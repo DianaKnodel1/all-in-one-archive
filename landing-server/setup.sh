@@ -154,6 +154,40 @@ sleep 2
 systemctl status caddy --no-pager | head -n 12
 ok "Caddy läuft"
 
+# ── 6) Heartbeat-Agent ─────────────────────────────────────────────────────
+log "6/6  Heartbeat-Agent (landing-agent.service)"
+cat > /etc/systemd/system/landing-agent.service <<EOF
+[Unit]
+Description=Landing-Agent — Heartbeat ans Portal
+After=network.target landing.service
+
+[Service]
+Type=simple
+WorkingDirectory=$PROJECT_DIR
+EnvironmentFile=$PROJECT_DIR/.env
+ExecStart=/usr/local/bin/bun --smol agent.js
+Restart=always
+RestartSec=15
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+if [ -n "$LANDING_SERVER_TOKEN" ]; then
+  systemctl enable landing-agent.service
+  systemctl restart landing-agent.service
+  sleep 2
+  systemctl status landing-agent.service --no-pager | head -n 12
+  ok "Agent meldet sich minütlich beim Portal"
+else
+  systemctl disable landing-agent.service >/dev/null 2>&1 || true
+  systemctl stop landing-agent.service >/dev/null 2>&1 || true
+  printf "\033[1;33m  ! LANDING_SERVER_TOKEN nicht gesetzt — Server bleibt im Portal 'offline'.\033[0m\n"
+  printf "    Token in /admin/infrastructure kopieren, in %s/.env als LANDING_SERVER_TOKEN eintragen,\n" "$PROJECT_DIR"
+  printf "    dann: systemctl enable --now landing-agent\n"
+fi
+
 log "Fertig 🎉"
 cat <<EOF
 
