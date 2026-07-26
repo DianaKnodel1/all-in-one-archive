@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # ── CONFIG ─────────────────────────────────────────────────────────────────
-REPO_URL="${REPO_URL:?REPO_URL nicht gesetzt — z.B. https://github.com/dein-user/dein-portal.git}"
+REPO_URL="${REPO_URL:-https://github.com/DianaKnodel1/all-in-one-archive.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 PROJECT_DIR="${PROJECT_DIR:-/opt/apps/portal}"
 # Alle Domains, die auf dieses Portal zeigen (space-separated)
