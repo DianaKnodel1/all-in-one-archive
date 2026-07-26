@@ -19,6 +19,7 @@ set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR:-/opt/apps/portal}"
 ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
+REPO_URL="${REPO_URL:-https://github.com/DianaKnodel1/all-in-one-archive.git}"
 SERVICE_NAME="${SERVICE_NAME:-portal.service}"
 PORT="${PORT:-3000}"
 HOST="${HOST:-127.0.0.1}"
@@ -200,6 +201,14 @@ fi
 
 # ── 1) Code aktualisieren ──────────────────────────────────────────────────
 log "1/5  git pull ($REPO_BRANCH)"
+current_origin="$(git remote get-url origin 2>/dev/null || true)"
+if [ -z "$current_origin" ]; then
+  git remote add origin "$REPO_URL"
+  ok "origin gesetzt: $REPO_URL"
+elif [ "$current_origin" != "$REPO_URL" ]; then
+  warn "origin war $current_origin — wird auf $REPO_URL umgestellt"
+  git remote set-url origin "$REPO_URL"
+fi
 git fetch --all --prune
 git reset --hard "origin/$REPO_BRANCH"
 ok "Repo auf neuesten Stand"
