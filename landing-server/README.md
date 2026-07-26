@@ -30,9 +30,31 @@ export SUPABASE_URL=https://supabase.deine-domain.de
 export SUPABASE_PUBLISHABLE_KEY=eyJ...                # anon/publishable key
 export PORTAL_API_ENDPOINT=https://mb-portal.com/api/public/applications
 export ACME_EMAIL=admin@mb-portal.com                 # für Let's Encrypt
+export LANDING_SERVER_TOKEN=<Token aus /admin/infrastructure>
 
 bash setup.sh
 ```
+
+## Warum steht mein Server im Portal auf "offline"?
+
+Der Landing-Renderer meldet sich nicht von selbst. Das macht der
+**Heartbeat-Agent** (`agent.js`, systemd-Unit `landing-agent.service`): er
+pingt minütlich `/api/public/landing-server-heartbeat` mit dem Bootstrap-Token
+des Servers. Ohne Token bzw. ohne laufenden Agent bleibt `last_heartbeat_at`
+leer und die Infrastruktur-Seite zeigt nach 5 Minuten "Offline" — auch wenn die
+Landing Pages einwandfrei ausgeliefert werden.
+
+Nachrüsten auf einem bestehenden Server:
+
+```bash
+cd /opt/apps/landing-server
+echo 'LANDING_SERVER_TOKEN=<Token aus /admin/infrastructure>' >> .env
+systemctl enable --now landing-agent
+journalctl -u landing-agent -f
+```
+
+Der Agent meldet zusätzlich, ob der Renderer gesund ist, und führt den
+Theme-Resync aus, wenn er im Portal angefordert wurde.
 
 Das war's. Setup installiert Bun + Caddy, legt systemd-Services `landing.service`
 und `caddy.service` an, schreibt Caddyfile und startet alles.

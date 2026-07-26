@@ -1,71 +1,33 @@
-## Ziel
+## 1. Was war mit den zwei Vorlagen geplant?
 
-Zwei Dinge: erst den Deploy-Blocker wegräumen, dann das komplette Mail-System durchtesten – Reminder, Registrierung, Bewerbung, Termin – und zwar mit Beleg statt Vermutung.
+**`reminder_appointment_subject` / `_body`**
+Geplant als "30 Minuten vor dem Termin"-Erinnerung: Ein Cron alle 10 Minuten sucht Buchungen, die in 25–40 Minuten starten, und schickt genau eine Mail pro Buchung (Idempotenz über `appointment_reminder_log`). Platzhalter waren `{{first_name}}`, `{{appointment_date}}`, `{{appointment_time}}`, `{{tenant_name}}`, `{{portal_link}}`.
 
-## 1. Build-Blocker in `src/start.ts`
+Warum sie heute nichts tut: Die Funktion, die dafür gebaut wurde, wurde später auf den Interview-Flow umgebaut. Sie versendet jetzt im selben 25–40-Minuten-Fenster die Interview-Einladung mit Magic-Link und benutzt dafür die Vorlage `bewerbung_magic_link_*`. Der ursprüngliche Termin-Reminder-Cron wurde ausdrücklich abgeschaltet. Die zwei Spalten sind also Altbestand — sie werden von keiner Versandlogik mehr gelesen, egal was man dort einträgt.
 
-Der Auth-Guard stoppt jeden Deploy, weil in der Datei wieder zwei Token-Attacher stehen (`attachSupabaseAuth` und `attachSupabaseBearer`). Erlaubt ist nur `attachSupabaseBearer`.
+**`reminder_recovery_bewerber_subject` / `_body`**
+Geplant für den Domain-Wechsel: Wenn die aktive Versand-Domain eines Mandanten getauscht wird, bekommen alle Kontakte eine Mail mit dem neuen Portal-Link. Die Empfänger sollten in zwei Gruppen mit unterschiedlichem Text aufgeteilt werden — Mitarbeiter (`reminder_recovery_*`) und bereits akzeptierte Bewerber (`reminder_recovery_bewerber_*`).
 
-Zu ändern: Import in Zeile 6 entfernen, in Zeile 25 nur noch `attachSupabaseBearer` stehen lassen.
+Warum sie heute nichts tut: Die Empfängerermittlung wurde bewusst auf Mitarbeiter reduziert; Bewerber sind laut Kommentar im Code ausgenommen, weil sie ohnehin über den normalen Einladungs-Reminder einen aktuellen Link bekommen. Die Bewerber-Gruppe wird also nie erzeugt, die Vorlage nie geladen.
 
-## 2. Bestandsaufnahme: was existiert überhaupt
+## 2. Warum ist der Landing-Server "offline"?
 
-Bevor irgendwas getestet wird, wird ausgelesen statt geraten:
+Nicht kaputt, sondern nie angeschlossen. Das Portal betreibt einen Heartbeat-Endpunkt, der alle 60 Sekunden eine Meldung mit dem Bootstrap-Token des Servers erwartet und daraus Status und Landing-Zahl setzt. Die Oberfläche zeigt "Offline", sobald länger als 5 Minuten keine Meldung kam.
 
-- Alle Mail-Auslöser im Code sammeln: welche Funktion verschickt welche Vorlage, bei welchem Ereignis.
-- Gegenprüfen, welche dieser Auslöser einen aktiven Cron-Job haben und welche nur durch eine Nutzeraktion feuern.
-- Ergebnis als eine Tabelle: Anlass → Auslöser (Cron oder Aktion) → Vorlage → Mandant.
+Auf dem Landing-Server existiert aber gar kein Agent, der das sendet: Das Setup installiert nur den Renderer und Caddy, kein Heartbeat, kein Timer, kein Token in der Konfiguration. Deshalb bleibt `last_heartbeat_at` leer und der Eintrag dauerhaft offline — auch wenn die Landing Pages selbst normal ausgeliefert werden.
 
-So siehst du schwarz auf weiß, ob die „14 Schritte" wirklich alle abgedeckt sind oder ob welche tot im Code liegen.
+## Vorschlag zum Aufräumen
 
-## 3. Prüfskript `scripts/mail-audit.sh`
+**A) Reminder-Vorlagen entwirren (empfohlen)**
+- Im Mail-Vorlagen-Bereich die zwei toten Vorlagen ausblenden bzw. sichtbar als "derzeit nicht im Einsatz" kennzeichnen, damit niemand Texte pflegt, die nie rausgehen.
+- Alternativ auf Wunsch: die Bewerber-Variante der Domain-Wechsel-Mail wieder scharf schalten (akzeptierte Bewerber als eigene Empfängergruppe) oder den echten 30-Minuten-Termin-Reminder zusätzlich zum Interview-Flow wieder aufsetzen. Das ist echte Funktionalität und sollte separat entschieden werden.
 
-Ein neues, rein lesendes Skript für den Portal-Server. Es prüft pro Bereich:
+**B) Heartbeat für Landing-Server nachrüsten**
+- Kleiner Agent im Landing-Server-Paket, der minütlich Status, Renderer-Gesundheit und Version ans Portal meldet und das Resync-Kommando entgegennimmt.
+- Setup erweitert um Token-Eintrag und einen Dienst/Timer für den Agent.
+- Kurzanleitung im Landing-Server-README: Token aus der Infrastruktur-Seite kopieren, eintragen, Dienst starten — danach springt die Anzeige auf Online.
 
-**Cron-Ebene**
-- Alle Jobs, Zeitplan, aktiv ja/nein.
-- Letzte Läufe je Job mit Status und HTTP-Code.
-- Jobs, die seit dem Anlegen noch nie gelaufen sind (die stillen Ausfälle).
-- Jobs, deren URL noch Platzhalter enthält.
-
-**Versand-Ebene**
-- Versandprotokoll der letzten 7 Tage, gruppiert nach Vorlage und Mandant, mit Erfolg/Fehler.
-- Vorlagen, die im Code existieren, aber in 7 Tagen kein einziges Mal versendet wurden – das sind die Verdächtigen.
-- Fehlermeldungen im Klartext, nicht nur Zähler.
-
-**Empfänger-Ebene**
-- Blockierte Adressen und der Grund.
-- Adressen mit mehreren Fehlversuchen in Folge.
-
-**Mandanten-Ebene**
-- SMTP-Daten vollständig ja/nein, je Mandant.
-- Pausiert ja/nein, mit Grund und Auslöser.
-- Letzter erfolgreicher SMTP-Test.
-
-## 4. Live-Test statt nur Protokoll lesen
-
-Protokolle zeigen nur, was passiert ist – nicht, ob es heute noch geht. Deshalb zusätzlich:
-
-- SMTP-Verbindungstest je Mandant mit gültigen Zugangsdaten, Ergebnis wird in `smtp_health_status` geschrieben. Damit ist die Spalte auch endlich befüllt.
-- Ein echter Testversand pro aktivem Mandanten an eine Adresse, die du mir nennst.
-- Die Reminder-Endpunkte einmal manuell aufrufen und die Antwort ansehen: wie viele Fällige wurden gefunden, wie viele verschickt, wie viele übersprungen und warum.
-
-Der letzte Punkt ist der wichtigste. Ein Cron mit Status „erfolgreich" heißt nur, dass der Aufruf ankam – nicht, dass die Logik jemanden gefunden und angeschrieben hat. Genau da trennt sich „läuft" von „läuft ins Leere".
-
-## 5. Auswertung
-
-Ich liefere dir am Ende eine Liste in drei Töpfen:
-- **Grün**: nachweislich verschickt, mit Datum und Empfängerzahl.
-- **Gelb**: technisch in Ordnung, aber es gab noch keinen Anlass zum Versenden.
-- **Rot**: kaputt oder blockiert, mit konkreter Ursache und Fix.
-
-## Was ich von dir brauche
-
-Eine Test-E-Mail-Adresse für den Live-Versand. Und die Info, ob MuS Marketing und W3 Personal ihre SMTP-Daten inzwischen eingetragen haben – sonst fallen beide automatisch in „Rot" und das verzerrt das Bild.
-
-## Technische Details
-
-- Betroffene Datei für den Blocker: `src/start.ts` (Import Zeile 6, Middleware-Array Zeile 25).
-- Neues Skript: `scripts/mail-audit.sh`, ausschließlich lesend, läuft über `supabase_admin` gegen die Backend-Datenbank wie die bestehenden Skripte.
-- Der SMTP-Test nutzt die vorhandene `smtp-test`-Funktion, damit `tenant_smtp_health` und `smtp_health_status` mitgeschrieben werden.
-- Alle Endpunkt-Aufrufe laufen über die bereits in `.env.server` hinterlegten Zugangsdaten – kein neues Secret nötig.
+### Technische Details
+- Betroffene Vorlagen: `tenants.reminder_appointment_*`, `tenants.reminder_recovery_bewerber_*` (nur Schema, keine Leser).
+- Endpunkt: `src/routes/api/public/landing-server-heartbeat.ts` erwartet `{ token, agent_version, renderer_healthy, resync_done }`; Antwort enthält `resync_needed`.
+- Agent-Neuanlage unter `landing-server/`, Einbindung in `landing-server/setup.sh` als systemd-Timer; keine Datenbankänderung nötig, `landing_servers` hat alle Felder bereits.

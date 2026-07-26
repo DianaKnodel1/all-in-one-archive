@@ -9,6 +9,7 @@
 #    4. .env mit SUPABASE_URL + ANON_KEY + PORTAL_API_ENDPOINT
 #    5. systemd-Service `landing.service` (Bun auf 127.0.0.1:3001)
 #    6. Caddy-Service (Auto-SSL via on_demand_tls)
+#    7. systemd-Service `landing-agent.service` (Heartbeat ans Portal)
 #
 #  Pflicht-Umgebungsvariablen vor Aufruf:
 #    SUPABASE_URL=https://supabase.deine-domain.de
@@ -20,6 +21,8 @@
 #    REPO_URL=https://github.com/dein-user/dein-portal.git
 #    REPO_BRANCH=main
 #    PROJECT_DIR=/opt/apps/landing-server
+#    LANDING_SERVER_TOKEN=<Bootstrap-Token aus /admin/infrastructure>
+#      → ohne Token läuft die Seite normal, im Portal bleibt der Server "offline"
 # =============================================================================
 set -euo pipefail
 
@@ -31,6 +34,7 @@ set -euo pipefail
 REPO_URL="${REPO_URL:-}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 PROJECT_DIR="${PROJECT_DIR:-/opt/apps/landing-server}"
+LANDING_SERVER_TOKEN="${LANDING_SERVER_TOKEN:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf "\n\033[1;36m▸ %s\033[0m\n" "$*"; }
@@ -99,6 +103,10 @@ SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY
 PORTAL_API_ENDPOINT=$PORTAL_API_ENDPOINT
 PORT=3001
 ACME_EMAIL=$ACME_EMAIL
+LANDING_SERVER_TOKEN=$LANDING_SERVER_TOKEN
+PROJECT_DIR=$PROJECT_DIR
+REPO_URL=$REPO_URL
+REPO_BRANCH=$REPO_BRANCH
 EOF
 chmod 600 "$PROJECT_DIR/.env"
 ok ".env angelegt"
@@ -145,6 +153,40 @@ systemctl restart caddy
 sleep 2
 systemctl status caddy --no-pager | head -n 12
 ok "Caddy läuft"
+
+# ── 6) Heartbeat-Agent ─────────────────────────────────────────────────────
+log "6/6  Heartbeat-Agent (landing-agent.service)"
+cat > /etc/systemd/system/landing-agent.service <<EOF
+[Unit]
+Description=Landing-Agent — Heartbeat ans Portal
+After=network.target landing.service
+
+[Service]
+Type=simple
+WorkingDirectory=$PROJECT_DIR
+EnvironmentFile=$PROJECT_DIR/.env
+ExecStart=/usr/local/bin/bun --smol agent.js
+Restart=always
+RestartSec=15
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+if [ -n "$LANDING_SERVER_TOKEN" ]; then
+  systemctl enable landing-agent.service
+  systemctl restart landing-agent.service
+  sleep 2
+  systemctl status landing-agent.service --no-pager | head -n 12
+  ok "Agent meldet sich minütlich beim Portal"
+else
+  systemctl disable landing-agent.service >/dev/null 2>&1 || true
+  systemctl stop landing-agent.service >/dev/null 2>&1 || true
+  printf "\033[1;33m  ! LANDING_SERVER_TOKEN nicht gesetzt — Server bleibt im Portal 'offline'.\033[0m\n"
+  printf "    Token in /admin/infrastructure kopieren, in %s/.env als LANDING_SERVER_TOKEN eintragen,\n" "$PROJECT_DIR"
+  printf "    dann: systemctl enable --now landing-agent\n"
+fi
 
 log "Fertig 🎉"
 cat <<EOF
