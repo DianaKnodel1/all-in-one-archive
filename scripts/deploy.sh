@@ -17,7 +17,16 @@
 set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/apps/portal}"
-ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env}"
+# Server-Konfiguration: .env.server hat Vorrang vor .env.
+# Grund: .env liegt im Repo und wird bei `git pull` / `git reset --hard`
+# überschrieben. .env.server wird nie aus dem Repo überschrieben.
+if [ -z "${ENV_FILE:-}" ]; then
+  if [ -f "$PROJECT_DIR/.env.server" ]; then
+    ENV_FILE="$PROJECT_DIR/.env.server"
+  else
+    ENV_FILE="$PROJECT_DIR/.env"
+  fi
+fi
 REPO_BRANCH="${REPO_BRANCH:-main}"
 REPO_URL="${REPO_URL:-https://github.com/DianaKnodel1/all-in-one-archive.git}"
 SERVICE_NAME="${SERVICE_NAME:-portal.service}"
