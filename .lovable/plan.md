@@ -1,45 +1,40 @@
-## Ziel
+## Was gerade passiert ist
 
-Prüfen, ob auf dem selbstgehosteten Backend (`api.mb-portal.com`) das Mail-System und alle Cron-Jobs/Reminder tatsächlich laufen.
+Zwei getrennte Dinge:
 
-Wichtig: Von hier aus habe ich keinen Zugriff auf deine Backend-Datenbank — die Prüfung läuft über Befehle, die du auf dem Backend-Server ausführst, plus einen Kontroll-Blick im Admin-UI.
+1. **Die Befehle liefen auf dem falschen Server.** Du warst auf `backendserver` (dort liegt Supabase, kein Portal-Repo) — daher `No such file or directory` und `command not found`. Das `401` am Ende ist eine Folgewirkung: ohne `.env.server` war die `key=`-Variable leer, der Aufruf ging also ohne Secret raus. Das sagt nichts über den echten Zustand aus.
+2. **`src/start.ts` enthält wieder `attachSupabaseAuth`** (Zeile 6 und 25). Der Prebuild-Guard `scripts/ensure-auth-middleware.mjs` verlangt ausschließlich `attachSupabaseBearer` und bricht den Build ab — sowohl hier in Lovable als auch beim Deploy auf dem Server.
 
-## Ablauf
+Der Service-Role-Key hast du jetzt aber — genau den braucht `/api/public/domain-health-cron`, weil die Route `supabaseAdmin` lädt (`src/integrations/supabase/client.server.ts` wirft ohne `SUPABASE_SERVICE_ROLE_KEY`). Das erklärt das vorherige HTTP 500 nach dem behobenen 401.
 
-### 1. Cron-Jobs existieren und feuern
-Auf dem Backend-Server im Postgres-Container prüfen:
-- Welche Jobs registriert und aktiv sind (`cron.job`) — erwartet: `send-application-reminders`, `send-appointment-reminders`, `process-invite-resend-queue`, `auto_complete_appointments`, `send-reminders-hourly`, `domain-health-cron`.
-- Ob jeder Name genau **einmal** vorkommt (Duplikate waren früher die Fehlerursache).
-- Letzte Läufe und Fehlermeldungen (`cron.job_run_details`).
+## Änderung im Code
 
-Häufigster Fehlerfall: der Vault-Eintrag `reminders_service_role_key` fehlt oder die URL im Job-Command steht noch als Platzhalter — dann laufen die Jobs, aber jeder HTTP-Call schlägt fehl.
+- `src/start.ts`: Import und Eintrag von `attachSupabaseAuth` entfernen, sodass nur `functionMiddleware: [attachSupabaseBearer]` bleibt. Damit läuft der Prebuild-Guard wieder durch.
 
-### 2. Edge Functions erreichbar
-Jede Mail-Function einmal direkt anstoßen und HTTP-Status + Logs prüfen: `send-application-reminders`, `send-appointment-reminders`, `send-reminders`, `process-invite-resend-queue`, `send-chat-reminder`.
+## Danach auf dem Server (Portal-Server `host-190-97-167-124`, nicht Backend!)
 
-### 3. SMTP je Mandant
-- `tenants`: sind `smtp_host/port/user/pass` gefüllt, ist `emails_paused = false`, was steht in `smtp_health_status`?
-- `smtp-test`-Function gegen eine echte Adresse laufen lassen.
+```bash
+cd /opt/apps/portal && git pull
 
-Hinweis aus dem Import: die Datenbank wurde nur mit Struktur, ohne Daten übernommen — falls die SMTP-Felder leer sind, geht aktuell garantiert keine Mail raus, unabhängig von den Crons.
+# Service-Role-Key eintragen (Wert vom Backend-Server, den du schon hast)
+grep -q SUPABASE_SERVICE_ROLE_KEY .env.server || cat >> .env.server <<'EOF'
+SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE3NzcwNjgwMDAsImV4cCI6MTkzNDgzNDQwMH0.4lyCBv845jQVTfSPsDRhpSkBlK2JDFo9F5VIkNOzYQc"
+EOF
 
-### 4. Versand-Historie auswerten
-- `email_send_log` der letzten 24 h nach Status gruppiert.
-- Einträge mit `failed`/`bounced`/`dlq`.
-- `suppressed_emails` (geblockte Empfänger).
-- `application_reminder_log` / `appointment_reminder_log`: feuern die Reminder-Ketten überhaupt?
+sudo /opt/apps/portal/scripts/deploy.sh   # muss bis "✓ Deploy fertig" laufen
 
-### 5. End-to-End-Test
-Eine Test-Bewerbung anlegen und die Kette durchspielen (Eingangsbestätigung → Buchungsbestätigung → 30-Min-Interview-Reminder). Dafür existieren bereits Snippets unter `scripts/email-test/sql-snippets/`, mit denen sich Zeitstempel künstlich vordatieren lassen, sodass die Cron-Gates sofort greifen.
+# Test: muss 200 liefern
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "https://mb-portal.com/api/public/domain-health-cron?key=$(grep CRON_SECRET .env.server | cut -d= -f2- | tr -d '\"')"
+```
 
-### 6. Kontrolle im Admin-UI
-`/admin/email-logs` und das `CronHealthPanel` gegenprüfen — dort muss jeder Job „Healthy" zeigen; „Stillstand" heißt, der Job läuft nicht oder die Function scheitert.
+Der Key wird per `EnvironmentFile` aus `.env.server` an `portal.service` durchgereicht, ist also nur serverseitig sichtbar und landet nicht im Browser-Bundle.
 
-## Was ich liefere
+## Kontrolle
 
-Ein Prüf-Skript `scripts/check-mail-health.sh`, das die Schritte 1–4 in einem Durchlauf gegen die Backend-DB ausführt und ein kompaktes Ergebnis ausgibt (Cron-Status, letzte Laufzeiten, SMTP-Zustand pro Mandant, Mail-Statistik, Fehlerliste) — damit du das jederzeit mit einem Befehl wiederholen kannst, statt einzelne SQL-Abfragen zu kopieren. Zusätzlich eine kurze Auswertung deiner Ausgabe und, falls nötig, Korrektur-Migrationen (z. B. Cron-Neuregistrierung oder fehlender Vault-Eintrag).
+- Kommt **200**: fertig — die Domain-Health-Crons (bereits mit korrektem Secret neu angelegt) laufen ab dem nächsten 5-Minuten-Slot sauber durch.
+- Kommt weiter **500**: `journalctl -u portal -n 50 --no-pager` schicken. Dann prüfe ich, ob stattdessen eine Spalte fehlt, die die Route abfragt (`domain_aliases`, `primary_domain`, `emails_paused` in `tenants`).
 
-## Technische Details
+## Hinweis am Rande
 
-- Skript nutzt `psql` über `docker exec supabase-db` bzw. `TARGET_DB_URL`, rein lesend (nur `SELECT`).
-- Keine Änderungen an Edge Functions oder Schema in diesem Schritt — erst Diagnose, dann gezielte Fixes.
+Der Service-Role-Key steht jetzt im Klartext im Chatverlauf. Wenn dir das nicht recht ist, rotierst du ihn später in der Supabase-Konfiguration auf dem Backend-Server und trägst den neuen Wert in `.env.server` sowie im Vault-Eintrag `reminders_service_role_key` nach.
