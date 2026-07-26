@@ -54,7 +54,10 @@ journalctl -u landing-agent -f
 ```
 
 Der Agent meldet zusätzlich, ob der Renderer gesund ist, und führt den
-Theme-Resync aus, wenn er im Portal angefordert wurde.
+Theme-Resync aus, wenn er im Portal angefordert wurde. Themes, Assets und
+Landing-Daten holt der Renderer ohnehin live vom Portal bzw. aus der DB — der
+Resync ist deshalb nur ein Cache-Flush (`POST /_internal/flush`, nur lokal
+erreichbar); schlägt er fehl, startet der Agent `landing.service` neu.
 
 Das war's. Setup installiert Bun + Caddy, legt systemd-Services `landing.service`
 und `caddy.service` an, schreibt Caddyfile und startet alles.
