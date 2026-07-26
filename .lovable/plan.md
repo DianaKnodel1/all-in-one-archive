@@ -1,40 +1,43 @@
-## Was gerade passiert ist
+## Ziel
 
-Zwei getrennte Dinge:
+Auslesen, warum UWK Consulting pausiert ist — und dann bewusst entscheiden statt blind freigeben.
 
-1. **Die Befehle liefen auf dem falschen Server.** Du warst auf `backendserver` (dort liegt Supabase, kein Portal-Repo) — daher `No such file or directory` und `command not found`. Das `401` am Ende ist eine Folgewirkung: ohne `.env.server` war die `key=`-Variable leer, der Aufruf ging also ohne Secret raus. Das sagt nichts über den echten Zustand aus.
-2. **`src/start.ts` enthält wieder `attachSupabaseAuth`** (Zeile 6 und 25). Der Prebuild-Guard `scripts/ensure-auth-middleware.mjs` verlangt ausschließlich `attachSupabaseBearer` und bricht den Build ab — sowohl hier in Lovable als auch beim Deploy auf dem Server.
+## Warum ein Skript nötig ist
 
-Der Service-Role-Key hast du jetzt aber — genau den braucht `/api/public/domain-health-cron`, weil die Route `supabaseAdmin` lädt (`src/integrations/supabase/client.server.ts` wirft ohne `SUPABASE_SERVICE_ROLE_KEY`). Das erklärt das vorherige HTTP 500 nach dem behobenen 401.
+Deine Mandantendaten liegen auf dem selbst gehosteten Backend. Von hier aus habe ich keinen Lesezugriff darauf, also braucht es einen kurzen Befehl, den du auf dem Portal-Server ausführst.
 
-## Änderung im Code
+## Was gebaut wird
 
-- `src/start.ts`: Import und Eintrag von `attachSupabaseAuth` entfernen, sodass nur `functionMiddleware: [attachSupabaseBearer]` bleibt. Damit läuft der Prebuild-Guard wieder durch.
+Ein Skript `scripts/tenant-pause-status.sh` im Stil der vorhandenen (`check-mail-health.sh`, `fix-mail-crons.sh`):
 
-## Danach auf dem Server (Portal-Server `host-190-97-167-124`, nicht Backend!)
+**Standardlauf — nur anzeigen, ändert nichts:**
+- alle pausierten Mandanten mit Name, Grund, Auslöser (`manuell` / `auto:domain_down`) und Zeitpunkt
+- dazu die passenden Einträge aus dem `activity_log` (`emails_auto_pausiert`), damit du siehst, welcher Cron-Lauf es war
+- der SMTP-Health-Stand pro Mandant: Fehlversuche in Folge, letzter Fehler, letzte Prüfung
+- bei `auto:domain_down` zusätzlich ein Live-Erreichbarkeitstest der betroffenen Domains — so siehst du sofort, ob das Problem noch besteht oder längst behoben ist
 
-```bash
+**Mit `--release "UWK"`:**
+- hebt die Pause für genau diesen Mandanten auf, setzt den Fehlerzähler zurück und schreibt einen Eintrag ins Aktivitätsprotokoll
+- vorher Rückfrage mit Anzeige des aktuellen Grundes
+
+## Ablauf für dich
+
+Auf dem Portal-Server:
+
+```
 cd /opt/apps/portal && git pull
-
-# Service-Role-Key eintragen (Wert vom Backend-Server, den du schon hast)
-grep -q SUPABASE_SERVICE_ROLE_KEY .env.server || cat >> .env.server <<'EOF'
-SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE3NzcwNjgwMDAsImV4cCI6MTkzNDgzNDQwMH0.4lyCBv845jQVTfSPsDRhpSkBlK2JDFo9F5VIkNOzYQc"
-EOF
-
-sudo /opt/apps/portal/scripts/deploy.sh   # muss bis "✓ Deploy fertig" laufen
-
-# Test: muss 200 liefern
-curl -s -o /dev/null -w '%{http_code}\n' \
-  "https://mb-portal.com/api/public/domain-health-cron?key=$(grep CRON_SECRET .env.server | cut -d= -f2- | tr -d '\"')"
+bash scripts/tenant-pause-status.sh
 ```
 
-Der Key wird per `EnvironmentFile` aus `.env.server` an `portal.service` durchgereicht, ist also nur serverseitig sichtbar und landet nicht im Browser-Bundle.
+Ausgabe schickst du mir, dann klären wir gemeinsam, ob Freigabe sinnvoll ist oder erst die Ursache weg muss.
 
-## Kontrolle
+## Nebenbefund zur Entscheidung
 
-- Kommt **200**: fertig — die Domain-Health-Crons (bereits mit korrektem Secret neu angelegt) laufen ab dem nächsten 5-Minuten-Slot sauber durch.
-- Kommt weiter **500**: `journalctl -u portal -n 50 --no-pager` schicken. Dann prüfe ich, ob stattdessen eine Spalte fehlt, die die Route abfragt (`domain_aliases`, `primary_domain`, `emails_paused` in `tenants`).
+Die automatische Pause bei SMTP-Fehlern ist im Code deaktiviert (`if (false && fails >= 5)`). Falls du willst, dass ein dauerhaft kaputter Mailserver den Versand wirklich stoppt, wäre das ein separater kleiner Eingriff — sag Bescheid, ich fasse es in diesem Schritt bewusst nicht an.
 
-## Hinweis am Rande
+## Technische Details
 
-Der Service-Role-Key steht jetzt im Klartext im Chatverlauf. Wenn dir das nicht recht ist, rotierst du ihn später in der Supabase-Konfiguration auf dem Backend-Server und trägst den neuen Wert in `.env.server` sowie im Vault-Eintrag `reminders_service_role_key` nach.
+- SQL über `psql` als `supabase_admin`, per stdin gepiped (keine `$$`-Expansion im Shell-Kontext)
+- gelesen wird `tenants` (`emails_paused*`), `tenant_smtp_health`, `activity_log`
+- Domain-Check per `curl -sS -o /dev/null -w '%{http_code}'` mit Timeout, analog zur Logik in `src/routes/api/public/domain-health-cron.ts`
+- keine Schemaänderung
