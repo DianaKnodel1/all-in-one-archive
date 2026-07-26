@@ -118,7 +118,7 @@ export const bookAppointment = createServerFn({ method: "POST" })
     const { data: rows, error } = await supabaseAdmin.rpc("book_appointment_by_token", {
       _magic_token: data.token,
       _starts_at: data.starts_at,
-      _applicant_timezone: data.applicant_timezone ?? null,
+      _applicant_timezone: data.applicant_timezone ?? undefined,
     });
     if (error) throw new Error(error.message);
     const row = (rows as any[])?.[0];
@@ -147,7 +147,7 @@ export const cancelAppointment = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows, error } = await supabaseAdmin.rpc("cancel_appointment_by_token", {
       _cancel_token: data.cancel_token,
-      _reason: data.reason ?? null,
+      _reason: data.reason ?? undefined,
     });
     if (error) throw new Error(error.message);
     const row = (rows as any[])?.[0];

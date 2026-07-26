@@ -60,7 +60,7 @@ export function useTenantByDomain() {
         .maybeSingle();
 
       if (primaryMatch) {
-        setTenant(primaryMatch as Tenant | null);
+        setTenant(primaryMatch as unknown as Tenant | null);
         setLoading(false);
         return;
       }

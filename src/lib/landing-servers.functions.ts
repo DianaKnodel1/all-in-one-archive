@@ -35,7 +35,7 @@ export const listLandingServers = createServerFn({ method: "GET" })
       .select("*")
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return { rows: data ?? [] };
+    return { rows: (data ?? []) as any[] };
   });
 
 const CreateInput = z.object({
@@ -73,7 +73,7 @@ export const createLandingServer = createServerFn({ method: "POST" })
       actor_id: context.userId,
       payload: { hostname: data.hostname, ip: data.ip },
     });
-    return row;
+    return row as any;
   });
 
 export const updateLandingServer = createServerFn({ method: "POST" })
@@ -99,7 +99,7 @@ export const updateLandingServer = createServerFn({ method: "POST" })
       .select()
       .single();
     if (error) throw new Error(error.message);
-    return row;
+    return row as any;
   });
 
 export const deleteLandingServer = createServerFn({ method: "POST" })
@@ -181,5 +181,5 @@ export const pickLandingServer = createServerFn({ method: "GET" })
       .order("landing_count", { ascending: true });
     if (error) throw new Error(error.message);
     const free = (data ?? []).find((s: any) => s.landing_count < s.capacity);
-    return { server: free ?? null, all: data ?? [] };
+    return { server: (free ?? null) as any, all: (data ?? []) as any[] };
   });
