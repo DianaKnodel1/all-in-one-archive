@@ -17,7 +17,16 @@
 set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/apps/portal}"
-ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env}"
+# Server-Konfiguration: .env.server hat Vorrang vor .env.
+# Grund: .env liegt im Repo und wird bei `git pull` / `git reset --hard`
+# überschrieben. .env.server wird nie aus dem Repo überschrieben.
+if [ -z "${ENV_FILE:-}" ]; then
+  if [ -f "$PROJECT_DIR/.env.server" ]; then
+    ENV_FILE="$PROJECT_DIR/.env.server"
+  else
+    ENV_FILE="$PROJECT_DIR/.env"
+  fi
+fi
 REPO_BRANCH="${REPO_BRANCH:-main}"
 REPO_URL="${REPO_URL:-https://github.com/DianaKnodel1/all-in-one-archive.git}"
 SERVICE_NAME="${SERVICE_NAME:-portal.service}"
@@ -90,11 +99,24 @@ validate_config() {
     exit 1
   fi
 
+  # Schutz: gehostete Lovable-Cloud-URLs dürfen nie ins Self-Hosting-Build.
+  if [[ "$vite_url" == *".supabase.co"* || "$server_url" == *".supabase.co"* ]]; then
+    echo "  ✗ Backend-URL zeigt auf eine gehostete Supabase-Cloud-Instanz (*.supabase.co)." >&2
+    echo "    Frontend: $vite_url" >&2
+    echo "    Server:   $server_url" >&2
+    echo "    Dieser Server ist self-hosted — erwartet wird z. B. https://api.mb-portal.com." >&2
+    echo "    Trage die richtigen Werte in $PROJECT_DIR/.env.server ein (wird von git nicht überschrieben)." >&2
+    echo "    Bewusst gewollt? Dann mit ALLOW_HOSTED_SUPABASE=1 erneut starten." >&2
+    [ "${ALLOW_HOSTED_SUPABASE:-0}" = "1" ] || exit 1
+    warn "ALLOW_HOSTED_SUPABASE=1 gesetzt — Build gegen gehostete Supabase-Instanz."
+  fi
+
   export VITE_SUPABASE_URL="$vite_url"
   export VITE_SUPABASE_PUBLISHABLE_KEY="$vite_key"
   export SUPABASE_URL="$server_url"
   export SUPABASE_PUBLISHABLE_KEY="$server_key"
 
+  echo "  Konfigurationsdatei:    $ENV_FILE"
   echo "  Backend URL (Frontend): $VITE_SUPABASE_URL"
   echo "  Backend URL (Server):   $SUPABASE_URL"
   echo "  Publishable Key:        $(mask_value "$VITE_SUPABASE_PUBLISHABLE_KEY")"
