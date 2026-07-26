@@ -1,41 +1,45 @@
-## Problem
+## Ziel
 
-Der Deploy baut das Frontend gegen die falsche Backend-URL.
+Prüfen, ob auf dem selbstgehosteten Backend (`api.mb-portal.com`) das Mail-System und alle Cron-Jobs/Reminder tatsächlich laufen.
 
-```text
-Ist:   https://iiabvudipyliimxjdpue.supabase.co  (Lovable-Cloud-DB, leer)
-Soll:  https://api.mb-portal.com                 (dein self-hosted Supabase)
-```
+Wichtig: Von hier aus habe ich keinen Zugriff auf deine Backend-Datenbank — die Prüfung läuft über Befehle, die du auf dem Backend-Server ausführst, plus einen Kontroll-Blick im Admin-UI.
 
-Die Datei `.env` ist nicht in `.gitignore` eingetragen, liegt also im GitHub-Repo. Beim `git reset --hard origin/main` wurde die Server-`.env` durch die Lovable-Werte ersetzt. `scripts/deploy.sh` liest genau diese Datei und exportiert die Werte in den Vite-Build — deshalb die falsche Anzeige in Schritt 0/5.
+## Ablauf
 
-## Änderungen im Repo
+### 1. Cron-Jobs existieren und feuern
+Auf dem Backend-Server im Postgres-Container prüfen:
+- Welche Jobs registriert und aktiv sind (`cron.job`) — erwartet: `send-application-reminders`, `send-appointment-reminders`, `process-invite-resend-queue`, `auto_complete_appointments`, `send-reminders-hourly`, `domain-health-cron`.
+- Ob jeder Name genau **einmal** vorkommt (Duplikate waren früher die Fehlerursache).
+- Letzte Läufe und Fehlermeldungen (`cron.job_run_details`).
 
-1. **`.gitignore`**: `.env` (und `.env.*.local`) ergänzen, damit Umgebungs-Werte nie wieder per Push/Pull die Server-Konfiguration überschreiben. Die lokale `.env` für die Lovable-Vorschau bleibt bestehen, wandert nur aus der Versionskontrolle.
-2. **`.env` aus dem Repo entfernen** (Datei bleibt lokal und auf dem Server erhalten, nur nicht mehr getrackt).
-3. **`.env.example` aktualisieren**: klar dokumentierte Vorlage mit `api.mb-portal.com` als Beispiel-Backend, damit auf einem frischen Server sofort klar ist, was einzutragen ist.
-4. **Schutz in `scripts/deploy.sh`**: Bricht der Deploy ab bzw. warnt deutlich, wenn `VITE_SUPABASE_URL` auf `*.supabase.co` zeigt, während erkennbar self-hosted deployt wird. Damit kann ein versehentlich falscher Wert nicht mehr unbemerkt live gehen.
+Häufigster Fehlerfall: der Vault-Eintrag `reminders_service_role_key` fehlt oder die URL im Job-Command steht noch als Platzhalter — dann laufen die Jobs, aber jeder HTTP-Call schlägt fehl.
 
-## Auf deinem Server (einmalig, nach dem Repo-Update)
+### 2. Edge Functions erreichbar
+Jede Mail-Function einmal direkt anstoßen und HTTP-Status + Logs prüfen: `send-application-reminders`, `send-appointment-reminders`, `send-reminders`, `process-invite-resend-queue`, `send-chat-reminder`.
 
-Da die `.env` dort bereits überschrieben wurde, muss sie einmal von Hand korrigiert werden:
+### 3. SMTP je Mandant
+- `tenants`: sind `smtp_host/port/user/pass` gefüllt, ist `emails_paused = false`, was steht in `smtp_health_status`?
+- `smtp-test`-Function gegen eine echte Adresse laufen lassen.
 
-```bash
-cd /opt/apps/portal
-cat > .env <<'EOF'
-VITE_SUPABASE_URL="https://api.mb-portal.com"
-VITE_SUPABASE_PUBLISHABLE_KEY="<dein anon/publishable key des self-hosted Supabase>"
-SUPABASE_URL="https://api.mb-portal.com"
-SUPABASE_PUBLISHABLE_KEY="<derselbe key>"
-EOF
-git pull
-sudo /opt/apps/portal/scripts/deploy.sh
-```
+Hinweis aus dem Import: die Datenbank wurde nur mit Struktur, ohne Daten übernommen — falls die SMTP-Felder leer sind, geht aktuell garantiert keine Mail raus, unabhängig von den Crons.
 
-Der Key ist der alte `eyJhbGci…TYeA` aus deinem bisherigen Deploy (steht in `/opt/supabase/docker/.env` als `ANON_KEY`). Nach dem Deploy muss Schritt 0/5 wieder `https://api.mb-portal.com` anzeigen.
+### 4. Versand-Historie auswerten
+- `email_send_log` der letzten 24 h nach Status gruppiert.
+- Einträge mit `failed`/`bounced`/`dlq`.
+- `suppressed_emails` (geblockte Empfänger).
+- `application_reminder_log` / `appointment_reminder_log`: feuern die Reminder-Ketten überhaupt?
 
-## Technische Hinweise
+### 5. End-to-End-Test
+Eine Test-Bewerbung anlegen und die Kette durchspielen (Eingangsbestätigung → Buchungsbestätigung → 30-Min-Interview-Reminder). Dafür existieren bereits Snippets unter `scripts/email-test/sql-snippets/`, mit denen sich Zeitstempel künstlich vordatieren lassen, sodass die Cron-Gates sofort greifen.
 
-- Vite-Variablen (`VITE_*`) werden beim Build fest in die JS-Bundles eingebrannt — ein falscher Wert lässt sich nur durch einen erneuten Build korrigieren, nicht zur Laufzeit.
-- Die Lovable-Vorschau in diesem Projekt nutzt weiterhin die Cloud-DB; das ist getrennt vom Server-Deploy und beeinflusst ihn nach der Änderung nicht mehr.
-- Empfehlung: den Cloud-Publishable-Key, der jetzt öffentlich im GitHub-Repo liegt, anschließend rotieren.
+### 6. Kontrolle im Admin-UI
+`/admin/email-logs` und das `CronHealthPanel` gegenprüfen — dort muss jeder Job „Healthy" zeigen; „Stillstand" heißt, der Job läuft nicht oder die Function scheitert.
+
+## Was ich liefere
+
+Ein Prüf-Skript `scripts/check-mail-health.sh`, das die Schritte 1–4 in einem Durchlauf gegen die Backend-DB ausführt und ein kompaktes Ergebnis ausgibt (Cron-Status, letzte Laufzeiten, SMTP-Zustand pro Mandant, Mail-Statistik, Fehlerliste) — damit du das jederzeit mit einem Befehl wiederholen kannst, statt einzelne SQL-Abfragen zu kopieren. Zusätzlich eine kurze Auswertung deiner Ausgabe und, falls nötig, Korrektur-Migrationen (z. B. Cron-Neuregistrierung oder fehlender Vault-Eintrag).
+
+## Technische Details
+
+- Skript nutzt `psql` über `docker exec supabase-db` bzw. `TARGET_DB_URL`, rein lesend (nur `SELECT`).
+- Keine Änderungen an Edge Functions oder Schema in diesem Schritt — erst Diagnose, dann gezielte Fixes.
