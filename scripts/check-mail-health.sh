@@ -107,7 +107,7 @@ sql "SELECT id, name,
             CASE WHEN coalesce(smtp_password,'') = '' THEN 'FEHLT' ELSE 'gesetzt' END AS smtp_pass,
             emails_paused,
             coalesce(smtp_health_status,'—') AS health,
-            smtp_health_checked_at
+            coalesce(sender_email,'—') AS absender
        FROM tenants ORDER BY name;"
 
 # --- 6) Mail-Versand ---------------------------------------------------------
