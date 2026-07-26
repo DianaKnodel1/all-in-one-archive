@@ -50,7 +50,7 @@ export const Route = createFileRoute("/api/public/landing-server-bootstrap")({
           action: "server.bootstrap",
           target: server.name,
           status: "ok",
-          payload: { ip: server.ip, hostname: server.hostname },
+          payload: { ip: String(server.ip ?? ""), hostname: server.hostname },
         });
 
         return new Response(script, {

@@ -111,7 +111,7 @@ export const Route = createFileRoute("/api/public/booking")({
         const { data: rows, error } = await supabaseAdmin.rpc("book_appointment_by_token", {
           _magic_token: parsed.data.token,
           _starts_at: parsed.data.starts_at,
-          _applicant_timezone: parsed.data.applicant_timezone ?? null,
+          _applicant_timezone: parsed.data.applicant_timezone ?? undefined,
         });
         if (error) return json({ ok: false, error: error.message }, 500);
         const row = (rows as any[])?.[0];
