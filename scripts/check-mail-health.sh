@@ -129,17 +129,17 @@ sql "SELECT recipient_email, template_name, status, left(coalesce(error_message,
       ORDER BY created_at DESC LIMIT 30;"
 
 log "6d/8  Geblockte Empfaenger (suppressed_emails)"
-sql "SELECT bounce_type, count(*) FROM suppressed_emails GROUP BY bounce_type;"
+sql "SELECT source, reason, count(*) FROM suppressed_emails GROUP BY source, reason ORDER BY count(*) DESC LIMIT 20;"
 
 # --- 7) Reminder-Ketten ------------------------------------------------------
 log "7/8  Application-Reminder (letzte 7 Tage)"
-sql "SELECT reminder_kind, count(*) AS anzahl, max(created_at) AS zuletzt
-       FROM application_reminder_log WHERE created_at > now() - interval '7 days'
-      GROUP BY reminder_kind ORDER BY zuletzt DESC;"
+sql "SELECT reminder_kind, status, count(*) AS anzahl, max(sent_at) AS zuletzt
+       FROM application_reminder_log WHERE sent_at > now() - interval '7 days'
+      GROUP BY reminder_kind, status ORDER BY zuletzt DESC;"
 
 log "7b/8  Termin-Reminder (letzte 7 Tage)"
-sql "SELECT count(*) AS anzahl, max(created_at) AS zuletzt
-       FROM appointment_reminder_log WHERE created_at > now() - interval '7 days';"
+sql "SELECT status, count(*) AS anzahl, max(sent_at) AS zuletzt
+       FROM appointment_reminder_log WHERE sent_at > now() - interval '7 days' GROUP BY status;"
 
 log "7c/8  Offene Invite-Resend-Queue"
 sql "SELECT status, count(*), min(created_at) AS aeltester
