@@ -378,6 +378,17 @@ const server = createServer(async (req, res) => {
 
     if (path === "/_health") return send(res, 200, "ok");
 
+    // Cache-Flush (nur lokal erreichbar, Caddy proxied /_internal/* nicht nach außen):
+    // Themes/Assets/Landings werden live vom Portal geholt — ein Flush reicht als "Resync".
+    if (path === "/_internal/flush") {
+      const n = cache.size + themeCache.size + assetCache.size;
+      cache.clear();
+      themeCache.clear();
+      assetCache.clear();
+      console.log(`[cache] flushed ${n} Einträge`);
+      return send(res, 200, JSON.stringify({ ok: true, flushed: n }), { "content-type": "application/json" });
+    }
+
     if (path === "/_internal/ask") {
       const domain = (url.searchParams.get("domain") || "").toLowerCase();
       if (!domain) return send(res, 400, "missing domain");
