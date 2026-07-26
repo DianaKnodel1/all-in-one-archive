@@ -174,6 +174,19 @@ function ServersTab() {
         </div>
       </CardHeader>
       <CardContent>
+        {!loading && !loadError && rows.some((r: any) => !r.last_heartbeat_at) && (
+          <div className="mb-4 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs space-y-1">
+            <p className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+              <AlertCircle className="w-3.5 h-3.5" /> Server ohne Heartbeat = „Offline"
+            </p>
+            <p className="text-amber-800 dark:text-amber-300">
+              Der Status kommt vom Heartbeat-Agent auf dem Landing-Server, nicht vom Portal. Fehlt er, bleibt der Eintrag offline — die Landing Pages laufen trotzdem. Auf dem Server einmalig:
+            </p>
+            <pre className="bg-amber-100 dark:bg-amber-900/40 p-2 rounded font-mono whitespace-pre-wrap">{`cd /opt/apps/landing-server
+echo 'LANDING_SERVER_TOKEN=<Token dieses Servers>' >> .env
+systemctl enable --now landing-agent`}</pre>
+          </div>
+        )}
         {loadError && /landing_servers|schema cache|relation .* does not exist/i.test(loadError) ? (
           <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm space-y-2">
             <p className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-2">
