@@ -103,7 +103,7 @@ log "5/8  SMTP-Konfiguration je Mandant"
 sql "SELECT id, name,
             coalesce(smtp_host,'—') AS host,
             smtp_port AS port,
-            CASE WHEN coalesce(smtp_user,'') = '' THEN 'FEHLT' ELSE 'gesetzt' END AS smtp_user,
+            CASE WHEN coalesce(smtp_username,'') = '' THEN 'FEHLT' ELSE 'gesetzt' END AS smtp_user,
             CASE WHEN coalesce(smtp_password,'') = '' THEN 'FEHLT' ELSE 'gesetzt' END AS smtp_pass,
             emails_paused,
             coalesce(smtp_health_status,'—') AS health,
