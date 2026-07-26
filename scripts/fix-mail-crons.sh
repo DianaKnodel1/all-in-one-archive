@@ -25,7 +25,7 @@ CONF_FILE="$REPO_DIR/scripts/backend-server.env"
 
 : "${BACKEND_USER:=root}"
 : "${BACKEND_DB_CONTAINER:=supabase-db}"
-: "${BACKEND_DB_USER:=postgres}"
+: "${BACKEND_DB_USER:=supabase_admin}"
 : "${BACKEND_DB_NAME:=postgres}"
 : "${API_URL:=https://api.mb-portal.com}"
 
@@ -47,10 +47,10 @@ fi
 sql() {
   local q="$1"
   case "$RUNNER" in
-    url)    psql "$TARGET_DB_URL" -v ON_ERROR_STOP=0 -P pager=off -c "$q" 2>&1 ;;
-    docker) docker exec -i "$BACKEND_DB_CONTAINER" psql -U "$BACKEND_DB_USER" -d "$BACKEND_DB_NAME" -v ON_ERROR_STOP=0 -P pager=off -c "$q" 2>&1 ;;
-    ssh)    ssh -o StrictHostKeyChecking=accept-new "${BACKEND_USER}@${BACKEND_HOST}" \
-              "docker exec -i $BACKEND_DB_CONTAINER psql -U $BACKEND_DB_USER -d $BACKEND_DB_NAME -v ON_ERROR_STOP=0 -P pager=off -c \"${q//\"/\\\"}\"" 2>&1 ;;
+    url)    printf '%s\n' "$q" | psql "$TARGET_DB_URL" -v ON_ERROR_STOP=0 -P pager=off 2>&1 ;;
+    docker) printf '%s\n' "$q" | docker exec -i "$BACKEND_DB_CONTAINER" psql -U "$BACKEND_DB_USER" -d "$BACKEND_DB_NAME" -v ON_ERROR_STOP=0 -P pager=off 2>&1 ;;
+    ssh)    printf '%s\n' "$q" | ssh -o StrictHostKeyChecking=accept-new "${BACKEND_USER}@${BACKEND_HOST}" \
+              "docker exec -i $BACKEND_DB_CONTAINER psql -U $BACKEND_DB_USER -d $BACKEND_DB_NAME -v ON_ERROR_STOP=0 -P pager=off" 2>&1 ;;
   esac
 }
 
@@ -58,28 +58,110 @@ echo "=============================================================="
 echo " Mail-Cron-Reparatur   Ziel-Host: $API_HOST   Modus: $RUNNER"
 echo "=============================================================="
 
-# --- 1) Kaputte Duplikate entfernen -----------------------------------------
-log "1/4  Doppelte Jobs mit Platzhalter entfernen"
+# --- 1) Kaputte/duplizierte Mail-Crons entfernen -----------------------------
+log "1/4  Kaputte/Duplikat-Jobs entfernen"
 sql "DO \$\$
 DECLARE r RECORD;
 BEGIN
   FOR r IN
-    SELECT j.jobid, j.jobname FROM cron.job j
-     WHERE j.command LIKE '%<SUPABASE_URL>%'
-       AND EXISTS (SELECT 1 FROM cron.job k
-                    WHERE k.jobname = j.jobname AND k.jobid <> j.jobid
-                      AND k.command NOT LIKE '%<SUPABASE_URL>%')
+    SELECT jobid, jobname FROM cron.job
+     WHERE jobname IN (
+       'send-reminders-hourly',
+       'send-appointment-reminders',
+       'send-application-reminders',
+       'process-invite-resend-queue'
+     )
   LOOP
-    PERFORM cron.unschedule(r.jobid);
-    RAISE NOTICE 'entfernt: % (jobid %)', r.jobname, r.jobid;
+    BEGIN
+      PERFORM cron.unschedule(r.jobid);
+      RAISE NOTICE 'entfernt: % (jobid %)', r.jobname, r.jobid;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'konnte % (jobid %) nicht entfernen: %', r.jobname, r.jobid, SQLERRM;
+    END;
   END LOOP;
 END\$\$;"
 
-# --- 2) Restliche Platzhalter ersetzen --------------------------------------
-log "2/4  Platzhalter <SUPABASE_URL> durch echten Host ersetzen"
-sql "UPDATE cron.job
-        SET command = replace(command, '<SUPABASE_URL>', '${API_HOST}')
-      WHERE command LIKE '%<SUPABASE_URL>%';"
+# --- 2) Jobs sauber neu anlegen ---------------------------------------------
+log "2/4  Mail-/Reminder-Crons mit echtem Host neu anlegen"
+sql "CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+DO \$\$
+DECLARE k text;
+BEGIN
+  SELECT decrypted_secret INTO k
+    FROM vault.decrypted_secrets
+   WHERE name = 'reminders_service_role_key'
+   LIMIT 1;
+
+  IF k IS NULL OR length(k) < 20 THEN
+    RAISE EXCEPTION 'Vault secret reminders_service_role_key fehlt oder ist leer.';
+  END IF;
+END\$\$;
+
+SELECT cron.schedule(
+  'send-reminders-hourly',
+  '15 * * * *',
+  \$CRON\$
+  SELECT net.http_post(
+    url := 'https://${API_HOST}/functions/v1/send-reminders',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'reminders_service_role_key'),
+      'Content-Type', 'application/json'
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 120000
+  );
+  \$CRON\$
+);
+
+SELECT cron.schedule(
+  'send-appointment-reminders',
+  '*/10 * * * *',
+  \$CRON\$
+  SELECT net.http_post(
+    url := 'https://${API_HOST}/functions/v1/send-appointment-reminders',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'reminders_service_role_key'),
+      'Content-Type', 'application/json'
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 60000
+  );
+  \$CRON\$
+);
+
+SELECT cron.schedule(
+  'send-application-reminders',
+  '*/30 * * * *',
+  \$CRON\$
+  SELECT net.http_post(
+    url := 'https://${API_HOST}/functions/v1/send-application-reminders',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'reminders_service_role_key'),
+      'Content-Type', 'application/json'
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 60000
+  );
+  \$CRON\$
+);
+
+SELECT cron.schedule(
+  'process-invite-resend-queue',
+  '*/15 * * * *',
+  \$CRON\$
+  SELECT net.http_post(
+    url := 'https://${API_HOST}/functions/v1/process-invite-resend-queue',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'reminders_service_role_key'),
+      'Content-Type', 'application/json'
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 120000
+  );
+  \$CRON\$
+);"
 
 # --- 3) Fehlende Spalte ------------------------------------------------------
 log "3/4  tenants.smtp_health_status sicherstellen"
