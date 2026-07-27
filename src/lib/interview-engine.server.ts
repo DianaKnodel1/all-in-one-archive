@@ -272,6 +272,32 @@ export async function sendRegistrationInviteAfterAiAccept(
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   if (!app.email || !app.tenant_id) return { sent: false, skipped: true, reason: "missing_email_or_tenant" };
 
+  // Ergebnis JEDES Versuchs festhalten: an der Bewerbung (Admin-Sicht) und —
+  // bei Fehlschlag/Skip — zusätzlich im zentralen E-Mail-Protokoll.
+  const record = async (
+    status: "sent" | "failed" | "skipped",
+    error: string | null,
+  ) => {
+    await supabaseAdmin
+      .from("applications")
+      .update({ invite_mail_status: status, invite_mail_error: error, invite_mail_at: new Date().toISOString() } as any)
+      .eq("id", app.id)
+      .then(() => {}, (e: any) => console.warn("[interview-engine] invite status update:", e?.message ?? e));
+    if (status !== "sent") {
+      await supabaseAdmin
+        .from("email_send_log")
+        .insert({
+          tenant_id: app.tenant_id,
+          template_name: "registration_invitation",
+          recipient_email: (app.email ?? "").toLowerCase().trim(),
+          status,
+          error_message: error,
+          metadata: { application_id: app.id, source: "ai_accept_invite" },
+        } as any)
+        .then(() => {}, () => {});
+    }
+  };
+
   // Schutz gegen verfrühte "Willkommen im Team"-Mails: ohne tatsächlich
   // geführtes Gespräch wird nicht eingeladen (außer Admin erzwingt es).
   if (!opts?.force) {
@@ -289,6 +315,7 @@ export async function sendRegistrationInviteAfterAiAccept(
       console.warn("[interview-engine] Registrierungs-Einladung blockiert (kein abgeschlossenes Interview)", {
         applicationId: app.id, status, userTurns,
       });
+      await record("skipped", `kein abgeschlossenes Interview (status=${status ?? "-"}, Antworten=${userTurns})`);
       return { sent: false, skipped: true, reason: "no_completed_interview" as const, interview_status: status, user_turns: userTurns };
     }
   }
@@ -302,6 +329,7 @@ export async function sendRegistrationInviteAfterAiAccept(
     .single();
   if (tokenErr || !tokenRow?.token) {
     console.error("[interview-engine] invitation token error:", tokenErr);
+    await record("failed", tokenErr?.message ?? "token_failed");
     return { sent: false, error: tokenErr?.message ?? "token_failed" };
   }
 
@@ -346,8 +374,10 @@ export async function sendRegistrationInviteAfterAiAccept(
   });
   if (mailErr) {
     console.warn("[interview-engine] invitation mail failed:", mailErr);
+    await record("failed", mailErr.message ?? "mail_failed");
     return { sent: false, error: mailErr.message ?? "mail_failed", registration_link: registrationLink };
   }
+  await record("sent", null);
   await supabaseAdmin
     .from("invite_resend_queue")
     .update({ status: "skipped", last_error: "ai_accept_invite_sent" } as any)
