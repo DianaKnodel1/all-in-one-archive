@@ -501,7 +501,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
               _force: false,
             } as any).then(() => {}, (e: any) => console.warn("[interview-chat] stage rpc:", e));
           }
-          return json({ ok: true, ended: true, timedOut, application_status: toApplicationStatus(result.recommendation), invite_mail: inviteMail, ...result });
+          return json({ ok: true, ended: true, timedOut, application_status: toApplicationStatus(result.recommendation), invite_mail: inviteMail, branding: brandingOut, ...result });
         }
 
         // Baue Messages für AI
@@ -564,7 +564,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
           } as any).then(() => {}, (e: any) => console.warn("[interview-chat] stage rpc:", e));
         }
 
-        return json({ ok: true, reply, ended, history, application_status: ended ? updates.status : undefined, interview_started_at: updates.interview_started_at ?? app.interview_started_at ?? null, invite_mail: inviteMail });
+        return json({ ok: true, reply, ended, history, application_status: ended ? updates.status : undefined, interview_started_at: updates.interview_started_at ?? app.interview_started_at ?? null, invite_mail: inviteMail, branding: brandingOut });
         } catch (e: any) {
           console.error("[interview-chat] fatal:", e?.stack || e);
           const msg = String(e?.message ?? "");
