@@ -61,17 +61,42 @@ function InterviewPage() {
 
   
 
-  // Branding laden
+  // Branding laden.
+  // Wichtig: Das Gespräch führt IMMER die Fast-Track-Firma. Zeigt der Slug auf
+  // eine Vermittlungs-/Broker-Landing, wird auf die verknüpfte Fast-Track-Landing
+  // aufgelöst — sonst erscheinen Firmenname, Logo und Recruiter:in der Vermittlung.
   useEffect(() => {
     if (!landing) return;
-    supabase
-      .from("landing_pages")
-      .select("logo_url, branding")
-      .eq("slug", landing)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setBranding({ ...(data.branding as any), logo_url: data.logo_url });
+    let cancelled = false;
+    const COLS = "logo_url, branding, recruiter_name, recruiter_avatar_url, flow_type, linked_fasttrack_landing_id";
+    const apply = (row: any) => {
+      if (cancelled || !row) return;
+      setBranding({
+        ...(row.branding as any),
+        logo_url: row.logo_url,
+        recruiter_name: row.recruiter_name || undefined,
+        recruiter_avatar_url: row.recruiter_avatar_url || null,
       });
+    };
+    (async () => {
+      const { data } = await supabase
+        .from("landing_pages")
+        .select(COLS)
+        .eq("slug", landing)
+        .maybeSingle();
+      if (!data) return;
+      const linkedId = (data as any).linked_fasttrack_landing_id;
+      if ((data as any).flow_type !== "fast" && linkedId) {
+        const { data: linked } = await supabase
+          .from("landing_pages")
+          .select(COLS)
+          .eq("id", linkedId)
+          .maybeSingle();
+        if (linked) return apply(linked);
+      }
+      apply(data);
+    })();
+    return () => { cancelled = true; };
   }, [landing]);
 
   // Init: Bewerbung + Verlauf laden — erst NACH Einwilligung
