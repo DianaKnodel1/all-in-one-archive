@@ -57,11 +57,23 @@ LOGS="$(sqlt "SELECT coalesce(template_name,'(null)'), status, count(*)
                 FROM email_send_log
                WHERE created_at > now() - interval '30 days'
                GROUP BY 1,2;")"
+# Reminder werden zusaetzlich je Art protokolliert — email_send_log allein
+# reicht nicht, weil dort teils der Tenant-Vorlagenname steht.
+RLOGS="$(sqlt "SELECT reminder_kind, status, count(*)
+                 FROM application_reminder_log
+                WHERE sent_at > now() - interval '30 days'
+                GROUP BY 1,2
+                UNION ALL
+               SELECT reminder_type, status, count(*)
+                 FROM reminder_log
+                WHERE sent_at > now() - interval '30 days'
+                GROUP BY 1,2;")"
 
 has_fn()   { printf '%s\n' "$FNS"   | grep -qx "$1"; }
 cron_line(){ printf '%s\n' "$CRONS" | grep -F "$1 ::" | head -1; }
-log_sent() { printf '%s\n' "$LOGS"  | awk -F'|' -v t="$1" '$1==t && ($2=="sent"||$2=="delivered"){s+=$3} END{print s+0}'; }
-log_fail() { printf '%s\n' "$LOGS"  | awk -F'|' -v t="$1" '$1==t && ($2=="failed"||$2=="error"||$2=="bounced"){s+=$3} END{print s+0}'; }
+log_sent() { printf '%s\n%s\n' "$LOGS" "$RLOGS" | awk -F'|' -v t="$1" '$1==t && ($2=="sent"||$2=="delivered"){s+=$3} END{print s+0}'; }
+log_fail() { printf '%s\n%s\n' "$LOGS" "$RLOGS" | awk -F'|' -v t="$1" '$1==t && ($2=="failed"||$2=="error"||$2=="bounced"){s+=$3} END{print s+0}'; }
+log_skip() { printf '%s\n' "$RLOGS" | awk -F'|' -v t="$1" '$1==t && $2=="skipped"{s+=$3} END{print s+0}'; }
 
 row() { # nr | name | function | template | cron-job ("-" = ereignisgesteuert)
   local nr="$1" name="$2" fn="$3" tpl="$4" job="$5" st ok=1 note=""
@@ -75,7 +87,7 @@ row() { # nr | name | function | template | cron-job ("-" = ereignisgesteuert)
     fi
   else note="${note}ereignisgesteuert; "; fi
   local s f; s="$(log_sent "$tpl")"; f="$(log_fail "$tpl")"
-  note="${note}30d: ${s} gesendet / ${f} fehlgeschlagen"
+  note="${note}30d: ${s} gesendet / ${f} fehlgeschlagen / $(log_skip "$tpl") uebersprungen"
   [ "$f" -gt 0 ] 2>/dev/null && ok=$(( ok == 1 ? 2 : ok ))
   case "$ok" in
     1) st="${G}OK  ${N}" ;;
@@ -95,6 +107,9 @@ row 4 "Kein Termin 24h"             send-application-reminders   no_booking_24h 
 row 5 "Kein Termin 72h"             send-application-reminders   no_booking_72h              send-application-reminders
 row 6 "No-Show 24h"                 send-application-reminders   no_show_24h                 send-application-reminders
 row 7 "Rebook nach Absage"          send-application-reminders   rebook_after_cancel_24h     send-application-reminders
+row 7b "Rebook nach Absage 72h"     send-application-reminders   rebook_after_cancel_72h     send-application-reminders
+row 7c "Zusage, nicht registriert 24h" send-application-reminders registration_pending_24h   send-application-reminders
+row 7d "Zusage, nicht registriert 72h" send-application-reminders registration_pending_72h   send-application-reminders
 
 hd "C) Onboarding / Account"
 row 8  "Willkommen / Einladung"     send-invitation-email        welcome_invitation          -
@@ -107,10 +122,24 @@ row 12 "Einladung noch offen"       send-reminders               reminder_invite
 row 13 "E-Mail noch nicht bestätigt" send-reminders              reminder_confirm_email      send-reminders-hourly
 row 14 "Registrierung abschließen"  send-reminders               reminder_complete_registration send-reminders-hourly
 row 15 "Invite-Drip-Queue"          process-invite-resend-queue  invitation                  process-invite-resend-queue
+row 14b "Registrierung abschließen (Log)" send-reminders         complete_registration       send-reminders-hourly
+row 14c "E-Mail bestätigen (Log)"   send-reminders               confirm_email               send-reminders-hourly
+row 14d "Keine Buchung (Mitarbeiter)" send-reminders             no_recent_booking           send-reminders-hourly
+row 14e "Domain-Recovery"           send-reminders               domain_recovery             send-reminders-hourly
 
 hd "E) Intern / Manuell"
 row 16 "Chat-Erinnerung"            send-chat-reminder           chat_reminder               -
 row 17 "SMTP-Test"                  smtp-test                    smtp_test                   -
+
+hd "Reminder-Protokoll je Art (30 Tage)"
+sqlt "SELECT reminder_kind||' | '||status||' | '||count(*)
+        FROM application_reminder_log
+       WHERE sent_at > now() - interval '30 days'
+       GROUP BY 1,2 ORDER BY 1;" | sed 's/^/  /'
+sqlt "SELECT reminder_type||' | '||status||' | '||count(*)
+        FROM reminder_log
+       WHERE sent_at > now() - interval '30 days'
+       GROUP BY 1,2 ORDER BY 1;" | sed 's/^/  /'
 
 hd "Cron-Übersicht (Ist-Zustand)"
 printf '%s\n' "$CRONS" | sed 's/^/  /'
