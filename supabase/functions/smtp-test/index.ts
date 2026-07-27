@@ -85,14 +85,12 @@ serve(async (req) => {
     if (tenant.is_active === false) {
       return json({ success: false, error: "Tenant ist deaktiviert", errorCode: "TENANT_INACTIVE", debug }, 400);
     }
-    if (tenant.emails_paused) {
-      return json({
-        success: false,
-        error: `E-Mail-Versand ist pausiert${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}`,
-        errorCode: "TENANT_PAUSED",
-        debug,
-      }, 400);
-    }
+    // Bewusst KEIN Abbruch bei emails_paused: sonst kann man nach dem
+    // Eintragen neuer Zugangsdaten nie nachweisen, dass SMTP wieder geht
+    // (Henne-Ei). Der Pausen-Zustand wird nur informativ mitgegeben.
+    const wasPaused = !!tenant.emails_paused;
+    const pausedBy = (tenant as any).emails_paused_by ?? null;
+    const pausedReason = tenant.emails_paused_reason ?? null;
     if (!tenant.smtp_host || !tenant.smtp_port || !tenant.smtp_username || !tenant.smtp_password || !tenant.sender_email) {
       return json({ success: false, error: "SMTP ist nicht vollständig konfiguriert", errorCode: "SMTP_CONFIG_INCOMPLETE", debug }, 400);
     }
@@ -122,7 +120,62 @@ serve(async (req) => {
 
     debug.last_successful_stage = "VERIFY";
     debug.current_stage = "DONE" satisfies Stage;
-    return json({ success: true, message: "SMTP-Verbindung und Login erfolgreich", debug }, 200);
+
+    // Health-Counter zurücksetzen
+    await admin.from("tenant_smtp_health").upsert({
+      tenant_id: tenant.id,
+      consecutive_fails: 0,
+      last_verify_ok: true,
+      last_verify_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    let autoResumed = false;
+    let resumeBlocked: string | null = null;
+
+    if (wasPaused) {
+      const manualPause = typeof pausedBy === "string" && pausedBy.startsWith("manual:");
+      if (manualPause) {
+        resumeBlocked = "manual";
+      } else {
+        const { error: resumeErr } = await admin
+          .from("tenants")
+          .update({
+            emails_paused: false,
+            emails_paused_at: null,
+            emails_paused_reason: null,
+            emails_paused_by: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", tenant.id);
+
+        if (resumeErr) {
+          resumeBlocked = "error";
+        } else {
+          autoResumed = true;
+          await admin.from("activity_log").insert({
+            actor_id: userRes.user.id,
+            action: "emails_reaktiviert",
+            entity_type: "tenant",
+            entity_id: tenant.id,
+            comment: `Automatisch freigegeben nach erfolgreichem SMTP-Test (vorher: ${pausedBy ?? "unbekannt"}${pausedReason ? ` – ${pausedReason}` : ""}).`,
+          });
+        }
+      }
+    }
+
+    return json({
+      success: true,
+      message: autoResumed
+        ? "SMTP-Verbindung und Login erfolgreich – Mail-Versand wurde automatisch wieder freigegeben."
+        : "SMTP-Verbindung und Login erfolgreich",
+      was_paused: wasPaused,
+      paused_by: pausedBy,
+      paused_reason: pausedReason,
+      auto_resumed: autoResumed,
+      resume_blocked: resumeBlocked,
+      debug,
+    }, 200);
   } catch (err: any) {
     const message = String(err?.message ?? err);
     return json({
