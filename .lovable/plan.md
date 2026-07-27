@@ -1,32 +1,37 @@
-## Kurze Antwort
+## Ausgangslage (geprüft)
 
-Nein — `verify-mail-matrix.sh` prüft nur **Existenz + Historie** (Function da? Cron aktiv? wie oft in 30 Tagen gesendet/fehlgeschlagen?). Es löst keine einzige Mail aus. Für „Bewerber bekommt Zusage → Mail geht wirklich raus" braucht es den Kettentest (`run-full-chain.sh`), und der hat aktuell Lücken.
+- Deploy auf dem Portal-Server ist erfolgreich (`portal.service` aktiv, Release `20260727-085931`).
+- Platzhalter werden **zur Sendezeit** ersetzt: der gemeinsame Mail-Wrapper rendert Betreff und Text mit den übergebenen Variablen (`first_name`, `email`, `portal_link`, `login_link`, `tenant_name`, `missing_documents`, …). Standardvorlagen im Code sind damit automatisch aktuell.
+- Nicht überprüfbar von hier aus: individuell überschriebene Vorlagen je Mandant — die liegen in deiner selbst gehosteten Datenbank.
 
-## Was ich geprüft habe
+## Schritt 1 — Vorlagen-Check ausführen (du)
 
-- `send-application-reminders` kennt 7 Arten: `no_booking_24h/72h`, `no_show_24h`, `rebook_after_cancel_24h/72h`, `registration_pending_24h/72h`.
-- `verify-mail-matrix.sh` listet davon nur 4 Zeilen — **`no_booking_72h`, `rebook_after_cancel_72h`, `registration_pending_24h` und `registration_pending_72h` fehlen komplett in der Matrix**. Genau „Zusage erhalten, aber nicht registriert" ist also bisher nicht in der Prüfung.
-- `send-reminders` kennt `invite`, `confirm_email`, `complete_registration`, `no_recent_booking`, `domain_recovery`. In der Matrix fehlen `no_recent_booking` und `domain_recovery`.
-- `complete_registration` greift auf `profiles.onboarding_status <> 'abgeschlossen'` — das ist die einzige Mail, die den Fall „registriert, aber Ausweis/Vertrag fehlt" abdeckt. Eine **eigene** Mail „Personalausweis fehlt" bzw. „Arbeitsvertrag nicht unterschrieben" existiert im Code nicht.
+Wichtig: **auf dem Backend-Server** (dort läuft der `supabase-db`-Container), nicht auf dem Portal-Server.
 
-## Vorgehen
+```bash
+cd /opt/apps/portal-migrations && git pull && bash scripts/check-mail-templates.sh --local
+```
 
-1. **Matrix vervollständigen** — `verify-mail-matrix.sh` um die 6 fehlenden Zeilen erweitern (`no_booking_72h`, `rebook_after_cancel_72h`, `registration_pending_24h/72h`, `no_recent_booking`, `domain_recovery`), damit aus 17 die tatsächlich implementierten ~23 Mails werden. Zusätzlich eine Auswertung direkt aus `application_reminder_log` je `reminder_kind` (nicht nur `email_send_log`), weil die Reminder dort mit ihrem Kind protokolliert werden.
+Falls dieses Verzeichnis dort nicht existiert, nimm den Ordner, aus dem du `deploy-backend.sh` startest. Alternativ vom Portal-Server aus mit direkter DB-URL:
 
-2. **Kettentest lückenlos machen** — `run-full-chain.sh` bekommt die fehlenden Stufen:
-   - Zusage erteilt, aber keine Registrierung nach 24h/72h → `registration_pending_24h/72h`
-   - Registriert, Onboarding unvollständig (kein Ausweis/kein Vertrag) → `complete_registration`
-   - E-Mail nicht bestätigt → `confirm_email`
-   Jede Stufe: Zustand setzen → Dry-Run (nur Testbewerber fällig) → echter Send → Logzeile prüfen.
+```bash
+cd /opt/apps/portal && TARGET_DB_URL='postgres://…' bash scripts/check-mail-templates.sh
+```
 
-3. **Onboarding-Seite mitnehmen** — für Stufe „Mitarbeiter registriert, Dokumente fehlen" muss der Test ein `profiles`-Testprofil mit `onboarding_status='in_bearbeitung'`, ohne `contract_signed_at` und ohne verifizierte `kyc_verifications` anlegen und am Ende wieder aufräumen (`chain-99-cleanup.sql` erweitern).
+Das Skript ist rein lesend und verschickt nichts.
 
-4. **Ergebnisbericht** — Tabelle: Mail · Auslöser · Cron · Dry-Run fällig? · real gesendet? · Postfach-Eingang.
+## Schritt 2 — Auswertung (ich)
 
-## Offene Frage vor der Umsetzung
+Du schickst mir die Ausgabe. Ich prüfe:
+- welche Mandanten Standardvorlagen nutzen (alles gut) und welche eigene Texte haben,
+- veraltete eigene „Registrierung abschließen“-Texte ohne `{{missing_documents}}`,
+- eigene Texte ganz ohne Link/Platzhalter (Bewerber kommt nicht weiter),
+- unbekannte Platzhalter, die als Rohtext `{{…}}` in der Mail landen würden.
 
-Soll ich für „Ausweis fehlt" und „Arbeitsvertrag nicht unterschrieben" **eigene** Mails bauen (getrennte Texte, eigene Idempotenz), oder reicht dir die bestehende Sammel-Mail „Registrierung abschließen"? Das ist der einzige echte Feature-Punkt; alles andere ist Test-Abdeckung.
+## Schritt 3 — Nachziehen
 
-## Technische Details
+Für jede auffällige Vorlage: entweder auf die aktuelle Standardvorlage zurücksetzen (Feld auf NULL) oder den eigenen Text um die fehlenden Platzhalter ergänzen. Das mache ich als eine SQL-Migration in `supabase/manual-migrations/`, die du mit `bash scripts/deploy-backend.sh` einspielst.
 
-Die neuen Kettenstufen arbeiten wie die bestehenden: nur Zeilen mit der Test-E-Mail werden manipuliert, `application_reminder_log` bzw. `reminder_log` wird je Kind gezielt geleert, damit die Idempotenz-Sperre den Wiederholungslauf nicht blockiert. Abbruch, sobald der Dry-Run mehr als den Testbewerber als fällig meldet. Für `complete_registration` wird zusätzlich ein Testeintrag in `profiles` benötigt (an einen Auth-User gebunden) — den räumt das Cleanup mit ab.
+## Schritt 4 — Gegenprobe
+
+Nach dem Nachziehen erneut `check-mail-templates.sh` (keine Zeile mit `!`) und danach `bash scripts/verify-mail-matrix.sh --local` für die Versandhistorie.
