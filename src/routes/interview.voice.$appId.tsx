@@ -30,6 +30,7 @@ type EndResult = {
   recommendation?: "invite" | "reject" | "unsure";
   application_status?: string;
   empty?: boolean;
+  invite_mail?: { sent?: boolean; registration_link?: string | null };
 };
 
 async function postVoice(body: unknown) {
@@ -286,30 +287,17 @@ function VoiceInterviewPage() {
     const primaryColor = branding?.primary_color || "#2563eb";
 
     if (rec === "invite") {
-      const registerUrl = `/register?application=${encodeURIComponent(appId)}`;
+      const registerUrl = endResult?.invite_mail?.registration_link ?? null;
       return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-slate-100 p-4">
-          <div className="max-w-xl w-full bg-white rounded-2xl border border-emerald-200 p-8 shadow-sm">
-            <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4">
-              <CheckCircle2 className="w-7 h-7" />
-            </div>
-            <h1 className="text-2xl font-semibold mb-2">Willkommen im Team!</h1>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              {greeting} wir freuen uns, dass Sie dabei sind. Ihr Profil hat uns überzeugt — lassen Sie uns direkt starten!
-            </p>
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 mb-5">
-              <p className="text-sm font-medium text-slate-800 mb-2">Wie geht es weiter?</p>
-              <ol className="text-sm text-slate-700 space-y-1.5 list-decimal list-inside">
-                <li>Registrieren Sie sich im Mitarbeiter-Portal von {companyName}</li>
-                <li>Führen Sie anschließend Ihr Onboarding durch (Arbeitsvertrag &amp; Personalausweis)</li>
-              </ol>
-            </div>
-            <Button asChild size="lg" className="w-full" style={{ background: primaryColor }}>
-              <a href={registerUrl}>Jetzt registrieren</a>
-            </Button>
-            <p className="text-xs text-muted-foreground text-center mt-4">
-              Wir wünschen Ihnen einen erfolgreichen Start!
-            </p>
+          <div className="max-w-xl w-full">
+            <ZusageCard
+              company={companyName}
+              primary={primaryColor}
+              recruiter={config?.recruiterName ?? "HR-Team"}
+              firstName={firstName}
+              registrationLink={registerUrl}
+            />
           </div>
         </div>
       );
