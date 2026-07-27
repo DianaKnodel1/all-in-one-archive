@@ -254,7 +254,8 @@ function VoiceInterviewPage() {
     }
   }, [conversation, connected, connecting]);
 
-  const company = branding?.firmenname || config?.companyName || "uns";
+  // Server-Config (löst Vermittlung → Fast-Track auf) hat Vorrang vor der lokalen Abfrage.
+  const company = config?.companyName || branding?.firmenname || "uns";
   const primary = branding?.primary_color || "#2563eb";
   const mm = Math.floor(remainingSec / 60).toString().padStart(2, "0");
   const ss = (remainingSec % 60).toString().padStart(2, "0");
@@ -284,7 +285,7 @@ function VoiceInterviewPage() {
     const rec = endResult?.recommendation;
     const firstName = config?.applicantFirstName?.trim();
     const greeting = firstName ? `Hallo ${firstName},` : "Hallo,";
-    const companyName = branding?.firmenname || config?.companyName || "uns";
+    const companyName = config?.companyName || branding?.firmenname || "uns";
     const primaryColor = branding?.primary_color || "#2563eb";
 
     if (rec === "invite") {
@@ -338,8 +339,8 @@ function VoiceInterviewPage() {
     );
   }
 
-  const recruiterName = config?.recruiterName ?? "Sabine Schneider";
-  const recruiterAvatarUrl = config?.recruiterAvatarUrl ?? null;
+  const recruiterName = config?.recruiterName || (branding as any)?.recruiter_name || "Ihr HR-Team";
+  const recruiterAvatarUrl = config?.recruiterAvatarUrl || (branding as any)?.recruiter_avatar_url || null;
   const recruiterInitials = recruiterName
     .split(" ")
     .map((p) => p[0])

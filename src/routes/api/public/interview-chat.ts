@@ -9,7 +9,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sendRegistrationInviteAfterAiAccept } from "@/lib/interview-engine.server";
+import { sendRegistrationInviteAfterAiAccept, prettifyCompanyName } from "@/lib/interview-engine.server";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -402,9 +402,10 @@ export const Route = createFileRoute("/api/public/interview-chat")({
 
         let systemPrompt = DEFAULT_SYSTEM_PROMPT;
         let companyName = "unserem Unternehmen";
-        let recruiterName = "Sabine Schneider";
+        let recruiterName = "Ihr HR-Team";
+        let recruiterAvatarUrl: string | null = null;
         {
-          const sel = "id, slug, source_slug, interview_system_prompt, branding, recruiter_name, linked_fasttrack_landing_id";
+          const sel = "id, slug, source_slug, interview_system_prompt, branding, recruiter_name, recruiter_avatar_url, linked_fasttrack_landing_id";
           let lp: any = null;
           if ((app as any).source_landing_id) {
             const { data: byId } = await supabaseAdmin
@@ -432,18 +433,32 @@ export const Route = createFileRoute("/api/public/interview-chat")({
               .from("landing_pages").select(sel).eq("id", (app as any).target_landing_id).maybeSingle();
             ft = ftData ?? null;
           }
-          // Source-Landing hat Vorrang; Fasttrack nur Fallback.
-          const custom = lp?.interview_system_prompt?.trim?.() || ft?.interview_system_prompt?.trim?.();
+          // Das Gespräch führt IMMER die Fast-Track-Firma → diese hat Vorrang,
+          // die Vermittlungs-Landing ist nur Fallback für fehlende Felder.
+          const custom = ft?.interview_system_prompt?.trim?.() || lp?.interview_system_prompt?.trim?.();
           if (custom) systemPrompt = custom;
-          const fn = lp?.branding?.firmenname?.trim?.() || ft?.branding?.firmenname?.trim?.();
-          if (fn) companyName = fn;
+          const fn = ft?.branding?.firmenname?.trim?.() || lp?.branding?.firmenname?.trim?.();
+          if (fn) companyName = prettifyCompanyName(fn);
           const rn =
-            lp?.branding?.recruiter_name?.trim?.() ||
-            lp?.recruiter_name?.trim?.() ||
             ft?.branding?.recruiter_name?.trim?.() ||
-            ft?.recruiter_name?.trim?.();
+            ft?.recruiter_name?.trim?.() ||
+            lp?.branding?.recruiter_name?.trim?.() ||
+            lp?.recruiter_name?.trim?.();
           if (rn) recruiterName = rn;
+          recruiterAvatarUrl =
+            ft?.recruiter_avatar_url ||
+            ft?.branding?.recruiter_avatar_url ||
+            lp?.recruiter_avatar_url ||
+            lp?.branding?.recruiter_avatar_url ||
+            null;
         }
+        // Branding wird an das Frontend durchgereicht, damit Chat-Kopf und
+        // Begrüßungstext garantiert dieselbe Firma/Person zeigen.
+        const brandingOut = {
+          recruiter_name: recruiterName,
+          recruiter_avatar_url: recruiterAvatarUrl,
+          company_name: companyName,
+        };
         // Vorname personalisieren — für persönliche Ansprache im Prompt.
         const rawFirst = (app as any).first_name?.trim?.() || (app.full_name || "").trim().split(/\s+/)[0] || "";
         const firstNameForPrompt = rawFirst || "";
@@ -486,7 +501,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
               _force: false,
             } as any).then(() => {}, (e: any) => console.warn("[interview-chat] stage rpc:", e));
           }
-          return json({ ok: true, ended: true, timedOut, application_status: toApplicationStatus(result.recommendation), invite_mail: inviteMail, ...result });
+          return json({ ok: true, ended: true, timedOut, application_status: toApplicationStatus(result.recommendation), invite_mail: inviteMail, branding: brandingOut, ...result });
         }
 
         // Baue Messages für AI
@@ -503,7 +518,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
 
         // Bei init: nur Greeting holen, falls History leer; sonst Fehler
         if (action === "init" && history.length > 0) {
-          return json({ reply: history[history.length - 1]?.text ?? "", ended: false, history, interview_started_at: app.interview_started_at ?? null });
+          return json({ reply: history[history.length - 1]?.text ?? "", ended: false, history, interview_started_at: app.interview_started_at ?? null, branding: brandingOut });
         }
 
         // AI-Antwort
@@ -549,7 +564,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
           } as any).then(() => {}, (e: any) => console.warn("[interview-chat] stage rpc:", e));
         }
 
-        return json({ ok: true, reply, ended, history, application_status: ended ? updates.status : undefined, interview_started_at: updates.interview_started_at ?? app.interview_started_at ?? null, invite_mail: inviteMail });
+        return json({ ok: true, reply, ended, history, application_status: ended ? updates.status : undefined, interview_started_at: updates.interview_started_at ?? app.interview_started_at ?? null, invite_mail: inviteMail, branding: brandingOut });
         } catch (e: any) {
           console.error("[interview-chat] fatal:", e?.stack || e);
           const msg = String(e?.message ?? "");

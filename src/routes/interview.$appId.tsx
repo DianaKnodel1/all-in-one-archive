@@ -69,7 +69,14 @@ function InterviewPage() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [scheduledAt, setScheduledAt] = useState<number | null>(null);
   const [branding, setBranding] = useState<{ firmenname?: string; primary_color?: string; logo_url?: string | null; recruiter_name?: string; recruiter_avatar_url?: string | null } | null>(null);
+  // Vom Server aufgelöstes Branding (Fast-Track-Firma). Hat Vorrang vor der
+  // direkten Datenbank-Abfrage, die bei unveröffentlichten Seiten leer bleibt.
+  const [serverBranding, setServerBranding] = useState<{ recruiter_name?: string; recruiter_avatar_url?: string | null; company_name?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const applyServerBranding = (data: any) => {
+    if (data?.branding) setServerBranding(data.branding);
+  };
 
 
   
@@ -120,6 +127,7 @@ function InterviewPage() {
       try {
         const data = await postInterview({ applicationId: appId, action: "init" });
         if (cancelled) return;
+        applyServerBranding(data);
         if ((data as any).__notYet) {
           const sched = (data as any).scheduled_at ? new Date((data as any).scheduled_at).getTime() : null;
           setScheduledAt(sched);
@@ -160,6 +168,7 @@ function InterviewPage() {
       try {
         const data = await postInterview({ applicationId: appId, action: "init" });
         if ((data as any).__notYet) return;
+        applyServerBranding(data);
         setScheduledAt(null);
         setMessages(data.history ?? []);
         if (data.ended) setEnded(true);
@@ -206,6 +215,7 @@ function InterviewPage() {
     typingTimerRef.current = setTimeout(() => setTyping(true), readMs);
     try {
       const data = await postInterview({ applicationId: appId, action: "message", text });
+      applyServerBranding(data);
       // Menschlichere Antwortzeit: kurze Denkpause + „Tipp"-Zeit abhängig von Antwortlänge
       const reply = (data.history ?? []).slice(-1)[0]?.text ?? "";
       const chars = reply.length;
@@ -237,6 +247,7 @@ function InterviewPage() {
     setLoading(true);
     try {
       const data = await postInterview({ applicationId: appId, action: "end" });
+      applyServerBranding(data);
       if (data?.application_status) setAppStatus(data.application_status);
       const im = (data as any)?.invite_mail;
       if (im?.registration_link) setRegistrationLink(im.registration_link);
@@ -249,7 +260,9 @@ function InterviewPage() {
     }
   }
 
-  const company = branding?.firmenname || "uns";
+  const company = serverBranding?.company_name || branding?.firmenname || "uns";
+  // Kein erfundener Name mehr: ohne gepflegten Recruiter zeigt der Chat das HR-Team.
+  const recruiterDisplayName = serverBranding?.recruiter_name || branding?.recruiter_name || "Ihr HR-Team";
   const primary = branding?.primary_color || "#2563eb";
   const portalBase =
     (portal || "").replace(/\/+$/, "") ||
@@ -293,16 +306,18 @@ function InterviewPage() {
         company={company}
         primary={primary}
         logoUrl={branding?.logo_url || null}
-        recruiterName={branding?.recruiter_name || "Sabine Schneider"}
+        recruiterName={recruiterDisplayName}
       />
     );
   }
 
 
 
-  const recruiterName = branding?.recruiter_name || "Sabine Schneider";
-  const avatarUrl = branding?.recruiter_avatar_url || null;
-  const initials = recruiterName.split(" ").map((s) => s[0]).join("").slice(0, 2).toUpperCase();
+  const avatarUrl = serverBranding?.recruiter_avatar_url || branding?.recruiter_avatar_url || null;
+  const recruiterName = recruiterDisplayName;
+  const initials = recruiterName === "Ihr HR-Team"
+    ? "HR"
+    : recruiterName.split(" ").map((s) => s[0]).join("").slice(0, 2).toUpperCase();
   const status = typing ? `${recruiterName.split(" ")[0]} schreibt …` : ended ? "Gespräch beendet" : "online";
 
   return (
