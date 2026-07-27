@@ -403,13 +403,23 @@ serve(async (req) => {
     }
 
     try {
-      const info = await transporter.sendMail({
-        from: `"${senderName}" <${senderEmail}>`,
-        to,
-        replyTo: tenant.reply_to_email ?? senderEmail,
-        subject,
-        html,
-      });
+      // Hartes Gesamtlimit: die Funktion muss IMMER antworten, sonst sieht der
+      // Admin nur "Failed to send a request to the Edge Function".
+      const info: any = await Promise.race([
+        transporter.sendMail({
+          from: `"${senderName}" <${senderEmail}>`,
+          to,
+          replyTo: tenant.reply_to_email ?? senderEmail,
+          subject,
+          html,
+        }),
+        new Promise((_r, rej) =>
+          setTimeout(
+            () => rej(new Error(`smtp_send_timeout: ${tenant.smtp_host}:${tenant.smtp_port} hat innerhalb von 25 s nicht geantwortet`)),
+            25000,
+          )
+        ),
+      ]);
       await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "sent", undefined, { ...smtpMeta, message_id: info?.messageId ?? null });
       await resetRecipientFailure(supabaseAdmin, to);
       return json({ success: true }, 200);
