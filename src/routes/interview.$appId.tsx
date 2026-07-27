@@ -10,6 +10,13 @@ import { Loader2, Send, CheckCircle2, UserPlus } from "lucide-react";
 
 type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
+// Menschlichere Reaktionszeit: die KI "liest" erst kurz, bevor die Tippblase erscheint.
+const READ_DELAY_MIN_MS = 1200;
+const READ_DELAY_MAX_MS = 2500;
+const readDelay = () =>
+  READ_DELAY_MIN_MS + Math.random() * (READ_DELAY_MAX_MS - READ_DELAY_MIN_MS);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function postInterview(body: unknown) {
   const res = await fetch("/api/public/interview-chat", {
     method: "POST",
@@ -48,6 +55,9 @@ function InterviewPage() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // Getrennt von `loading`: die Tippblase erscheint erst nach der Lesepause.
+  const [typing, setTyping] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [ended, setEnded] = useState(false);
   const [appStatus, setAppStatus] = useState<string | null>(null);
@@ -114,7 +124,16 @@ function InterviewPage() {
           return;
         }
         setScheduledAt(null);
-        setMessages(data.history ?? []);
+        const history = data.history ?? [];
+        // Begrüßung nicht abrupt einblenden: kurz "tippen" lassen.
+        if (history.length > 0 && history[history.length - 1]?.role === "assistant") {
+          setInitializing(false);
+          setTyping(true);
+          await sleep(readDelay() + 600);
+          if (cancelled) return;
+          setTyping(false);
+        }
+        setMessages(history);
         if (data.ended) setEnded(true);
         if (data.application_status) setAppStatus(data.application_status);
         setStartedAt(data.interview_started_at ? new Date(data.interview_started_at).getTime() : Date.now());
@@ -161,7 +180,10 @@ function InterviewPage() {
   // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, typing]);
+
+  // Timer aufräumen
+  useEffect(() => () => { if (typingTimerRef.current) clearTimeout(typingTimerRef.current); }, []);
 
   // KI Chat ist bewusst ein reiner Text-Chat — keine TTS, keine Stimme.
   // Sprachausgabe läuft ausschließlich über /interview/voice/$appId (KI Telefon).
@@ -175,6 +197,10 @@ function InterviewPage() {
     // optimistic
     setMessages((prev) => [...prev, { role: "user", text, ts: new Date().toISOString() }]);
     const startedAt = Date.now();
+    // Lesepause: erst nach 1,2–2,5 s erscheint die Tippblase.
+    const readMs = readDelay();
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => setTyping(true), readMs);
     try {
       const data = await postInterview({ applicationId: appId, action: "message", text });
       // Menschlichere Antwortzeit: kurze Denkpause + „Tipp"-Zeit abhängig von Antwortlänge
@@ -182,15 +208,19 @@ function InterviewPage() {
       const chars = reply.length;
       // ~35ms pro Zeichen "Tippen", + 900ms Denkpause, gedeckelt bei 6s
       const targetMs = Math.min(6000, 900 + chars * 35);
+      // Lesepause zählt mit, aber es wird immer mindestens ~600 ms sichtbar getippt.
+      const minVisible = readMs + 600;
       const elapsed = Date.now() - startedAt;
-      const wait = Math.max(0, targetMs - elapsed);
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      const wait = Math.max(0, Math.max(targetMs, minVisible) - elapsed);
+      if (wait > 0) await sleep(wait);
       setMessages(data.history ?? []);
       if (data.ended) setEnded(true);
       if (data.application_status) setAppStatus(data.application_status);
     } catch (e: any) {
       setError(e?.message ?? "Unbekannter Fehler");
     } finally {
+      if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
+      setTyping(false);
       setLoading(false);
     }
   }
@@ -259,7 +289,7 @@ function InterviewPage() {
   const recruiterName = branding?.recruiter_name || "Sabine Schneider";
   const avatarUrl = branding?.recruiter_avatar_url || null;
   const initials = recruiterName.split(" ").map((s) => s[0]).join("").slice(0, 2).toUpperCase();
-  const status = loading ? `${recruiterName.split(" ")[0]} schreibt …` : ended ? "Gespräch beendet" : "online";
+  const status = typing ? `${recruiterName.split(" ")[0]} schreibt …` : ended ? "Gespräch beendet" : "online";
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -321,7 +351,7 @@ function InterviewPage() {
               </div>
             );
           })}
-          {loading && !ended && (
+          {typing && !ended && (
             <div className="flex justify-start mt-2">
               <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
                 <div className="flex items-end gap-1.5 h-4">
