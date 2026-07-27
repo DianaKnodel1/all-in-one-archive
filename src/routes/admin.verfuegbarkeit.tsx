@@ -352,8 +352,16 @@ function RulesEditor({ scheduleId, slotMinutes }: { scheduleId: string; slotMinu
         <CardDescription>Wann finden regelmäßig Bewerbungsgespräche statt?</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        {rules.map((r, idx) => (
-          <div key={idx} className="flex items-center gap-2">
+        <p className="text-xs text-muted-foreground">
+          Ein Termin muss vollständig <strong>innerhalb</strong> des Fensters liegen. Bei {slotMinutes} Min.
+          Slot-Dauer ist der letzte Start also {slotMinutes} Min. vor der Endzeit (z.&nbsp;B. 09:00–12:00 → letzter
+          Termin {slotPreview("09:00", "12:00", slotMinutes)?.last ?? "–"}). Für Termine bis Mitternacht die Endzeit
+          auf 23:59 setzen.
+        </p>
+        {rules.map((r, idx) => {
+          const preview = slotPreview(r.start_time, r.end_time, slotMinutes);
+          return (
+          <div key={idx} className="flex flex-wrap items-center gap-2">
             <Select value={String(r.weekday)}
               onValueChange={v => setDraft(rules.map((x, i) => i === idx ? { ...x, weekday: Number(v) } : x))}>
               <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
@@ -371,8 +379,16 @@ function RulesEditor({ scheduleId, slotMinutes }: { scheduleId: string; slotMinu
               onClick={() => setDraft(rules.filter((_, i) => i !== idx))}>
               <Trash2 className="h-4 w-4" />
             </Button>
+            {preview && (
+              <span className="text-xs text-muted-foreground">
+                {preview.count === 0
+                  ? "kein Termin – Fenster kürzer als die Slot-Dauer"
+                  : `${preview.count} Termine · letzter Start ${preview.last} Uhr`}
+              </span>
+            )}
           </div>
-        ))}
+          );
+        })}
         {rules.length === 0 && (
           <p className="text-xs text-muted-foreground">Noch keine Regeln. Fügen Sie unten eine hinzu.</p>
         )}
