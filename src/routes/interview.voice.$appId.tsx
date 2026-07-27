@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Loader2, Mic, MicOff, PhoneOff, CheckCircle2, AlertCircle } from "lucide-react";
+import { ZusageCard } from "@/components/interview/ZusageCard";
 
 type Msg = { role: "user" | "assistant"; text: string };
 
