@@ -858,6 +858,7 @@ document.addEventListener('submit', function(e){
                     <th className="text-left py-1.5 px-2 font-medium">Slug</th>
                     <th className="text-left py-1.5 px-2 font-medium">Theme</th>
                     <th className="text-left py-1.5 px-2 font-medium">Flow</th>
+                    <th className="text-left py-1.5 px-2 font-medium">Verknüpfung</th>
                     <th className="text-left py-1.5 px-2 font-medium">Status</th>
                     <th className="text-right py-1.5 px-2 font-medium">Aktionen</th>
                   </tr>
@@ -873,6 +874,18 @@ document.addEventListener('submit', function(e){
                       <td className="py-1.5 px-2 font-mono text-muted-foreground">{l.slug}</td>
                       <td className="py-1.5 px-2 text-muted-foreground">{l.theme_id}</td>
                       <td className="py-1.5 px-2">{l.flow_type === "fast" ? "⚡ Fast" : l.flow_type === "broker" ? "🤝 Vermittlung" : "🟡 Klassisch"}</td>
+                      <td className="py-1.5 px-2 text-muted-foreground">
+                        {(() => {
+                          const nameOf = (x: any) => x?.branding?.firmenname?.trim?.() || x?.slug || "?";
+                          const target = l.linked_fasttrack_landing_id
+                            ? landings.find((x) => x.id === l.linked_fasttrack_landing_id)
+                            : null;
+                          if (target) return <span title="Weiterleitung + geteilte Terminzeiten">{nameOf(l)} → {nameOf(target)}</span>;
+                          const source = landings.find((x) => x.linked_fasttrack_landing_id === l.id);
+                          if (source) return <span title="Wird von dieser Vermittlung beliefert – geteilte Terminzeiten">← {nameOf(source)}</span>;
+                          return <span className="opacity-40">–</span>;
+                        })()}
+                      </td>
                       <td className="py-1.5 px-2">
                         {l.is_published ? <span className="text-emerald-600">● live</span> : <span className="text-muted-foreground">○ pausiert</span>}
                       </td>
