@@ -18,9 +18,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { renderEmail } from "../_shared/email-wrapper.ts";
 import { guardSend } from "../_shared/send-guard.ts";
+import { formatAppointmentDate, formatAppointmentTime } from "../_shared/format-datetime.ts";
 
-// Alle Termin-Zeiten in E-Mails in deutscher Ortszeit (Container läuft in UTC).
-const APP_TZ = "Europe/Berlin";
 
 const FUNCTION_VERSION = "2026-07-09-interview-invite-30min-v1";
 const REMINDER_KIND = "interview_invite_30min";
@@ -292,8 +291,8 @@ serve(async (req) => {
         full_name: a.full_name || `${firstName} ${a.last_name || ""}`.trim(),
         email: a.email,
         tenant_name: tenant.name,
-        appointment_date: startsAt.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", timeZone: APP_TZ }),
-        appointment_time: startsAt.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: APP_TZ }),
+        appointment_date: formatAppointmentDate(startsAt, false),
+        appointment_time: formatAppointmentTime(startsAt),
         magic_link: magicLink,
         button_label: buttonLabel,
       };

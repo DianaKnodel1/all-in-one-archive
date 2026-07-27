@@ -14,9 +14,8 @@ import { renderEmail } from "../_shared/email-wrapper.ts";
 import { resolveSender } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo, type LogoResolution } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
+import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
 
-// Alle Termin-Zeiten in E-Mails in deutscher Ortszeit (Container läuft in UTC).
-const APP_TZ = "Europe/Berlin";
 
 const FUNCTION_VERSION = "2026-07-18-booking-confirmation-v3-lookback72h";
 const REMINDER_KIND = "booking_confirmation";
@@ -119,11 +118,16 @@ function icsEscape(s: string): string {
 function buildIcs(opts: { uid: string; title: string; description: string; start: Date; end: Date; url: string; organizerName: string; organizerEmail: string; attendeeEmail: string; }): string {
   const lines = [
     "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//MB Portal//Bewerbung//DE","CALSCALE:GREGORIAN","METHOD:REQUEST",
+    // VTIMEZONE, damit Outlook/Apple die Ortszeit auch ohne eigene Zeitzonen-DB korrekt anzeigen.
+    `BEGIN:VTIMEZONE`, `TZID:${APP_TZ}`,
+    "BEGIN:DAYLIGHT","TZOFFSETFROM:+0100","TZOFFSETTO:+0200","TZNAME:CEST","DTSTART:19700329T020000","RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU","END:DAYLIGHT",
+    "BEGIN:STANDARD","TZOFFSETFROM:+0200","TZOFFSETTO:+0100","TZNAME:CET","DTSTART:19701025T030000","RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU","END:STANDARD",
+    "END:VTIMEZONE",
     "BEGIN:VEVENT",
     `UID:${opts.uid}`,
     `DTSTAMP:${icsDate(new Date())}`,
-    `DTSTART:${icsDate(opts.start)}`,
-    `DTEND:${icsDate(opts.end)}`,
+    `DTSTART;TZID=${APP_TZ}:${icsLocalBerlin(opts.start)}`,
+    `DTEND;TZID=${APP_TZ}:${icsLocalBerlin(opts.end)}`,
     `SUMMARY:${icsEscape(opts.title)}`,
     `DESCRIPTION:${icsEscape(opts.description)}`,
     `URL:${opts.url}`,
@@ -302,8 +306,8 @@ serve(async (req) => {
         full_name: app.full_name || `${firstName} ${app.last_name || ""}`.trim(),
         tenant_name: tenant.name,
         recruiter_name: recruiterName,
-        appointment_date: starts.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: APP_TZ }),
-        appointment_time: starts.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: APP_TZ }),
+        appointment_date: formatAppointmentDate(starts),
+        appointment_time: formatAppointmentTime(starts),
         duration_minutes: String(duration),
         cancel_url: cancelUrl,
         // Portal-URL: Fast-Track-Portal (portal.<fast-track-domain>), dort läuft das KI-Interview.
