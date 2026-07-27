@@ -7,7 +7,10 @@ UPDATE applications
    SET created_at = now(),
        updated_at = now(),
        booking_status = NULL,
-       scheduled_at = NULL
+       scheduled_at = NULL,
+       is_test = false,
+       interview_status = 'pending',
+       interview_messages = '[]'::jsonb
  WHERE email = :'test_email';
 
 UPDATE interview_appointments
@@ -22,6 +25,9 @@ DELETE FROM application_reminder_log
 
 DELETE FROM reminder_log
  WHERE email = :'test_email';
+
+DELETE FROM invitation_tokens
+ WHERE application_id IN (SELECT id FROM applications WHERE email = :'test_email');
 
 COMMIT;
 

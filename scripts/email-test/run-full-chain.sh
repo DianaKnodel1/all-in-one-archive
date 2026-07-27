@@ -18,13 +18,16 @@
 #   SKIP="no_show_24h,password_reset"   Stufen überspringen (Kommaliste)
 #   PAUSE_SECONDS=6                      Pause zwischen Sends (SMTP-Rate-Limit)
 #   FORCE_SEND=true                     Umgeht dry_run-Sicherheitscheck (NICHT empfohlen)
+#   PORTAL_URL          Basis-URL des Portals, z.B. https://portal.example.de
+#                       Nur für die Interview-Stufe (KI-Gespräch). Fehlt sie,
+#                       werden Stufe 9/10 automatisch übersprungen.
 #
 # Nutzung:
 #   bash scripts/email-test/run-full-chain.sh
 # =============================================================================
 set -euo pipefail
 
-SUITE_VERSION="2026-07-24.4"
+SUITE_VERSION="2026-07-27.1"
 
 : "${SUPABASE_URL:?set SUPABASE_URL}"
 : "${SERVICE_ROLE:?set SERVICE_ROLE}"
@@ -180,14 +183,14 @@ run_stage() {
   STAGE=$((STAGE + 1))
   local key="$1" desc="$2" cb="$3"
   if skip "$key"; then
-    printf "⏭️  %2d/14 %-36s (SKIP)\n" "$STAGE" "$key"
+    printf "⏭️  %2d/16 %-36s (SKIP)\n" "$STAGE" "$key"
     return 0
   fi
-  printf "▶️  %2d/14 %-36s %s\n" "$STAGE" "$key" "$desc"
+  printf "▶️  %2d/16 %-36s %s\n" "$STAGE" "$key" "$desc"
   if "$cb"; then
-    printf "✅ %2d/14 %-36s → %s\n" "$STAGE" "$key" "$TEST_EMAIL"
+    printf "✅ %2d/16 %-36s → %s\n" "$STAGE" "$key" "$TEST_EMAIL"
   else
-    printf "❌ %2d/14 %-36s (siehe Ausgabe oben)\n" "$STAGE" "$key"
+    printf "❌ %2d/16 %-36s (siehe Ausgabe oben)\n" "$STAGE" "$key"
     return 1
   fi
   sleep "$PAUSE_SECONDS"
@@ -429,6 +432,97 @@ stage_rebook_after_cancel_72h() {
 
 
 # ---------- Stufe 9: Willkommens-/Registrierungs-Einladung ------------------
+# ---------- Stufe 9: Termin wahrgenommen → KI-Interview ---------------------
+# Führt das komplette Bewerbungsgespräch gegen /api/public/interview-chat und
+# liest die KI-Entscheidung aus. WICHTIG: Der Endpunkt verschickt bei einer
+# Zusage bewusst KEINE Mail mehr — das übernimmt Stufe 10 (Recruiter-Zusage).
+portal_post() {
+  local path="$1" body="$2"
+  curl -sS -X POST "${PORTAL_URL%/}$path" \
+    -H "Content-Type: application/json" \
+    -d "$body"
+}
+
+stage_interview_ai_decision() {
+  if [[ -z "${PORTAL_URL:-}" ]]; then
+    echo "   ⏭️  PORTAL_URL nicht gesetzt — Interview-Stufe übersprungen."
+    return 0
+  fi
+  psql_run "$SNIP/chain-10-interview-attended.sql" || return 1
+  load_app_context || return 1
+
+  local out
+  out=$(portal_post /api/public/interview-chat \
+    "$(jq -nc --arg id "$APP_ID" '{applicationId:$id, action:"init"}')") || return 1
+  if echo "$out" | jq -e '.error? != null' >/dev/null; then
+    echo "   ❌ Interview-Start fehlgeschlagen: $out"
+    return 1
+  fi
+  echo "   Gruß der KI: $(echo "$out" | jq -r '.reply // "" | .[0:90]')"
+
+  # Standardantworten, die die sechs Pflichtthemen des Prompts abdecken.
+  local answers=(
+    "Hallo, ich arbeite aktuell in Teilzeit im Einzelhandel und habe die Anzeige online gefunden."
+    "Ich habe fünf Jahre Kundenservice-Erfahrung und arbeite sehr sorgfältig am PC."
+    "Mich reizt das Homeoffice und die freie Zeiteinteilung, weil ich zwei Kinder habe."
+    "Teilzeit mit 120 Stunden im Monat wäre für mich ideal."
+    "Starten könnte ich ab dem Ersten des nächsten Monats, am liebsten vormittags."
+    "Nein, danke — Sie haben alles beantwortet, ich habe keine Fragen mehr."
+  )
+  local ended="false" a
+  for a in "${answers[@]}"; do
+    out=$(portal_post /api/public/interview-chat \
+      "$(jq -nc --arg id "$APP_ID" --arg t "$a" '{applicationId:$id, action:"message", text:$t}')") || return 1
+    if echo "$out" | jq -e '.error? != null' >/dev/null; then
+      echo "   ❌ Interview-Nachricht fehlgeschlagen: $out"
+      return 1
+    fi
+    ended=$(echo "$out" | jq -r '.ended // false')
+    [[ "$ended" == "true" ]] && break
+    sleep 2
+  done
+
+  if [[ "$ended" != "true" ]]; then
+    out=$(portal_post /api/public/interview-chat \
+      "$(jq -nc --arg id "$APP_ID" '{applicationId:$id, action:"end"}')") || return 1
+  fi
+
+  local decision score
+  decision=$(psql_value "SELECT COALESCE(ai_decision,'-') FROM applications WHERE email = '$TEST_EMAIL' LIMIT 1;")
+  score=$(psql_value "SELECT COALESCE(interview_score::text,'-') FROM applications WHERE email = '$TEST_EMAIL' LIMIT 1;")
+  echo "   KI-Entscheidung: $decision (Score $score) — Mailversand erfolgt bewusst erst durch die Recruiter-Zusage."
+  if [[ "$decision" == "-" ]]; then
+    echo "   ❌ Keine KI-Entscheidung gespeichert."
+    return 1
+  fi
+  return 0
+}
+
+# ---------- Stufe 10: Recruiter-Zusage → Willkommens-Mail -------------------
+# Bildet exakt ab, was advanceApplicationStage (vermittlung_zusage /
+# fasttrack_angenommen) im Admin-Portal tut: Invitation-Token anlegen und
+# die Willkommens-/Registrierungsmail mit genau diesem Token verschicken.
+stage_zusage_after_interview() {
+  psql_run "$SNIP/chain-11-recruiter-zusage.sql" || return 1
+  load_app_context || return 1
+  local token
+  token=$(psql_value "SELECT t.token FROM invitation_tokens t JOIN applications a ON a.id = t.application_id WHERE a.email = '$TEST_EMAIL' ORDER BY t.created_at DESC LIMIT 1;")
+  if [[ -z "$token" ]]; then
+    echo "   ❌ Kein Invitation-Token erzeugt."
+    return 1
+  fi
+  local link="https://portal.${TENANT_DOMAIN}/register?token=${token}"
+  invoke_fn send-invitation-email \
+    "$(jq -nc \
+        --arg to "$TEST_EMAIL" \
+        --arg link "$link" \
+        --arg tid "$TEST_TENANT_ID" \
+        --arg appId "$APP_ID" \
+        '{to:$to, fullName:"Test Kette", firstName:"Test", lastName:"Kette", registrationLink:$link, tenantId:$tid, applicationId:$appId}')" \
+    | jq -c '{status: (.status // "?"), error: (.error // null), success: (.success // null)}'
+}
+
+# ---------- Stufe 11: Willkommens-/Registrierungs-Einladung -----------------
 stage_welcome_invitation() {
   psql_run "$SNIP/chain-09-welcome-invitation.sql" || return 1
   load_app_context || return 1
@@ -531,6 +625,8 @@ run_stage no_booking_72h                "Kein Termin – 72h Erinnerung"     sta
 run_stage no_show_24h                   "No-Show – erneut buchen"          stage_no_show_24h
 run_stage rebook_after_cancel_24h       "Rebook 24h nach Absage"           stage_rebook_after_cancel_24h
 run_stage rebook_after_cancel_72h       "Rebook 72h nach Absage"           stage_rebook_after_cancel_72h
+run_stage interview_ai_decision         "Termin wahrgenommen + KI-Interview" stage_interview_ai_decision
+run_stage zusage_after_interview        "Recruiter-Zusage → Willkommen"    stage_zusage_after_interview
 run_stage welcome_invitation            "Willkommens-/Registrierungs-Mail" stage_welcome_invitation
 run_stage signup_confirmation           "E-Mail-Bestätigung"               stage_signup_confirmation
 run_stage signup_confirmation_resend    "Bestätigung erneut senden"        stage_signup_confirmation_resend
