@@ -990,6 +990,9 @@ async function sendMail(tenant: TenantRow, to: string, subject: string, html: st
     port: tenant.smtp_port!,
     secure: tenant.smtp_port === 465,
     auth: { user: tenant.smtp_username!, pass: tenant.smtp_password! },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
 
   let cached = _verifyCache.get(tenant.id);

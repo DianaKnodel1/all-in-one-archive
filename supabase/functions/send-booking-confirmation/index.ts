@@ -347,6 +347,9 @@ serve(async (req) => {
         const transporter = nodemailer.createTransport({
           host: tenant.smtp_host!, port: tenant.smtp_port!, secure: tenant.smtp_port === 465,
           auth: { user: tenant.smtp_username!, pass: tenant.smtp_password! },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 20000,
         });
         await transporter.sendMail({
           from: `"${tenant.sender_name || tenant.name}" <${tenant.sender_email || tenant.smtp_username!}>`,
