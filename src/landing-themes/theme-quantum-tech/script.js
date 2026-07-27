@@ -5,8 +5,7 @@
 
   // Accent color from data or default
   try {
-    var accentEl = document.querySelector('[data-editable="accent_color"]');
-    var accent = (accentEl && accentEl.textContent && accentEl.textContent.trim()) || null;
+    var accent = '{{accent_color}}';
     if (accent && /^#[0-9a-f]{3,8}$/i.test(accent)) {
       document.documentElement.style.setProperty('--qt-accent', accent);
     }

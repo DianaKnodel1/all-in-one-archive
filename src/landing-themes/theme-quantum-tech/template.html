@@ -3,8 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title data-editable="seo_title">Qualität sichtbar machen</title>
-<meta name="description" data-editable-attr="seo_description" content="Professionelle Qualitätssicherung für Websites, Apps und digitale Produkte." />
+<title>{{seo_title}}</title>
+<meta name="description" content="{{seo_description}}" />
+<meta property="og:title" content="{{seo_title}}" />
+<meta property="og:description" content="{{seo_description}}" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -26,33 +30,33 @@
   <a href="#" class="qt-logo">
     <span class="qt-logo-mark"></span>
     <span class="qt-logo-text">
-      <b data-editable="brand_name">QUANTUM</b>
-      <em data-editable="brand_tagline">Digital Quality Platform</em>
+      <b>{{brand_name}}</b>
+      <em>{{brand_tagline}}</em>
     </span>
   </a>
   <nav class="qt-nav-links">
-    <a href="#leistungen" data-editable="nav_1">Plattform</a>
-    <a href="#leistungen" data-editable="nav_2">Leistungen</a>
-    <a href="#prozess" data-editable="nav_3">Prozess</a>
-    <a href="#tester" data-editable="nav_4">Tester</a>
+    <a href="#leistungen">{{nav_1}}</a>
+    <a href="#leistungen">{{nav_2}}</a>
+    <a href="#prozess">{{nav_3}}</a>
+    <a href="#tester">{{nav_4}}</a>
   </nav>
-  <a href="#bewerbung-form" class="qt-btn qt-btn-primary qt-nav-cta" data-editable="nav_cta">Projekt starten</a>
+  <a href="#bewerbung-form" class="qt-btn qt-btn-primary qt-nav-cta">{{nav_cta}}</a>
 </header>
 
 <!-- HERO -->
 <section class="qt-hero">
   <div class="qt-hero-copy">
-    <span class="qt-eyebrow"><span class="qt-dot"></span><span data-editable="hero_eyebrow">Next-Gen Quality Assurance</span></span>
-    <h1 class="qt-h1" data-editable="hero_title">Qualität sichtbar machen. Vertrauen digital schaffen.</h1>
-    <p class="qt-lead" data-editable="hero_subtitle">Professionelle Qualitätssicherung für Websites, Apps und digitale Produkte.</p>
+    <span class="qt-eyebrow"><span class="qt-dot"></span><span>{{hero_eyebrow}}</span></span>
+    <h1 class="qt-h1">{{hero_title}}</h1>
+    <p class="qt-lead">{{hero_subtitle}}</p>
     <div class="qt-cta-row">
-      <a href="#bewerbung-form" class="qt-btn qt-btn-primary" data-editable="hero_cta_primary">Jetzt Projekt starten</a>
-      <a href="#tester" class="qt-btn qt-btn-ghost" data-editable="hero_cta_secondary">Tester werden</a>
+      <a href="#bewerbung-form" class="qt-btn qt-btn-primary">{{hero_cta_primary}}</a>
+      <a href="#tester" class="qt-btn qt-btn-ghost">{{hero_cta_secondary}}</a>
     </div>
     <div class="qt-badges">
-      <span class="qt-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span data-editable="hero_badge_1">ISO 27001 Prozesse</span></span>
-      <span class="qt-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span data-editable="hero_badge_2">DSGVO-konform</span></span>
-      <span class="qt-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span data-editable="hero_badge_3">Real Devices</span></span>
+      <span class="qt-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span>{{hero_badge_1}}</span></span>
+      <span class="qt-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span>{{hero_badge_2}}</span></span>
+      <span class="qt-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span>{{hero_badge_3}}</span></span>
     </div>
   </div>
 
@@ -150,54 +154,54 @@
 <!-- SERVICES -->
 <section id="leistungen" class="qt-section">
   <div class="qt-section-head">
-    <span class="qt-eyebrow"><span class="qt-dot"></span><span data-editable="services_eyebrow">Leistungen</span></span>
-    <h2 class="qt-h2" data-editable="services_title">Ein Testing-Stack für jede digitale Ebene.</h2>
+    <span class="qt-eyebrow"><span class="qt-dot"></span><span>{{services_eyebrow}}</span></span>
+    <h2 class="qt-h2">{{services_title}}</h2>
   </div>
   <div class="qt-services">
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M8 14h5"/></svg></div>
-      <h3 data-editable="svc_1_title">Website Testing</h3>
-      <p data-editable="svc_1_text">Funktionale Tests über alle Auflösungen.</p>
+      <h3>{{svc_1_title}}</h3>
+      <p>{{svc_1_text}}</p>
     </article>
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
-      <h3 data-editable="svc_2_title">App Testing</h3>
-      <p data-editable="svc_2_text">iOS & Android auf echten Geräten.</p>
+      <h3>{{svc_2_title}}</h3>
+      <p>{{svc_2_text}}</p>
     </article>
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg></div>
-      <h3 data-editable="svc_3_title">UX Reviews</h3>
-      <p data-editable="svc_3_text">Heuristische Reviews & Nutzerpfad-Analysen.</p>
+      <h3>{{svc_3_title}}</h3>
+      <p>{{svc_3_text}}</p>
     </article>
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></div>
-      <h3 data-editable="svc_4_title">Accessibility</h3>
-      <p data-editable="svc_4_text">WCAG 2.2 & Screenreader.</p>
+      <h3>{{svc_4_title}}</h3>
+      <p>{{svc_4_text}}</p>
     </article>
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16v10H4zM2 20h20"/></svg></div>
-      <h3 data-editable="svc_5_title">Cross Browser</h3>
-      <p data-editable="svc_5_text">Chrome, Safari, Firefox, Edge.</p>
+      <h3>{{svc_5_title}}</h3>
+      <p>{{svc_5_text}}</p>
     </article>
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
-      <h3 data-editable="svc_6_title">Performance</h3>
-      <p data-editable="svc_6_text">Core Web Vitals & Lighthouse.</p>
+      <h3>{{svc_6_title}}</h3>
+      <p>{{svc_6_text}}</p>
     </article>
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6z"/></svg></div>
-      <h3 data-editable="svc_7_title">Security Checks</h3>
-      <p data-editable="svc_7_text">OWASP-Basis-Checks & Auth-Flows.</p>
+      <h3>{{svc_7_title}}</h3>
+      <p>{{svc_7_text}}</p>
     </article>
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="8" width="12" height="12" rx="2"/><path d="M9 8V5a3 3 0 016 0v3M9 14h6"/></svg></div>
-      <h3 data-editable="svc_8_title">Bug Reports</h3>
-      <p data-editable="svc_8_text">Reproduzierbar mit Video & Logs.</p>
+      <h3>{{svc_8_title}}</h3>
+      <p>{{svc_8_text}}</p>
     </article>
     <article class="qt-svc" data-reveal>
       <div class="qt-svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg></div>
-      <h3 data-editable="svc_9_title">QM & Reporting</h3>
-      <p data-editable="svc_9_text">Wöchentliche Berichte mit KPIs.</p>
+      <h3>{{svc_9_title}}</h3>
+      <p>{{svc_9_text}}</p>
     </article>
   </div>
 </section>
@@ -205,31 +209,31 @@
 <!-- PROCESS TIMELINE -->
 <section id="prozess" class="qt-section">
   <div class="qt-section-head">
-    <span class="qt-eyebrow"><span class="qt-dot"></span><span data-editable="process_eyebrow">So arbeiten wir</span></span>
-    <h2 class="qt-h2" data-editable="process_title">Von der Analyse bis zur Optimierung.</h2>
+    <span class="qt-eyebrow"><span class="qt-dot"></span><span>{{process_eyebrow}}</span></span>
+    <h2 class="qt-h2">{{process_title}}</h2>
   </div>
   <ol class="qt-timeline">
-    <li data-reveal><span class="qt-tl-num">01</span><div><h3 data-editable="step_1_title">Analyse</h3><p data-editable="step_1_text">Wir verstehen Ihr Produkt.</p></div></li>
-    <li data-reveal><span class="qt-tl-num">02</span><div><h3 data-editable="step_2_title">Testplanung</h3><p data-editable="step_2_text">Tester, Geräte und Szenarien.</p></div></li>
-    <li data-reveal><span class="qt-tl-num">03</span><div><h3 data-editable="step_3_title">Live-Test</h3><p data-editable="step_3_text">Auf echten Geräten mit Video.</p></div></li>
-    <li data-reveal><span class="qt-tl-num">04</span><div><h3 data-editable="step_4_title">Fehleranalyse</h3><p data-editable="step_4_text">Priorisierung & Reproduktion.</p></div></li>
-    <li data-reveal><span class="qt-tl-num">05</span><div><h3 data-editable="step_5_title">Qualitätsbericht</h3><p data-editable="step_5_text">Transparenter Report mit KPIs.</p></div></li>
-    <li data-reveal><span class="qt-tl-num">06</span><div><h3 data-editable="step_6_title">Optimierung</h3><p data-editable="step_6_text">Retests und Regression.</p></div></li>
+    <li data-reveal><span class="qt-tl-num">01</span><div><h3>{{step_1_title}}</h3><p>{{step_1_text}}</p></div></li>
+    <li data-reveal><span class="qt-tl-num">02</span><div><h3>{{step_2_title}}</h3><p>{{step_2_text}}</p></div></li>
+    <li data-reveal><span class="qt-tl-num">03</span><div><h3>{{step_3_title}}</h3><p>{{step_3_text}}</p></div></li>
+    <li data-reveal><span class="qt-tl-num">04</span><div><h3>{{step_4_title}}</h3><p>{{step_4_text}}</p></div></li>
+    <li data-reveal><span class="qt-tl-num">05</span><div><h3>{{step_5_title}}</h3><p>{{step_5_text}}</p></div></li>
+    <li data-reveal><span class="qt-tl-num">06</span><div><h3>{{step_6_title}}</h3><p>{{step_6_text}}</p></div></li>
   </ol>
 </section>
 
 <!-- DASHBOARD -->
 <section class="qt-section qt-dash-section">
   <div class="qt-dash-copy">
-    <span class="qt-eyebrow"><span class="qt-dot"></span><span data-editable="dash_eyebrow">Live Insights</span></span>
-    <h2 class="qt-h2" data-editable="dash_title">Ein Cockpit für Ihre digitale Qualität.</h2>
-    <p class="qt-lead" data-editable="dash_text">Alle laufenden Tests, Fehlerprioritäten, Geräteabdeckung und Performance-Kurven — in Echtzeit.</p>
+    <span class="qt-eyebrow"><span class="qt-dot"></span><span>{{dash_eyebrow}}</span></span>
+    <h2 class="qt-h2">{{dash_title}}</h2>
+    <p class="qt-lead">{{dash_text}}</p>
   </div>
   <div class="qt-dash" data-reveal>
     <div class="qt-dash-top">
-      <div class="qt-dash-kpi"><span data-editable="dash_kpi_1">Tests aktiv</span><b data-editable="dash_kpi_1_val">142</b></div>
-      <div class="qt-dash-kpi"><span data-editable="dash_kpi_2">Kritisch</span><b class="qt-alert" data-editable="dash_kpi_2_val">07</b></div>
-      <div class="qt-dash-kpi"><span data-editable="dash_kpi_3">Coverage</span><b data-editable="dash_kpi_3_val">98%</b></div>
+      <div class="qt-dash-kpi"><span>{{dash_kpi_1}}</span><b>{{dash_kpi_1_val}}</b></div>
+      <div class="qt-dash-kpi"><span>{{dash_kpi_2}}</span><b class="qt-alert">{{dash_kpi_2_val}}</b></div>
+      <div class="qt-dash-kpi"><span>{{dash_kpi_3}}</span><b>{{dash_kpi_3_val}}</b></div>
     </div>
     <div class="qt-dash-body">
       <div class="qt-dash-chart">
@@ -263,16 +267,16 @@
 <!-- BUSINESS BENEFITS -->
 <section class="qt-section">
   <div class="qt-section-head">
-    <span class="qt-eyebrow"><span class="qt-dot"></span><span data-editable="biz_eyebrow">Für Unternehmen</span></span>
-    <h2 class="qt-h2" data-editable="biz_title">Weniger Bugs. Bessere Releases.</h2>
+    <span class="qt-eyebrow"><span class="qt-dot"></span><span>{{biz_eyebrow}}</span></span>
+    <h2 class="qt-h2">{{biz_title}}</h2>
   </div>
   <div class="qt-biz-grid">
-    <div class="qt-biz" data-reveal><span>01</span><b data-editable="biz_1">Höhere Produktqualität</b></div>
-    <div class="qt-biz" data-reveal><span>02</span><b data-editable="biz_2">Weniger Supportanfragen</b></div>
-    <div class="qt-biz" data-reveal><span>03</span><b data-editable="biz_3">Schnellere Release-Zyklen</b></div>
-    <div class="qt-biz" data-reveal><span>04</span><b data-editable="biz_4">Zufriedenere Nutzer</b></div>
-    <div class="qt-biz" data-reveal><span>05</span><b data-editable="biz_5">Detaillierte Reports</b></div>
-    <div class="qt-biz" data-reveal><span>06</span><b data-editable="biz_6">Flexible Testprojekte</b></div>
+    <div class="qt-biz" data-reveal><span>01</span><b>{{biz_1}}</b></div>
+    <div class="qt-biz" data-reveal><span>02</span><b>{{biz_2}}</b></div>
+    <div class="qt-biz" data-reveal><span>03</span><b>{{biz_3}}</b></div>
+    <div class="qt-biz" data-reveal><span>04</span><b>{{biz_4}}</b></div>
+    <div class="qt-biz" data-reveal><span>05</span><b>{{biz_5}}</b></div>
+    <div class="qt-biz" data-reveal><span>06</span><b>{{biz_6}}</b></div>
   </div>
 </section>
 
@@ -280,16 +284,16 @@
 <section id="tester" class="qt-section qt-tester">
   <div class="qt-tester-inner">
     <div class="qt-tester-copy">
-      <span class="qt-eyebrow"><span class="qt-dot"></span><span data-editable="tester_eyebrow">Für Tester</span></span>
-      <h2 class="qt-h2" data-editable="tester_title">Werde Teil unseres professionellen Tester-Netzwerks.</h2>
-      <p class="qt-lead" data-editable="tester_text">Ortsunabhängig, flexibel und fair vergütet.</p>
+      <span class="qt-eyebrow"><span class="qt-dot"></span><span>{{tester_eyebrow}}</span></span>
+      <h2 class="qt-h2">{{tester_title}}</h2>
+      <p class="qt-lead">{{tester_text}}</p>
       <ul class="qt-tester-list">
-        <li data-editable="tester_1">Remote-Arbeit</li>
-        <li data-editable="tester_2">Flexible Projekte</li>
-        <li data-editable="tester_3">Faire Vergütung</li>
-        <li data-editable="tester_4">Persönliches Dashboard</li>
+        <li>{{tester_1}}</li>
+        <li>{{tester_2}}</li>
+        <li>{{tester_3}}</li>
+        <li>{{tester_4}}</li>
       </ul>
-      <a href="#bewerbung-form" class="qt-btn qt-btn-primary" data-editable="tester_cta">Als Tester bewerben</a>
+      <a href="#bewerbung-form" class="qt-btn qt-btn-primary">{{tester_cta}}</a>
     </div>
     <div class="qt-tester-visual" data-reveal>
       <div class="qt-ring"></div>
@@ -305,43 +309,43 @@
 <!-- JOBS -->
 <section class="qt-section">
   <div class="qt-section-head">
-    <span class="qt-eyebrow"><span class="qt-dot"></span><span data-editable="jobs_eyebrow">Offene Projekte</span></span>
-    <h2 class="qt-h2" data-editable="jobs_title">Aktuelle Test-Aufträge.</h2>
+    <span class="qt-eyebrow"><span class="qt-dot"></span><span>{{jobs_eyebrow}}</span></span>
+    <h2 class="qt-h2">{{jobs_title}}</h2>
   </div>
   <div class="qt-jobs">
     <article class="qt-job" data-reveal>
-      <header><h3 data-editable="job_1_title">Banking-App testen</h3><b data-editable="job_1_pay">85 €</b></header>
+      <header><h3>{{job_1_title}}</h3><b>{{job_1_pay}}</b></header>
       <dl>
-        <div><dt>Dauer</dt><dd data-editable="job_1_dur">90 Min</dd></div>
-        <div><dt>Plattform</dt><dd data-editable="job_1_plat">iOS · Android</dd></div>
-        <div><dt>Level</dt><dd data-editable="job_1_lvl">Fortgeschritten</dd></div>
+        <div><dt>Dauer</dt><dd>{{job_1_dur}}</dd></div>
+        <div><dt>Plattform</dt><dd>{{job_1_plat}}</dd></div>
+        <div><dt>Level</dt><dd>{{job_1_lvl}}</dd></div>
       </dl>
       <a href="#bewerbung-form" class="qt-btn qt-btn-ghost">Bewerben →</a>
     </article>
     <article class="qt-job" data-reveal>
-      <header><h3 data-editable="job_2_title">Gesundheitsportal prüfen</h3><b data-editable="job_2_pay">60 €</b></header>
+      <header><h3>{{job_2_title}}</h3><b>{{job_2_pay}}</b></header>
       <dl>
-        <div><dt>Dauer</dt><dd data-editable="job_2_dur">60 Min</dd></div>
-        <div><dt>Plattform</dt><dd data-editable="job_2_plat">Web</dd></div>
-        <div><dt>Level</dt><dd data-editable="job_2_lvl">Einsteiger</dd></div>
+        <div><dt>Dauer</dt><dd>{{job_2_dur}}</dd></div>
+        <div><dt>Plattform</dt><dd>{{job_2_plat}}</dd></div>
+        <div><dt>Level</dt><dd>{{job_2_lvl}}</dd></div>
       </dl>
       <a href="#bewerbung-form" class="qt-btn qt-btn-ghost">Bewerben →</a>
     </article>
     <article class="qt-job" data-reveal>
-      <header><h3 data-editable="job_3_title">E-Commerce-Shop analysieren</h3><b data-editable="job_3_pay">70 €</b></header>
+      <header><h3>{{job_3_title}}</h3><b>{{job_3_pay}}</b></header>
       <dl>
-        <div><dt>Dauer</dt><dd data-editable="job_3_dur">75 Min</dd></div>
-        <div><dt>Plattform</dt><dd data-editable="job_3_plat">Web · Mobile</dd></div>
-        <div><dt>Level</dt><dd data-editable="job_3_lvl">Mittel</dd></div>
+        <div><dt>Dauer</dt><dd>{{job_3_dur}}</dd></div>
+        <div><dt>Plattform</dt><dd>{{job_3_plat}}</dd></div>
+        <div><dt>Level</dt><dd>{{job_3_lvl}}</dd></div>
       </dl>
       <a href="#bewerbung-form" class="qt-btn qt-btn-ghost">Bewerben →</a>
     </article>
     <article class="qt-job" data-reveal>
-      <header><h3 data-editable="job_4_title">KI-Webanwendung evaluieren</h3><b data-editable="job_4_pay">120 €</b></header>
+      <header><h3>{{job_4_title}}</h3><b>{{job_4_pay}}</b></header>
       <dl>
-        <div><dt>Dauer</dt><dd data-editable="job_4_dur">120 Min</dd></div>
-        <div><dt>Plattform</dt><dd data-editable="job_4_plat">Web</dd></div>
-        <div><dt>Level</dt><dd data-editable="job_4_lvl">Experte</dd></div>
+        <div><dt>Dauer</dt><dd>{{job_4_dur}}</dd></div>
+        <div><dt>Plattform</dt><dd>{{job_4_plat}}</dd></div>
+        <div><dt>Level</dt><dd>{{job_4_lvl}}</dd></div>
       </dl>
       <a href="#bewerbung-form" class="qt-btn qt-btn-ghost">Bewerben →</a>
     </article>
@@ -351,34 +355,34 @@
 <!-- STATS -->
 <section class="qt-section qt-stats-section">
   <div class="qt-stats">
-    <div class="qt-stat" data-reveal><b data-counter data-editable="stat_1_num">25000</b><span data-editable="stat_1_label">durchgeführte Tests</span></div>
-    <div class="qt-stat" data-reveal><b data-counter data-editable="stat_2_num">3000</b><span data-editable="stat_2_label">aktive Tester</span></div>
-    <div class="qt-stat" data-reveal><b data-counter data-suffix="%" data-editable="stat_3_num">99</b><span data-editable="stat_3_label">Kundenzufriedenheit</span></div>
-    <div class="qt-stat" data-reveal><b data-counter data-suffix="+" data-editable="stat_4_num">60</b><span data-editable="stat_4_label">Plattformen</span></div>
+    <div class="qt-stat" data-reveal><b data-counter>{{stat_1_num}}</b><span>{{stat_1_label}}</span></div>
+    <div class="qt-stat" data-reveal><b data-counter>{{stat_2_num}}</b><span>{{stat_2_label}}</span></div>
+    <div class="qt-stat" data-reveal><b data-counter data-suffix="%">{{stat_3_num}}</b><span>{{stat_3_label}}</span></div>
+    <div class="qt-stat" data-reveal><b data-counter data-suffix="+">{{stat_4_num}}</b><span>{{stat_4_label}}</span></div>
   </div>
 </section>
 
 <!-- TESTIMONIALS -->
 <section class="qt-section">
   <div class="qt-section-head">
-    <span class="qt-eyebrow"><span class="qt-dot"></span><span data-editable="test_eyebrow">Stimmen</span></span>
-    <h2 class="qt-h2" data-editable="test_title">Was Kunden über uns sagen.</h2>
+    <span class="qt-eyebrow"><span class="qt-dot"></span><span>{{test_eyebrow}}</span></span>
+    <h2 class="qt-h2">{{test_title}}</h2>
   </div>
   <div class="qt-testis">
     <figure class="qt-testi" data-reveal>
       <div class="qt-stars">★★★★★</div>
-      <blockquote data-editable="test_1_quote">Innerhalb von zwei Wochen hatten wir mehr belastbare Findings als in sechs Monaten interner QA.</blockquote>
-      <figcaption><b data-editable="test_1_name">Julia Wenger</b><span data-editable="test_1_role">Head of Product · Fintech AG</span></figcaption>
+      <blockquote>{{test_1_quote}}</blockquote>
+      <figcaption><b>{{test_1_name}}</b><span>{{test_1_role}}</span></figcaption>
     </figure>
     <figure class="qt-testi" data-reveal>
       <div class="qt-stars">★★★★★</div>
-      <blockquote data-editable="test_2_quote">Die Reports sind so klar, dass unsere Entwickler direkt loslegen konnten.</blockquote>
-      <figcaption><b data-editable="test_2_name">Markus Baumann</b><span data-editable="test_2_role">CTO · Health Platform</span></figcaption>
+      <blockquote>{{test_2_quote}}</blockquote>
+      <figcaption><b>{{test_2_name}}</b><span>{{test_2_role}}</span></figcaption>
     </figure>
     <figure class="qt-testi" data-reveal>
       <div class="qt-stars">★★★★★</div>
-      <blockquote data-editable="test_3_quote">Endlich echte Nutzer statt Simulator — der Unterschied ist massiv.</blockquote>
-      <figcaption><b data-editable="test_3_name">Sarah Klein</b><span data-editable="test_3_role">Lead Designer · E-Commerce</span></figcaption>
+      <blockquote>{{test_3_quote}}</blockquote>
+      <figcaption><b>{{test_3_name}}</b><span>{{test_3_role}}</span></figcaption>
     </figure>
   </div>
 </section>
@@ -389,11 +393,11 @@
 <!-- FINAL CTA -->
 <section class="qt-final">
   <div class="qt-final-inner">
-    <h2 class="qt-h1-final" data-editable="final_title">Jede digitale Erfahrung beginnt mit perfekter Qualität.</h2>
-    <p class="qt-lead" data-editable="final_sub">Starten Sie Ihr Testprojekt in unter 48 Stunden.</p>
+    <h2 class="qt-h1-final">{{final_title}}</h2>
+    <p class="qt-lead">{{final_sub}}</p>
     <div class="qt-cta-row">
-      <a href="#bewerbung-form" class="qt-btn qt-btn-primary" data-editable="final_cta_1">Projekt anfragen</a>
-      <a href="#bewerbung-form" class="qt-btn qt-btn-ghost" data-editable="final_cta_2">Kostenlos registrieren</a>
+      <a href="#bewerbung-form" class="qt-btn qt-btn-primary">{{final_cta_1}}</a>
+      <a href="#bewerbung-form" class="qt-btn qt-btn-ghost">{{final_cta_2}}</a>
     </div>
   </div>
   <div class="qt-final-bg"></div>
@@ -405,24 +409,25 @@
     <div>
       <div class="qt-logo">
         <span class="qt-logo-mark"></span>
-        <span class="qt-logo-text"><b data-editable="brand_name">QUANTUM</b><em data-editable="brand_tagline">Digital Quality Platform</em></span>
+        <span class="qt-logo-text"><b>{{brand_name}}</b><em>{{brand_tagline}}</em></span>
       </div>
-      <p class="qt-foot-note" data-editable="footer_note">Digital Quality Platform — made with precision.</p>
+      <p class="qt-foot-note">{{footer_note}}</p>
     </div>
     <div>
       <h4>Kontakt</h4>
-      <p><span data-editable="footer_email">hallo@example.com</span></p>
-      <p><span data-editable="footer_phone">+49 30 123 456 78</span></p>
-      <p><span data-editable="footer_address">Berlin · Hamburg · München</span></p>
+      <p><span>{{footer_email}}</span></p>
+      <p><span>{{footer_phone}}</span></p>
+      <p><span>{{footer_address}}</span></p>
     </div>
     <div>
       <h4>Rechtliches</h4>
-      <div data-inject-anchor="legal-links"></div>
+      <p><a href="{{impressum_url}}">Impressum</a></p>
+      <p><a href="{{datenschutz_url}}">Datenschutz</a></p>
     </div>
   </div>
   <div class="qt-footer-bottom">
-    <span>© <span id="qt-year"></span> <span data-editable="brand_name">QUANTUM</span></span>
-    <span data-editable="landing_domain">example.com</span>
+    <span>© <span id="qt-year"></span> <span>{{brand_name}}</span></span>
+    <span>{{landing_domain}}</span>
   </div>
 </footer>
 
