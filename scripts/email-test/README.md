@@ -13,6 +13,28 @@ export TEST_TENANT_ID="<broker-tenant-uuid>"             # Tenant der Source-Lan
 export TEST_SOURCE_LANDING_ID="<uuid>"                   # Vermittlungs-Landing (flow_type='broker')
 export TEST_TARGET_LANDING_ID="<uuid>"                   # Fast-Track-/Ziel-Landing
 export TEST_EMAIL="test+chain@deine-domain.de"           # test+ empfohlen; andere Adressen über ALLOWED_TEST_EMAILS
+export PORTAL_URL="https://portal.deine-domain.de"       # nur für die KI-Interview-Stufe
+```
+
+## Ebene 0 — Bestandsaufnahme ohne Versand
+
+```bash
+bash scripts/email-test/audit-chain-coverage.sh
+```
+
+Zeigt je Mail-Stufe, ob sie produktiv schon einmal erfolgreich versendet wurde,
+welche Sends fehlgeschlagen sind, welche Mandanten versandfähig sind und welche
+KI-Interviews eine Einladung erhalten haben. Mit gesetztem `SUPABASE_URL` +
+`SERVICE_ROLE` läuft zusätzlich ein Dry-Run aller Cron-Endpunkte.
+
+## Wichtig: KI-Zusage verschickt keine Mail
+
+Der Interview-Endpunkt speichert nur `ai_decision` (`zusage`/`absage`/`pending`).
+Die Willkommens-/Registrierungsmail geht erst raus, wenn ein Recruiter im Admin
+die Bewerbung auf `vermittlung_zusage` bzw. `fasttrack_angenommen` setzt. Die
+Test-Suite bildet beides getrennt ab (Stufe 9 = Interview, Stufe 10 = Zusage).
+
+```text
 
 # Klassischer Einzel-Landing-Test (kein Vermittlungsflow): stattdessen
 # nur TEST_LANDING_ID setzen – wird dann als Source UND Target genutzt.
