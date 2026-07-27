@@ -264,9 +264,34 @@ export async function loadInterviewContext(app: ApplicationRow): Promise<Intervi
   return { systemPrompt, companyName, recruiterName, recruiterAvatarUrl, voiceId, interviewMode, landingSlug, brandingFirstName };
 }
 
-export async function sendRegistrationInviteAfterAiAccept(app: ApplicationRow, request: Request) {
+export async function sendRegistrationInviteAfterAiAccept(
+  app: ApplicationRow,
+  request: Request,
+  opts?: { force?: boolean },
+) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   if (!app.email || !app.tenant_id) return { sent: false, skipped: true, reason: "missing_email_or_tenant" };
+
+  // Schutz gegen verfrühte "Willkommen im Team"-Mails: ohne tatsächlich
+  // geführtes Gespräch wird nicht eingeladen (außer Admin erzwingt es).
+  if (!opts?.force) {
+    const { data: check } = await supabaseAdmin
+      .from("applications")
+      .select("interview_status, interview_messages")
+      .eq("id", app.id)
+      .maybeSingle();
+    const status = (check as any)?.interview_status ?? null;
+    const msgs = Array.isArray((check as any)?.interview_messages)
+      ? ((check as any).interview_messages as any[])
+      : [];
+    const userTurns = msgs.filter((m) => m?.role === "user").length;
+    if (!(status === "done" || status === "taken_over") || userTurns < 2) {
+      console.warn("[interview-engine] Registrierungs-Einladung blockiert (kein abgeschlossenes Interview)", {
+        applicationId: app.id, status, userTurns,
+      });
+      return { sent: false, skipped: true, reason: "no_completed_interview" as const, interview_status: status, user_turns: userTurns };
+    }
+  }
 
   const email = app.email.toLowerCase().trim();
   const token = `${crypto.randomUUID()}-${crypto.randomUUID().slice(0, 8)}`;
