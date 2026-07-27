@@ -183,14 +183,14 @@ run_stage() {
   STAGE=$((STAGE + 1))
   local key="$1" desc="$2" cb="$3"
   if skip "$key"; then
-    printf "⏭️  %2d/16 %-36s (SKIP)\n" "$STAGE" "$key"
+    printf "⏭️  %2d/19 %-36s (SKIP)\n" "$STAGE" "$key"
     return 0
   fi
-  printf "▶️  %2d/16 %-36s %s\n" "$STAGE" "$key" "$desc"
+  printf "▶️  %2d/19 %-36s %s\n" "$STAGE" "$key" "$desc"
   if "$cb"; then
-    printf "✅ %2d/16 %-36s → %s\n" "$STAGE" "$key" "$TEST_EMAIL"
+    printf "✅ %2d/19 %-36s → %s\n" "$STAGE" "$key" "$TEST_EMAIL"
   else
-    printf "❌ %2d/16 %-36s (siehe Ausgabe oben)\n" "$STAGE" "$key"
+    printf "❌ %2d/19 %-36s (siehe Ausgabe oben)\n" "$STAGE" "$key"
     return 1
   fi
   sleep "$PAUSE_SECONDS"
