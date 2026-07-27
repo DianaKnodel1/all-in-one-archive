@@ -1,34 +1,42 @@
-## Ziel
+## Ausgangslage
 
-Wenn die KI am Ende des Bewerbungsgesprächs eine Zusage erteilt, sieht der Bewerber die Zusage **sofort im Portal** — als Erfolgs-Screen im Stil der „Willkommen im Team"-E-Mail, inklusive „Jetzt registrieren"-Button mit demselben Registrierungs-Link, der auch per Mail rausgeht. Die E-Mail bleibt unverändert zusätzlich bestehen.
+Der Chat wurde beendet und im Portal wurde eine Zusage angezeigt, aber die Registrierungs-/„Willkommen im Team"-Mail kam nicht an.
 
-## Was gebaut wird
+Was ich im Code gesehen habe (bestätigt):
+- Die Einladungsmail wird an drei Stellen ausgelöst (`interview-chat.ts` beim automatischen Ende, beim manuellen „end", und `interview-engine.server.ts` für Voice/Finalize) — jeweils nur wenn die KI-Empfehlung exakt `invite` lautet.
+- Der Versand selbst läuft über die Edge-Funktion `send-invitation-email`. Schlägt sie fehl, wird das Ergebnis **nur in die Server-Konsole geloggt** und im API-Response mitgegeben — es landet **nicht** an der Bewerbung, nicht im Admin und (bei Invoke-Fehler) unter Umständen auch nicht in `email_send_log`.
+- `interview-chat.ts` enthält eine eigene Kopie der Einladungslogik (ohne den `ref=`-Parameter und ohne den Guard aus der Engine) — zwei Codepfade, die auseinanderlaufen können.
 
-**1. Registrierungs-Link ans Frontend durchreichen**
-- `sendRegistrationInviteAfterAiAccept` (in `src/lib/interview-engine.server.ts`) gibt zusätzlich `registration_link` zurück (der Link wird dort ohnehin schon erzeugt).
-- Gleiches in der Chat-Route `src/routes/api/public/interview-chat.ts` (eigene Kopie der Funktion).
-- Die JSON-Antwort beim Gesprächsende enthält dann: `recommendation`, `application_status` und `invite_mail.registration_link`.
-- Wichtig: Der Link wird nur zurückgegeben, wenn die bestehende Schutzlogik (abgeschlossenes Interview) greift — an der Guard-Logik ändert sich nichts.
+Die eigentliche Ursache im konkreten Fall ist **noch nicht bestätigt**. Realistische Kandidaten: (a) Empfehlung war `unsure`, obwohl das Gespräch positiv endete, (b) SMTP des Mandanten fehlt/pausiert/535-Auth (bekanntes Thema bei mehreren Mandanten), (c) Edge-Funktion nicht erreichbar. Deshalb ist Schritt 1 reine Diagnose.
 
-**2. Zusage-Screen im Chat-Interview** (`src/routes/interview.$appId.tsx`)
-- Neuer Zustand: nach Gesprächsende mit `recommendation === "invite"` wird über dem Chat ein Erfolgs-Panel eingeblendet (kurze Verzögerung nach der letzten KI-Nachricht, damit es nicht abrupt wirkt).
-- Inhalt analog zur E-Mail:
-  - 🎉 „Willkommen im Team!" / „Wir freuen uns, dass Sie dabei sind."
-  - „Ihr Profil hat uns überzeugt – lassen Sie uns direkt starten!"
-  - Box „Wie geht es weiter?" mit den zwei nummerierten Schritten (Registrieren im Mitarbeiterportal, danach Onboarding)
-  - Primär-Button „Jetzt registrieren" → `registration_link`
-  - Signatur mit dem echten Recruiter-Namen und Firmennamen der Landing Page (die Seite kennt beides bereits), plus Hinweis „Bereits registriert? Zum Login"
-- Fallback: Kommt kein `registration_link` zurück (z. B. Mailversand-Fehler), zeigt der Screen die Zusage trotzdem an, mit Hinweis „Sie erhalten den Registrierungslink per E-Mail".
-- Bei `reject`/`unsure` ändert sich nichts — es bleibt beim bisherigen „Gespräch beendet".
+## Schritt 1 — Ursache feststellen (Diagnose-Skript)
 
-**3. Gleiches Verhalten im Voice-Interview** (`src/routes/interview.voice.$appId.tsx`)
-- Derselbe Erfolgs-Screen nach Gesprächsende, als gemeinsame Komponente `src/components/interview/ZusageCard.tsx`, damit Chat und Voice identisch aussehen.
+Neues Skript `scripts/diagnose-invite-mail.sh` (läuft auf dem Backend-Server, `--local` via `docker exec ... psql`), Eingabe: E-Mail oder Bewerbungs-ID. Es zeigt:
+- Bewerbung: `interview_status`, `interview_recommendation`, `interview_score`, `ai_decision`, `status`, `stage`, `interview_completed_at`
+- ob ein `invitation_tokens`-Eintrag erzeugt wurde (Token da = Mailversuch lief, Token fehlt = gar nicht ausgelöst)
+- alle `email_send_log`-Zeilen zu dieser Adresse (Status, `skip_reason`, `error_message`)
+- SMTP-Zustand des Mandanten (`emails_paused`, Grund, ob SMTP-Daten vollständig)
+- `activity_log`-Eintrag `bewerbung_ai_akzeptiert`
 
-**4. Optik**
-- Kein Hardcoding von Farben: Styling über die bestehenden Design-Tokens/Portal-Theme-Klassen, Layout am Screenshot orientiert (zentrierte Karte, Emoji-Header, graue Schritt-Box, breiter Primär-Button).
+Damit ist eindeutig, ob es an der KI-Empfehlung, am Kontingent/Pause oder am SMTP hing.
+
+## Schritt 2 — Ergebnis dauerhaft sichtbar machen
+
+Damit so ein Fall nie wieder unsichtbar bleibt:
+- Das Ergebnis des Einladungsversands wird nach jedem Versuch an der Bewerbung gespeichert (`invite_mail_status`, `invite_mail_error`, `invite_mail_at`) — neue Migration in `supabase/manual-migrations/` inkl. GRANTs.
+- Schlägt der Versand fehl oder wird er übersprungen, wird zusätzlich ein `email_send_log`-Eintrag mit Status `failed`/`skipped` und Grund geschrieben (bisher nur Konsole).
+- In der Admin-Bewerbungsansicht erscheint ein Badge „Einladung versendet" / „Einladung fehlgeschlagen: …" mit Button **Einladung erneut senden**.
+
+## Schritt 3 — Doppelte Logik zusammenführen
+
+Die lokale Kopie in `src/routes/api/public/interview-chat.ts` wird entfernt; alle Pfade nutzen `sendRegistrationInviteAfterAiAccept` aus `src/lib/interview-engine.server.ts` (inkl. `ref=`-Parameter und Guard). Ein Verhaltensunterschied zwischen Chat-Ende, „end"-Aktion und Voice entfällt damit.
+
+## Schritt 4 — Zusage ohne Mail abfangen
+
+Wenn die KI `invite` empfiehlt, der Mailversand aber scheitert, zeigt das Portal weiterhin die Zusage-Karte (der Registrierungslink funktioniert auch ohne Mail) — zusätzlich mit dem Hinweis „Die E-Mail ist unterwegs; nutzen Sie zur Sicherheit direkt diesen Button." Damit ist der Bewerber nie blockiert, selbst wenn SMTP klemmt.
 
 ## Technische Details
 
-- Betroffene Dateien: `src/lib/interview-engine.server.ts`, `src/routes/api/public/interview-chat.ts`, `src/routes/interview.$appId.tsx`, `src/routes/interview.voice.$appId.tsx`, neu `src/components/interview/ZusageCard.tsx`.
-- Keine Datenbank-Migration nötig, keine Änderung an Mail-Templates oder Crons.
-- Abschluss mit `tsgo`-Typecheck; danach normales Deploy auf dem Portal-Server (Backend-Deploy nicht erforderlich, da keine Edge Function betroffen ist).
+- Betroffene Dateien: `src/routes/api/public/interview-chat.ts`, `src/lib/interview-engine.server.ts`, `src/components/interview/ZusageCard.tsx`, Admin-Bewerbungsansicht, neues `scripts/diagnose-invite-mail.sh`, neue manuelle Migration.
+- Kein Eingriff in die KI-Bewertung selbst — die Entscheidung `invite/unsure/reject` bleibt unverändert.
+- Deployment wie gewohnt: Portal-Server `git pull` + `scripts/deploy.sh`, Backend-Server nur falls die Migration ansteht.
