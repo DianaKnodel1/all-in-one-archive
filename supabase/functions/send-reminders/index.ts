@@ -675,7 +675,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
   const cutoff = new Date(Date.now() - MIN_DAYS_BETWEEN * 86400_000).toISOString();
   const { data: profiles, error } = await ctx.admin
     .from("profiles")
-    .select("user_id,full_name,tenant_id,onboarding_status,status,updated_at,created_at")
+    .select("user_id,full_name,tenant_id,onboarding_status,status,contract_signed_at,updated_at,created_at")
     .neq("onboarding_status", "abgeschlossen")
     .not("status", "in", '("deaktiviert","abgelehnt")')
     .lte("created_at", cutoff);
