@@ -207,13 +207,26 @@ export const getAppointmentByCancelToken = createServerFn({ method: "POST" })
           .maybeSingle();
         interview_status = ((appRow as any)?.interview_status as string) ?? null;
         landing_slug = ((appRow as any)?.source_slug as string) ?? null;
-        if (!landing_slug && (appRow as any)?.source_landing_id) {
-          const { data: lp } = await supabaseAdmin
-            .from("landing_pages")
-            .select("slug")
-            .eq("id", (appRow as any).source_landing_id)
-            .maybeSingle();
-          landing_slug = ((lp as any)?.slug as string) ?? null;
+
+        // Das Gespräch führt immer die Fast-Track-Firma. Zeigt der Slug auf eine
+        // Vermittlungs-/Broker-Landing, auf die verknüpfte Fast-Track-Landing wechseln,
+        // sonst zeigt die Interview-Seite Branding + Recruiter:in der Vermittlung.
+        const cols = "id, slug, flow_type, linked_fasttrack_landing_id";
+        let srcLp: any = null;
+        if ((appRow as any)?.source_landing_id) {
+          const { data } = await supabaseAdmin
+            .from("landing_pages").select(cols).eq("id", (appRow as any).source_landing_id).maybeSingle();
+          srcLp = data ?? null;
+        } else if (landing_slug) {
+          const { data } = await supabaseAdmin
+            .from("landing_pages").select(cols).eq("slug", landing_slug).maybeSingle();
+          srcLp = data ?? null;
+        }
+        if (srcLp && !landing_slug) landing_slug = (srcLp.slug as string) ?? null;
+        if (srcLp && srcLp.flow_type !== "fast" && srcLp.linked_fasttrack_landing_id) {
+          const { data: linked } = await supabaseAdmin
+            .from("landing_pages").select("slug").eq("id", srcLp.linked_fasttrack_landing_id).maybeSingle();
+          if ((linked as any)?.slug) landing_slug = (linked as any).slug as string;
         }
       }
     } catch { /* non-fatal */ }
