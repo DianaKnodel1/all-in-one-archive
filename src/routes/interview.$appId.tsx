@@ -124,7 +124,16 @@ function InterviewPage() {
           return;
         }
         setScheduledAt(null);
-        setMessages(data.history ?? []);
+        const history = data.history ?? [];
+        // Begrüßung nicht abrupt einblenden: kurz "tippen" lassen.
+        if (history.length > 0 && history[history.length - 1]?.role === "assistant") {
+          setInitializing(false);
+          setTyping(true);
+          await sleep(readDelay() + 600);
+          if (cancelled) return;
+          setTyping(false);
+        }
+        setMessages(history);
         if (data.ended) setEnded(true);
         if (data.application_status) setAppStatus(data.application_status);
         setStartedAt(data.interview_started_at ? new Date(data.interview_started_at).getTime() : Date.now());
