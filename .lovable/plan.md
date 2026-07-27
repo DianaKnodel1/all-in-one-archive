@@ -1,43 +1,44 @@
-## Was der Screenshot zeigt
+## Ziel
 
-Gebucht wurde 01:00 Uhr (deutsche Zeit, 28.07.). In der Mail steht „Montag, 27. Juli 2026, 23:00 Uhr“ — exakt 2 Stunden früher, also **UTC statt Europe/Berlin**. Im Portal (Buchungsseite/Bestätigungskarte) wird die Zeit korrekt angezeigt, weil dort der Browser formatiert.
+Im Chat-Kopf und in der Begrüßung sollen der echte Recruiter-Name (z. B. Merlin Schneider), sein Profilbild und der richtige Firmenname erscheinen — nicht „Sabine Schneider" und nicht der Domain-Slug „personalservice-gmbh.de".
 
-Im Code ist die Absicht richtig: `send-booking-confirmation` formatiert mit `timeZone: "Europe/Berlin"`. Dass die Mail trotzdem UTC zeigt, hat eine von zwei Ursachen — das muss zuerst gemessen werden, ich rate hier nicht:
+## Was ich im Code sehe
 
-1. Der selbstgehostete Mail-Dienst hat keine vollständigen Zeitzonendaten, wodurch die Zeitzonen-Angabe still ignoriert wird und UTC herauskommt.
-2. Auf dem Backend-Server läuft noch eine ältere Version der Versandfunktion ohne die Zeitzonen-Angabe.
+Es gibt zwei Stellen, die die Anzeige bestimmen, und beide können das Falsche liefern:
 
-## Vorgehen
+1. **Server (Begrüßungstext der KI):** Bei einer Vermittlungs-/Broker-Bewerbung hat aktuell die **Quell-Landing Vorrang** vor der verknüpften Fast-Track-Landing. Firmenname und Recruiter:in werden also von der Vermittlungsseite genommen, obwohl das Gespräch die Fast-Track-Firma führt. Fehlt dort ein Recruiter-Name, greift der fest verdrahtete Fallback „Sabine Schneider".
+2. **Chat-Kopfzeile (Browser):** Die Seite liest die Landing-Daten direkt aus der Datenbank. Öffentlich lesbar sind aber nur **veröffentlichte** Landing-Pages. Ist die verknüpfte Fast-Track-Seite nicht veröffentlicht, kommt nichts zurück und die Seite fällt auf die Vermittlungsseite bzw. auf „Sabine Schneider" ohne Bild zurück.
 
-**Schritt 1 — Ursache messen (Backend-Server, read-only)**
-- Im Mail-Container prüfen, ob eine Uhrzeit mit deutscher Zeitzone korrekt formatiert wird.
-- Parallel prüfen, ob die dort liegende Version der Bestätigungsfunktion die Zeitzonen-Angabe überhaupt enthält.
+Ob bei dir zusätzlich einfach kein Recruiter-Name/Bild gepflegt ist, muss vor dem Fix einmal geprüft werden — das ist Schritt 1.
 
-Ergebnis entscheidet: nur neu ausrollen (Fall 2) oder Code härten (Fall 1).
+## Schritt 1 — Datenlage prüfen (Backend-Server)
 
-**Schritt 2 — Zeitformatierung unabhängig vom Runtime machen**
-Eine gemeinsame Hilfsfunktion für alle Mail-Funktionen, die
-- zuerst die normale Zeitzonen-Formatierung versucht,
-- selbst verifiziert, ob die Zeitzone wirklich angewendet wurde,
-- und andernfalls den deutschen Offset (Sommer-/Winterzeit korrekt) manuell berechnet.
+Ein Prüfbefehl, der Quell- und Fast-Track-Seite nebeneinander zeigt (Name, Bild, Firmenname, Veröffentlichungsstatus, Verknüpfung). Ergebnis entscheidet, ob es nur ein Pflege-Thema ist oder wirklich die Auflösungslogik.
 
-Damit ist die Uhrzeit richtig, egal wie der Server konfiguriert ist.
+## Schritt 2 — Serverseitige Auflösung korrigieren
 
-**Schritt 3 — Auf alle betroffenen Mails anwenden**
-- Terminbestätigung (inkl. Betreff und Vorschautext)
-- 30-Minuten-Erinnerung vor dem Termin
-- „Termin verpasst“-Erinnerung
-- Mail-Vorschau im Admin (damit Vorschau und echter Versand identisch sind)
+- Bei Bewerbungen aus einer Vermittlungs-/Broker-Landing bekommt die **verknüpfte Fast-Track-Landing Vorrang** für Firmenname, Recruiter-Name, Profilbild und Interview-Prompt; die Quell-Landing dient nur noch als Ersatz für fehlende Felder.
+- Betrifft die gemeinsame Interview-Logik sowie den Chat- und den Voice-Einstieg, damit alle Wege dasselbe Ergebnis liefern.
+- Der harte Fallback „Sabine Schneider" wird durch eine neutrale Formulierung („Ihr HR-Team" bzw. der gepflegte Firmenname) ersetzt, damit nie wieder ein erfundener Name erscheint.
+- Sieht der Firmenname wie eine Domain aus (z. B. `personalservice-gmbh.de`), wird er für die Anzeige lesbar aufbereitet, statt die Domain vorzulesen.
 
-**Schritt 4 — Kalendereintrag (.ics) präzisieren**
-Der Anhang nutzt UTC-Zeitstempel mit `Z` — das ist technisch korrekt und Kalender rechnen es richtig um. Zusätzlich wird die Zeitzone als `TZID` mitgegeben, damit Outlook/Apple die Zeit auch in Textvorschauen richtig anzeigen.
+## Schritt 3 — Kopfzeile aus derselben Quelle speisen
 
-**Schritt 5 — Bestehende Buchung prüfen**
-Kurzabfrage, ob der gespeicherte Termin in der Datenbank korrekt ist (Erwartung: ja, gespeichert ist 23:00 UTC = 01:00 deutsche Zeit). Falls doch die Speicherung schiefliegt, wird das separat gefixt — dann wäre auch die Terminplanung selbst betroffen.
+- Die Interview-Seite erhält Recruiter-Name, Profilbild und Firmenname künftig **mit der Server-Antwort** beim Start des Gesprächs, statt selbst in der Datenbank zu suchen. Damit stimmen Kopfzeile und Begrüßungstext immer überein und unveröffentlichte Fast-Track-Seiten sind kein Problem mehr.
+- Die bisherige Direktabfrage bleibt nur als Notfall-Ersatz erhalten.
+- Gleiches für die Voice-Variante des Gesprächs.
+
+## Schritt 4 — Kleines Prüfskript
+
+Ein Skript, das für eine Landing-Page anzeigt, welcher Recruiter, welches Bild und welcher Firmenname im Gespräch tatsächlich verwendet würden — damit sich so ein Fall künftig in einer Minute klären lässt.
+
+## Schritt 5 — Deploy
+
+Portal (`git pull && bash scripts/deploy.sh`) und Backend-Server; danach ein Testgespräch über die BV-Agentur-Fast-Track-Seite.
 
 ## Technische Details
 
-- Neues Modul `supabase/functions/_shared/format-datetime.ts` mit `formatAppointmentDate/Time(date)`; Selbstprüfung über `Intl.DateTimeFormat().formatToParts` plus DST-Fallback (letzter Sonntag im März/Oktober).
-- Ersetzt die direkten `toLocaleDateString/toLocaleTimeString`-Aufrufe mit `APP_TZ` in `send-booking-confirmation`, `send-appointment-reminders`, `send-application-reminders`, `email-preview`.
-- `buildIcs`: zusätzlich `VTIMEZONE`/`TZID`-Variante neben den bestehenden UTC-Werten.
-- Danach Deployment: Portal `git pull && bash scripts/deploy.sh`, Backend Sync der Edge-Funktionen; Verifikation über einen Testversand.
+- `src/lib/interview-engine.server.ts`: Priorität in `loadInterviewContext` umdrehen (fasttrack vor landing), `recruiterAvatarUrl` mit ausgeben, Fallback-Name neutralisieren.
+- `src/routes/api/public/interview-chat.ts`: identische Priorität im Inline-Zweig; `init`-Antwort um `recruiter_name`, `recruiter_avatar_url`, `company_name` erweitern.
+- `src/routes/interview.$appId.tsx` und `src/routes/interview.voice.$appId.tsx`: Branding aus der Init-Antwort übernehmen, DB-Abfrage nur als Fallback, `"Sabine Schneider"`-Literale entfernen.
+- Neues Skript `scripts/check-interview-branding.sh`.
