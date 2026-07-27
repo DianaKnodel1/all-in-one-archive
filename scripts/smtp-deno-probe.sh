@@ -63,7 +63,8 @@ for (const p of [port, port === 587 ? 465 : 587]) {
   catch (e) { console.log("  Port " + p + ": FEHLER -> " + (e?.message ?? e)); }
 }
 TS
-deno run -A --no-lock /tmp/probe.ts 2>&1 | grep -E "Port |error|Error" | head -20'
+echo "  deno: $(command -v deno || echo NICHT-GEFUNDEN)"
+(command -v deno >/dev/null && deno run -A --no-lock /tmp/probe.ts 2>&1 || /usr/local/bin/edge-runtime --version 2>&1) | tail -25'
   echo
 done <<< "$ROWS"
 
