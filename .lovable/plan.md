@@ -1,42 +1,32 @@
-## Ziel
+## Kurze Antwort
 
-Jede automatische Bewerber-Mail einmal nachweisbar auslösen und belegen, dass sie wirklich rausgeht — nicht nur "Cron läuft".
+Nein — `verify-mail-matrix.sh` prüft nur **Existenz + Historie** (Function da? Cron aktiv? wie oft in 30 Tagen gesendet/fehlgeschlagen?). Es löst keine einzige Mail aus. Für „Bewerber bekommt Zusage → Mail geht wirklich raus" braucht es den Kettentest (`run-full-chain.sh`), und der hat aktuell Lücken.
 
-## Was schon existiert (geprüft)
+## Was ich geprüft habe
 
-- `scripts/email-test/run-full-chain.sh` + SQL-Snippets `chain-01` … `chain-14`: setzt einen Test-Bewerber gezielt in jeden Zustand und ruft die Cron-Funktionen auf, vorher immer mit `dry_run:true` als Sicherheitsnetz.
-- `scripts/email-test/dry-run-all.sh`: zeigt für alle 4 Cron-Endpunkte, wer aktuell fällig wäre — ohne Versand.
-- `send-application-reminders` deckt ab: `no_booking_24h`, `no_booking_72h`, `no_show_24h`, `rebook_after_cancel_24h/72h`, `registration_pending_24h/72h`, `interview_invite_30min`, `booking_confirmation`.
-- Der KI-Interview-Pfad (`src/routes/api/public/interview-chat.ts`) schreibt bei Zusage `ai_decision` und ruft direkt `send-invitation-email` mit frischem `invitation_tokens`-Eintrag auf.
-
-## Lücke
-
-Für die **KI-Zusage nach absolviertem Interview** gibt es kein Chain-Snippet (Nummern 10–12 fehlen). Genau dieser Schritt — Termin wahrgenommen → Interview → Zusage-Mail — ist damit bisher nie automatisiert getestet worden.
+- `send-application-reminders` kennt 7 Arten: `no_booking_24h/72h`, `no_show_24h`, `rebook_after_cancel_24h/72h`, `registration_pending_24h/72h`.
+- `verify-mail-matrix.sh` listet davon nur 4 Zeilen — **`no_booking_72h`, `rebook_after_cancel_72h`, `registration_pending_24h` und `registration_pending_72h` fehlen komplett in der Matrix**. Genau „Zusage erhalten, aber nicht registriert" ist also bisher nicht in der Prüfung.
+- `send-reminders` kennt `invite`, `confirm_email`, `complete_registration`, `no_recent_booking`, `domain_recovery`. In der Matrix fehlen `no_recent_booking` und `domain_recovery`.
+- `complete_registration` greift auf `profiles.onboarding_status <> 'abgeschlossen'` — das ist die einzige Mail, die den Fall „registriert, aber Ausweis/Vertrag fehlt" abdeckt. Eine **eigene** Mail „Personalausweis fehlt" bzw. „Arbeitsvertrag nicht unterschrieben" existiert im Code nicht.
 
 ## Vorgehen
 
-1. **Bestandsaufnahme ohne Versand**
-   - `dry-run-all.sh` gegen das Backend: zeigt, welche echten Bewerber gerade in welchem Zustand hängen.
-   - DB-Auswertung: pro `reminder_kind` die letzten Sends aus `application_reminder_log` + `email_send_log` (Status, Fehler, Empfänger) — welche Kinds sind produktiv je schon einmal erfolgreich rausgegangen, welche nie.
+1. **Matrix vervollständigen** — `verify-mail-matrix.sh` um die 6 fehlenden Zeilen erweitern (`no_booking_72h`, `rebook_after_cancel_72h`, `registration_pending_24h/72h`, `no_recent_booking`, `domain_recovery`), damit aus 17 die tatsächlich implementierten ~23 Mails werden. Zusätzlich eine Auswertung direkt aus `application_reminder_log` je `reminder_kind` (nicht nur `email_send_log`), weil die Reminder dort mit ihrem Kind protokolliert werden.
 
-2. **Fehlendes Test-Snippet ergänzen**
-   - Neues `chain-10-interview-completed-zusage.sql`: Bewerber auf „Termin wahrgenommen“ (`booking_status = completed`, Termin in der Vergangenheit, `interview_status` gesetzt) und Aufruf des Interview-Endpunkts bis zur Entscheidung, damit die Zusage-Mail über `send-invitation-email` real ausgelöst wird.
-   - Einbindung als Stufe in `run-full-chain.sh` (überspringbar via `SKIP`).
+2. **Kettentest lückenlos machen** — `run-full-chain.sh` bekommt die fehlenden Stufen:
+   - Zusage erteilt, aber keine Registrierung nach 24h/72h → `registration_pending_24h/72h`
+   - Registriert, Onboarding unvollständig (kein Ausweis/kein Vertrag) → `complete_registration`
+   - E-Mail nicht bestätigt → `confirm_email`
+   Jede Stufe: Zustand setzen → Dry-Run (nur Testbewerber fällig) → echter Send → Logzeile prüfen.
 
-3. **Kontrollierter Live-Durchlauf**
-   - `run-full-chain.sh` mit einer Test-Adresse (`test+kette@…` oder eine der freigegebenen Adressen), Tenant mit funktionierendem SMTP.
-   - Jede Stufe: Zustand setzen → Dry-Run-Check (nur der Testbewerber ist fällig) → echter Send → Log-Zeile prüfen.
+3. **Onboarding-Seite mitnehmen** — für Stufe „Mitarbeiter registriert, Dokumente fehlen" muss der Test ein `profiles`-Testprofil mit `onboarding_status='in_bearbeitung'`, ohne `contract_signed_at` und ohne verifizierte `kyc_verifications` anlegen und am Ende wieder aufräumen (`chain-99-cleanup.sql` erweitern).
 
-4. **Abschlussbericht**
-   - Tabelle: Mail-Typ · Auslöser · Zeitpunkt · zuständiger Cron · Testergebnis (angekommen / geskippt / Fehler).
-   - Offene Punkte separat, z. B. Mandanten ohne SMTP (MuS Marketing, W3 Personal) und pausierte Mandanten, die im Test zwangsläufig skippen.
+4. **Ergebnisbericht** — Tabelle: Mail · Auslöser · Cron · Dry-Run fällig? · real gesendet? · Postfach-Eingang.
 
-## Was ich von dir brauche
+## Offene Frage vor der Umsetzung
 
-- Eine **Test-Empfängeradresse**, in die du reinschauen kannst.
-- Den **Mandanten**, mit dem getestet werden soll (muss aktiv sein, SMTP hinterlegt, nicht pausiert).
-- Freigabe, dass echte Mails an genau diese Adresse rausgehen dürfen — Schritt 1 und 2 laufen vorher komplett ohne Versand.
+Soll ich für „Ausweis fehlt" und „Arbeitsvertrag nicht unterschrieben" **eigene** Mails bauen (getrennte Texte, eigene Idempotenz), oder reicht dir die bestehende Sammel-Mail „Registrierung abschließen"? Das ist der einzige echte Feature-Punkt; alles andere ist Test-Abdeckung.
 
 ## Technische Details
 
-Die Snippets manipulieren ausschließlich Zeilen mit der Test-E-Mail und leeren gezielt `application_reminder_log` je `reminder_kind`, damit die Idempotenz-Sperre (`UNIQUE(application_id, reminder_kind)`) den Wiederholungslauf nicht blockiert. `chain-99-cleanup.sql` räumt am Ende Bewerber, Termine und Logs wieder ab. Kein Eingriff in Produktionsdaten anderer Bewerber; das Skript bricht ab, sobald der Dry-Run mehr als den Testbewerber als fällig meldet.
+Die neuen Kettenstufen arbeiten wie die bestehenden: nur Zeilen mit der Test-E-Mail werden manipuliert, `application_reminder_log` bzw. `reminder_log` wird je Kind gezielt geleert, damit die Idempotenz-Sperre den Wiederholungslauf nicht blockiert. Abbruch, sobald der Dry-Run mehr als den Testbewerber als fällig meldet. Für `complete_registration` wird zusätzlich ein Testeintrag in `profiles` benötigt (an einen Auth-User gebunden) — den räumt das Cleanup mit ab.

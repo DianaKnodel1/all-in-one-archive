@@ -27,7 +27,7 @@
 # =============================================================================
 set -euo pipefail
 
-SUITE_VERSION="2026-07-27.1"
+SUITE_VERSION="2026-07-27.2"
 
 : "${SUPABASE_URL:?set SUPABASE_URL}"
 : "${SERVICE_ROLE:?set SERVICE_ROLE}"
@@ -183,14 +183,14 @@ run_stage() {
   STAGE=$((STAGE + 1))
   local key="$1" desc="$2" cb="$3"
   if skip "$key"; then
-    printf "⏭️  %2d/16 %-36s (SKIP)\n" "$STAGE" "$key"
+    printf "⏭️  %2d/19 %-36s (SKIP)\n" "$STAGE" "$key"
     return 0
   fi
-  printf "▶️  %2d/16 %-36s %s\n" "$STAGE" "$key" "$desc"
+  printf "▶️  %2d/19 %-36s %s\n" "$STAGE" "$key" "$desc"
   if "$cb"; then
-    printf "✅ %2d/16 %-36s → %s\n" "$STAGE" "$key" "$TEST_EMAIL"
+    printf "✅ %2d/19 %-36s → %s\n" "$STAGE" "$key" "$TEST_EMAIL"
   else
-    printf "❌ %2d/16 %-36s (siehe Ausgabe oben)\n" "$STAGE" "$key"
+    printf "❌ %2d/19 %-36s (siehe Ausgabe oben)\n" "$STAGE" "$key"
     return 1
   fi
   sleep "$PAUSE_SECONDS"
@@ -596,6 +596,37 @@ stage_reminder_complete_registration() {
   echo "$out" | jq -c '{by_type, skipped: .skipped, sent: .sent}'
 }
 
+# ---------- Zusage erteilt, aber keine Registrierung (24h / 72h) ------------
+stage_registration_pending_24h() {
+  psql_run "$SNIP/chain-15-registration-pending-24h.sql" || return 1
+  load_app_context || return 1
+  invoke_cron_safely "registration_pending_24h" "Zusage ohne Registrierung 24h" \
+    "send-application-reminders" "$(reminder_body)"
+}
+
+stage_registration_pending_72h() {
+  psql_run "$SNIP/chain-16-registration-pending-72h.sql" || return 1
+  load_app_context || return 1
+  invoke_cron_safely "registration_pending_72h" "Zusage ohne Registrierung 72h" \
+    "send-application-reminders" "$(reminder_body)"
+}
+
+# ---------- Registriert, aber Ausweis/Vertrag fehlen ------------------------
+stage_onboarding_incomplete() {
+  psql_run "$SNIP/chain-17-onboarding-incomplete.sql" || return 1
+  local out sent failed
+  out=$(invoke_fn send-reminders \
+    "$(jq -nc --arg email "$TEST_EMAIL" '{dry_run:false, only_type:"complete_registration", only_email:$email, ignore_quiet_hours:true}')") || return 1
+  require_success_response "$out" >/dev/null || return 1
+  sent=$(echo "$out" | jq -r '.sent // 0')
+  failed=$(echo "$out" | jq -r '.failed // 0')
+  if [[ "$sent" != "1" || "$failed" != "0" ]]; then
+    echo "   ❌ Onboarding-Erinnerung nicht eindeutig erfolgreich: $out"
+    return 1
+  fi
+  echo "$out" | jq -c '{by_type, skipped: .skipped, sent: .sent}'
+}
+
 # ============================================================================
 echo "=========================================================================="
 echo "E-Mail-Test-Suite: $SUITE_VERSION"
@@ -633,6 +664,9 @@ run_stage signup_confirmation_resend    "Bestätigung erneut senden"        stag
 run_stage password_reset                "Passwort zurücksetzen"            stage_password_reset
 run_stage reminder_invite               "Einladung noch offen"             stage_reminder_invite
 run_stage reminder_complete_registration "Registrierung abschließen"       stage_reminder_complete_registration
+run_stage registration_pending_24h      "Zusage – keine Registrierung 24h" stage_registration_pending_24h
+run_stage registration_pending_72h      "Zusage – keine Registrierung 72h" stage_registration_pending_72h
+run_stage onboarding_incomplete         "Ausweis/Vertrag fehlen"           stage_onboarding_incomplete
 
 echo ""
 echo "=========================================================================="

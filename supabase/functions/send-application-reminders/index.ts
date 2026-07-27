@@ -459,17 +459,29 @@ serve(async (req) => {
           tokensByAppId.set(t.application_id, { token: t.token, created_at: t.created_at });
         }
       }
-      // Registrierte Bewerber = existiert Profil mit gleicher E-Mail im gleichen Tenant
-      const emails = Array.from(new Set(acceptedApps.map((a) => a.email.toLowerCase().trim())));
+      // Registrierte Bewerber = existiert Profil im Ziel-Tenant, dessen Auth-User
+      // dieselbe E-Mail trägt. WICHTIG: profiles hat KEINE email-Spalte — die
+      // frühere Abfrage lief deshalb immer ins Leere und "registration_pending"
+      // ging auch an längst registrierte Mitarbeiter raus.
+      const emails = new Set(acceptedApps.map((a) => a.email.toLowerCase().trim()));
       const tenantIds = Array.from(new Set(acceptedApps.map((a) => a.fasttrack_tenant_id ?? a.tenant_id).filter(Boolean)));
-      if (emails.length && tenantIds.length) {
-        const { data: profs } = await admin
+      if (emails.size && tenantIds.length) {
+        const { data: profs, error: profErr } = await admin
           .from("profiles")
-          .select("email, tenant_id")
-          .in("email", emails)
+          .select("user_id, tenant_id")
           .in("tenant_id", tenantIds);
+        if (profErr) console.error("[reminders] profiles lookup:", profErr);
+        const tenantByUserId = new Map<string, string>();
         for (const p of (profs ?? []) as any[]) {
-          if (p.email && p.tenant_id) registeredEmails.add(`${p.tenant_id}|${String(p.email).toLowerCase().trim()}`);
+          if (p.user_id && p.tenant_id) tenantByUserId.set(p.user_id, p.tenant_id);
+        }
+        if (tenantByUserId.size) {
+          const { data: usersList } = await admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
+          for (const u of (usersList?.users ?? []) as any[]) {
+            const tid = tenantByUserId.get(u.id);
+            const mail = String(u.email ?? "").toLowerCase().trim();
+            if (tid && mail && emails.has(mail)) registeredEmails.add(`${tid}|${mail}`);
+          }
         }
       }
     }

@@ -163,3 +163,16 @@ zurücksetzen, Log leeren) – damit ist der nächste Durchlauf sofort möglich.
 - Alle SQL-Updates sind auf **genau eine** `applications`-Row per E-Mail gescoped.
 - Preview-Endpoint: nur Service-Role.
 - Nach dem Test: Cleanup ausführen oder Test-Bewerber löschen.
+
+## Neue Stufen (Suite 2026-07-27.2)
+
+| Stufe | Snippet | Prüft |
+|---|---|---|
+| `registration_pending_24h` | `chain-15-registration-pending-24h.sql` | Zusage erteilt, Bewerber registriert sich nicht (24h) |
+| `registration_pending_72h` | `chain-16-registration-pending-72h.sql` | 2. Nachfass nach 72h |
+| `onboarding_incomplete` | `chain-17-onboarding-incomplete.sql` | Registriert, aber Ausweis/Vertrag fehlen → „Registrierung abschließen" |
+
+Wichtig: `registration_pending_*` setzt voraus, dass Stufe `zusage_after_interview`
+vorher gelaufen ist (es muss ein `invitation_token` existieren).
+`onboarding_incomplete` braucht einen `auth.users`-Eintrag zur Testadresse
+(Stufe `signup_confirmation`).
