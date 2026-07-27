@@ -1,27 +1,34 @@
-## Problem
+## Ziel
 
-Sobald der Bewerber absendet, erscheint die „…"-Tippblase der KI sofort — das wirkt maschinell. Aktuell steuert im Chat ein einziger `loading`-State sowohl den Request als auch die Tippblase, deshalb springt sie ohne Pause an.
+Wenn die KI am Ende des Bewerbungsgesprächs eine Zusage erteilt, sieht der Bewerber die Zusage **sofort im Portal** — als Erfolgs-Screen im Stil der „Willkommen im Team"-E-Mail, inklusive „Jetzt registrieren"-Button mit demselben Registrierungs-Link, der auch per Mail rausgeht. Die E-Mail bleibt unverändert zusätzlich bestehen.
 
-## Lösung
+## Was gebaut wird
 
-Zwischen „Nachricht abgeschickt" und „KI tippt" eine kurze Lesepause einbauen, wie in echten Messengern:
+**1. Registrierungs-Link ans Frontend durchreichen**
+- `sendRegistrationInviteAfterAiAccept` (in `src/lib/interview-engine.server.ts`) gibt zusätzlich `registration_link` zurück (der Link wird dort ohnehin schon erzeugt).
+- Gleiches in der Chat-Route `src/routes/api/public/interview-chat.ts` (eigene Kopie der Funktion).
+- Die JSON-Antwort beim Gesprächsende enthält dann: `recommendation`, `application_status` und `invite_mail.registration_link`.
+- Wichtig: Der Link wird nur zurückgegeben, wenn die bestehende Schutzlogik (abgeschlossenes Interview) greift — an der Guard-Logik ändert sich nichts.
 
-1. **Lesepause:** Nach dem Absenden bleibt es 1,2–2,5 Sekunden (leicht zufällig, damit es nicht getaktet wirkt) still — keine Tippblase, kein „schreibt …" im Header.
-2. **Danach Tippblase:** Erst dann erscheinen die drei Punkte und der Header-Status wechselt auf „Merlin schreibt …".
-3. **Antwort-Timing bleibt:** Die bestehende Tipp-Simulation (ca. 35 ms pro Zeichen, gedeckelt bei 6 s) bleibt unverändert; die Lesepause wird darauf angerechnet, damit lange KI-Antworten nicht spürbar länger dauern als heute.
-4. Kommt die Antwort schneller als die Lesepause, wird trotzdem kurz getippt, bevor die Nachricht erscheint — es gibt keinen Sprung ohne Tippblase.
-5. Gleiche Logik zusätzlich für die erste Begrüßungsnachricht beim Gesprächsstart, damit der Einstieg ebenfalls natürlich wirkt.
+**2. Zusage-Screen im Chat-Interview** (`src/routes/interview.$appId.tsx`)
+- Neuer Zustand: nach Gesprächsende mit `recommendation === "invite"` wird über dem Chat ein Erfolgs-Panel eingeblendet (kurze Verzögerung nach der letzten KI-Nachricht, damit es nicht abrupt wirkt).
+- Inhalt analog zur E-Mail:
+  - 🎉 „Willkommen im Team!" / „Wir freuen uns, dass Sie dabei sind."
+  - „Ihr Profil hat uns überzeugt – lassen Sie uns direkt starten!"
+  - Box „Wie geht es weiter?" mit den zwei nummerierten Schritten (Registrieren im Mitarbeiterportal, danach Onboarding)
+  - Primär-Button „Jetzt registrieren" → `registration_link`
+  - Signatur mit dem echten Recruiter-Namen und Firmennamen der Landing Page (die Seite kennt beides bereits), plus Hinweis „Bereits registriert? Zum Login"
+- Fallback: Kommt kein `registration_link` zurück (z. B. Mailversand-Fehler), zeigt der Screen die Zusage trotzdem an, mit Hinweis „Sie erhalten den Registrierungslink per E-Mail".
+- Bei `reject`/`unsure` ändert sich nichts — es bleibt beim bisherigen „Gespräch beendet".
 
-Der Eingabe-Button bleibt währenddessen deaktiviert, damit keine Doppel-Sendungen entstehen.
+**3. Gleiches Verhalten im Voice-Interview** (`src/routes/interview.voice.$appId.tsx`)
+- Derselbe Erfolgs-Screen nach Gesprächsende, als gemeinsame Komponente `src/components/interview/ZusageCard.tsx`, damit Chat und Voice identisch aussehen.
+
+**4. Optik**
+- Kein Hardcoding von Farben: Styling über die bestehenden Design-Tokens/Portal-Theme-Klassen, Layout am Screenshot orientiert (zentrierte Karte, Emoji-Header, graue Schritt-Box, breiter Primär-Button).
 
 ## Technische Details
 
-- Datei: `src/routes/interview.$appId.tsx`
-- Neuer State `typing` (getrennt von `loading`); die Tippblase (Zeilen ~324) und der Header-Status (Zeile ~237) hängen künftig an `typing` statt an `loading`.
-- In `send()` ein `setTimeout` mit zufälliger Dauer (1200–2500 ms) setzen, das `typing` aktiviert; Timer beim Unmount bzw. beim Rendern der Antwort sauber aufräumen.
-- Die vorhandene `targetMs`-Berechnung bleibt bestehen und wird als Untergrenze gegen die Lesepause verrechnet.
-- Konstanten (`READ_DELAY_MIN_MS`, `READ_DELAY_MAX_MS`) oben in der Datei, damit die Werte leicht anpassbar sind.
-
-## Nebenbefund
-
-Im Screenshot steht noch „Sabine Schneider · personalservice-gmbh.de". Das ist der Branding-Fix aus dem letzten Schritt — der ist im Code, aber auf `portal.bv-agentur.com` offenbar noch nicht deployed. Nach dem nächsten Portal-Deploy sollte dort „Merlin Schneider" mit Profilbild und BV-Agentur stehen.
+- Betroffene Dateien: `src/lib/interview-engine.server.ts`, `src/routes/api/public/interview-chat.ts`, `src/routes/interview.$appId.tsx`, `src/routes/interview.voice.$appId.tsx`, neu `src/components/interview/ZusageCard.tsx`.
+- Keine Datenbank-Migration nötig, keine Änderung an Mail-Templates oder Crons.
+- Abschluss mit `tsgo`-Typecheck; danach normales Deploy auf dem Portal-Server (Backend-Deploy nicht erforderlich, da keine Edge Function betroffen ist).

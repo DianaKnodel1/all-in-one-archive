@@ -346,7 +346,7 @@ export async function sendRegistrationInviteAfterAiAccept(
   });
   if (mailErr) {
     console.warn("[interview-engine] invitation mail failed:", mailErr);
-    return { sent: false, error: mailErr.message ?? "mail_failed" };
+    return { sent: false, error: mailErr.message ?? "mail_failed", registration_link: registrationLink };
   }
   await supabaseAdmin
     .from("invite_resend_queue")
@@ -362,7 +362,7 @@ export async function sendRegistrationInviteAfterAiAccept(
     old_status: app.status ?? null,
     new_status: "akzeptiert",
   } as any).then(() => {}, () => {});
-  return { sent: true };
+  return { sent: true, registration_link: registrationLink };
 }
 
 export async function finalizeInterview(app: ApplicationRow, messages: Msg[], request: Request) {

@@ -6,7 +6,8 @@ import { createFileRoute, useParams, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, CheckCircle2, UserPlus } from "lucide-react";
+import { Loader2, Send, CheckCircle2 } from "lucide-react";
+import { ZusageCard } from "@/components/interview/ZusageCard";
 
 type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
@@ -61,6 +62,7 @@ function InterviewPage() {
   const [initializing, setInitializing] = useState(true);
   const [ended, setEnded] = useState(false);
   const [appStatus, setAppStatus] = useState<string | null>(null);
+  const [registrationLink, setRegistrationLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -216,6 +218,8 @@ function InterviewPage() {
       setMessages(data.history ?? []);
       if (data.ended) setEnded(true);
       if (data.application_status) setAppStatus(data.application_status);
+      const link = (data as any)?.invite_mail?.registration_link;
+      if (link) setRegistrationLink(link);
     } catch (e: any) {
       setError(e?.message ?? "Unbekannter Fehler");
     } finally {
@@ -232,6 +236,8 @@ function InterviewPage() {
     try {
       const data = await postInterview({ applicationId: appId, action: "end" });
       if (data?.application_status) setAppStatus(data.application_status);
+      const link = (data as any)?.invite_mail?.registration_link;
+      if (link) setRegistrationLink(link);
       setEnded(true);
     } catch (e: any) {
       setError(e?.message ?? "Unbekannter Fehler");
@@ -242,6 +248,11 @@ function InterviewPage() {
 
   const company = branding?.firmenname || "uns";
   const primary = branding?.primary_color || "#2563eb";
+  const portalBase =
+    (portal || "").replace(/\/+$/, "") ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+  // Ohne Token (z. B. Mailversand-Fehler) zeigt die Karte den Hinweis auf die E-Mail.
+  const registerFallbackHref: string | null = null;
 
 
 
@@ -366,11 +377,13 @@ function InterviewPage() {
 
         {ended ? (
           appStatus === "akzeptiert" ? (
-            <WelcomeAccepted
+            <ZusageCard
+              className="mt-4"
               company={company}
               primary={primary}
               recruiter={recruiterName}
-              portal={portal}
+              registrationLink={registrationLink ?? registerFallbackHref}
+              loginHref={`${portalBase}/login`}
             />
           ) : (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-6 text-center space-y-3">
@@ -419,66 +432,6 @@ function InterviewPage() {
           </div>
         )}
       </main>
-    </div>
-  );
-}
-
-function WelcomeAccepted({
-  company,
-  primary,
-  recruiter,
-  portal,
-}: {
-  company: string;
-  primary: string;
-  recruiter: string;
-  portal: string;
-}) {
-  const base = (portal || "").replace(/\/+$/, "") || (typeof window !== "undefined" ? window.location.origin : "");
-  const registerHref = `${base}/register`;
-  return (
-    <div className="mt-4 bg-white dark:bg-slate-900 rounded-2xl border-2 p-6 space-y-5 text-center shadow-lg" style={{ borderColor: primary }}>
-      <div className="text-5xl leading-none animate-bounce">🎉</div>
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold leading-tight">Herzlichen Glückwunsch!</h2>
-        <p className="text-[15px] text-foreground leading-relaxed">
-          Ihr Profil hat uns <strong>überzeugt</strong> — willkommen bei {company}!
-        </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Registrieren Sie sich jetzt im Mitarbeiter-Portal. Direkt nach der
-          Registrierung liegt Ihr <strong>Arbeitsvertrag</strong> dort für Sie zur
-          Durchsicht und digitalen Unterschrift bereit.
-        </p>
-        <div className="mt-3 mx-auto max-w-sm rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 text-left">
-          ⏱️ <strong>Wenn Sie sich heute noch registrieren</strong>, kann Ihr Teamleiter Ihren Vertrag oft schon <strong>morgen früh</strong> freigeben — dann starten Sie noch <strong>diese Woche</strong>.
-        </div>
-        <div className="mt-3 mx-auto max-w-sm rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
-          📬 Sie erhalten in ca. <strong>1 Minute</strong> eine Bestätigungs-E-Mail mit Ihrem persönlichen Portal-Link. Bitte auch den Spam-Ordner prüfen.
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Bitte für die Registrierung bereithalten: <strong>Personalausweis</strong>, <strong>IBAN</strong>, <strong>Steuer-ID</strong>.
-        </p>
-      </div>
-
-      <Button
-        asChild
-        size="lg"
-        className="w-full font-semibold text-base h-12 shadow-md hover:shadow-lg transition-shadow"
-        style={{ background: primary }}
-      >
-        <a href={registerHref}>
-          <UserPlus className="h-5 w-5 mr-2" />
-          Jetzt im Mitarbeiter-Portal registrieren
-        </a>
-      </Button>
-
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        ⏱️ Dauert nur 5 Minuten · 📄 Vertrag digital unterschreiben · 🚀 Sofort startklar
-      </p>
-
-      <p className="text-xs text-muted-foreground pt-3 border-t border-border">
-        Herzliche Grüße, {recruiter} · HR bei {company}
-      </p>
     </div>
   );
 }

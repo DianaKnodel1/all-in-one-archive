@@ -398,7 +398,7 @@ async function sendRegistrationInviteAfterAiAccept(app: ApplicationRow, request:
 
   if (mailErr) {
     console.warn("[interview-chat] invitation mail failed:", mailErr);
-    return { sent: false, error: mailErr.message ?? "mail_failed" };
+    return { sent: false, error: mailErr.message ?? "mail_failed", registration_link: registrationLink };
   }
 
   // Falls durch alte/manuelle Prozesse bereits ein Drip-Eintrag offen ist,
@@ -419,7 +419,7 @@ async function sendRegistrationInviteAfterAiAccept(app: ApplicationRow, request:
     new_status: "akzeptiert",
   } as any).then(() => {}, () => {});
 
-  return { sent: true };
+  return { sent: true, registration_link: registrationLink };
 }
 
 export const Route = createFileRoute("/api/public/interview-chat")({
