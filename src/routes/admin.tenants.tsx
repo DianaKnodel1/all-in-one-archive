@@ -4,7 +4,7 @@ export const Route = createFileRoute("/admin/tenants")({
   component: AdminTenantsPage,
 });
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { compressImage } from "@/lib/image-compression";
@@ -68,7 +68,6 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const setDnsFn = useServerFn(setLandingDnsRecord);
-
   const leaderInitials = (leaderName || "T").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const smtpConfigured = !!(smtpHost.trim() && smtpUsername.trim() && smtpPassword.trim() && senderEmail.trim());
 
@@ -735,9 +734,15 @@ function TestEmailButton({ tenantId, smtpConfigured }: { tenantId: string; smtpC
 
       const feedback: TestFeedback = {
         success: true,
-        title: "SMTP-Verbindung erfolgreich",
+        title: data?.auto_resumed
+          ? "SMTP OK — Versand wieder freigegeben"
+          : data?.resume_blocked === "manual"
+            ? "SMTP OK — Pause wurde manuell gesetzt"
+            : "SMTP-Verbindung erfolgreich",
         message: data?.message || "Die Verbindung zum Mailserver konnte hergestellt werden.",
-        hint: "Der nächste Test prüft zusätzlich den echten Login und den Versand an die Zieladresse.",
+        hint: data?.resume_blocked === "manual"
+          ? "Die Zugangsdaten stimmen. Die Pause wurde bewusst von einem Admin gesetzt und muss über „Versand fortsetzen“ freigegeben werden."
+          : "Der nächste Test prüft zusätzlich den echten Login und den Versand an die Zieladresse.",
         debugDetails: data?.debug ? JSON.stringify(data.debug, null, 2) : undefined,
       };
       setSmtpResult(feedback);
@@ -1040,6 +1045,36 @@ function AdminTenantsPage() {
   const [switchTenant, setSwitchTenant] = useState<Tenant | undefined>();
   const { toast } = useToast();
   const setDnsFn = useServerFn(setLandingDnsRecord);
+  const [smtpOkIds, setSmtpOkIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("tenant_smtp_health" as any)
+        .select("tenant_id,last_verify_ok");
+      if (cancelled || !data) return;
+      setSmtpOkIds(
+        new Set(
+          (data as any[])
+            .filter((r) => r?.last_verify_ok === true)
+            .map((r) => String(r.tenant_id)),
+        ),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenants]);
+
+  const pauseTrigger = (t: Tenant) => {
+    const by = (t as any).emails_paused_by as string | null;
+    if (!by) return "unbekannt";
+    if (by.startsWith("manual:")) return "manuell";
+    if (by === "auto:domain_down") return "automatisch (Domains offline)";
+    if (by.startsWith("auto:")) return `automatisch (${by.slice(5)})`;
+    return "manuell";
+  };
 
   const setupDns = async (t: Tenant) => {
     const { data: fastRows } = await supabase
@@ -1174,9 +1209,24 @@ function AdminTenantsPage() {
                     {t.is_active ? "Aktiv" : "Inaktiv"}
                   </Badge>
                   {(t as any).emails_paused && (
-                    <Badge variant="destructive" className="text-[10px]" title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}>
-                      ⏸ Mails pausiert
-                    </Badge>
+                    <>
+                      <Badge
+                        variant="destructive"
+                        className="text-[10px]"
+                        title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}
+                      >
+                        ⏸ Mails pausiert · {pauseTrigger(t)}
+                      </Badge>
+                      {smtpOkIds.has(t.id) && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                          title="Letzter SMTP-Test war erfolgreich — der Versand kann freigegeben werden."
+                        >
+                          SMTP OK — jetzt freigeben
+                        </Badge>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="flex items-center gap-3">

@@ -14,6 +14,13 @@
 #    manuell            -> Admin -> Mandanten -> "Mail-Versand pausieren"
 #    auto:domain_down   -> ALLE Domains des Mandanten nicht erreichbar
 #    auto:smtp_verify   -> im Code derzeit deaktiviert (if (false && fails >= 5))
+#
+#  Freigabe:
+#    - Ein erfolgreicher SMTP-Test im Admin hebt AUTOMATISCHE Pausen
+#      (auto:*, unbekannt) sofort auf und setzt den Health-Counter zurueck.
+#    - MANUELLE Pausen (manual:admin) bleiben bestehen und muessen ueber
+#      "Versand fortsetzen" oder --release freigegeben werden.
+#    - Neue SMTP-Daten allein heben KEINE Pause auf.
 # =============================================================================
 set -uo pipefail
 
