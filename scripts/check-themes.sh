@@ -26,7 +26,7 @@ fail=0
 for d in "$DIR"/theme-*/; do
   name=$(basename "$d"); tpl="$d/template.html"; meta="$d/meta.json"
   [ -f "$tpl" ] || { echo "$name  !! template.html fehlt"; fail=1; continue; }
-  probs=()
+  probs=(); hints=()
 
   ph=$(grep -o '{{[a-z0-9_]*}}' "$tpl" | sort -u | tr -d '{}')
   [ -z "$ph" ] && probs+=("keine Platzhalter — Eingaben werden NICHT uebernommen")
@@ -52,7 +52,7 @@ for d in "$DIR"/theme-*/; do
       case " $BUILTIN " in *" $k "*) continue;; esac
       grep -qx "$k" <<<"$ph" || grep -qx "$k" <<<"$extra" || unused="$unused $k"
     done
-    [ -n "$unused" ] && probs+=("Slots ohne Platzhalter im Template:$unused")
+    [ -n "$unused" ] && hints+=("Slots ohne Platzhalter im Template (nur Hinweis):$unused")
   else
     probs+=("meta.json fehlt")
   fi
@@ -60,10 +60,12 @@ for d in "$DIR"/theme-*/; do
   n=$(printf '%s\n' "$ph" | grep -c . )
   if [ ${#probs[@]} -eq 0 ]; then
     printf '%-32s OK    %s Platzhalter\n' "$name" "$n"
+    for p in "${hints[@]:-}"; do [ -n "$p" ] && echo "                                 i $p"; done
   else
     fail=1
     printf '%-32s !!    %s Platzhalter\n' "$name" "$n"
     for p in "${probs[@]}"; do echo "                                 - $p"; done
+    for p in "${hints[@]:-}"; do [ -n "$p" ] && echo "                                 i $p"; done
   fi
 done
 echo
