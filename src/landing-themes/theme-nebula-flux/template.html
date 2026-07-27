@@ -44,12 +44,12 @@
 <section class="nf-hero">
   <div class="nf-wrap nf-hero-grid">
     <div data-reveal>
-      <span class="nf-eyebrow">{{hero_eyebrow}}</span>
+      <span class="nf-eyebrow">{{eyebrow_1}}</span>
       <h1 class="nf-h1" style="margin-top:22px">
         <span>{{hero_title}}</span>
         <span class="nf-grad-text"> Vertrauen digital schaffen.</span>
       </h1>
-      <p class="nf-lead" style="margin-top:22px">{{hero_subtitle}}</p>
+      <p class="nf-lead" style="margin-top:22px">{{lead_1}}</p>
       <div class="nf-hero-ctas">
         <a href="#bewerbung-form" class="nf-btn nf-btn-pri">
           <span>{{hero_cta_primary}}</span>
@@ -58,10 +58,10 @@
         <a href="#tester" class="nf-btn nf-btn-sec">{{hero_cta_secondary}}</a>
       </div>
       <div class="nf-hero-badges">
-        <span class="nf-badge">ISO 27001 Prozesse</span>
-        <span class="nf-badge">DSGVO-konform</span>
-        <span class="nf-badge">Real Devices</span>
-        <span class="nf-badge">3.000+ Tester</span>
+        <span class="nf-badge">{{hero_badge_1}}</span>
+        <span class="nf-badge">{{hero_badge_2}}</span>
+        <span class="nf-badge">{{hero_badge_3}}</span>
+        <span class="nf-badge">{{hero_badge_4}}</span>
       </div>
     </div>
 
@@ -111,22 +111,22 @@
 <section id="leistungen">
   <div class="nf-wrap">
     <div data-reveal>
-      <span class="nf-eyebrow">Leistungen</span>
-      <h2 class="nf-h2">Ein Testing-Stack für <span class="nf-grad-text">jede digitale Ebene.</span></h2>
-      <p class="nf-lead">Von funktionalen Tests bis Security-Audits — ein durchgängiger Prüfprozess auf echten Geräten, dokumentiert in strukturierten Reports.</p>
+      <span class="nf-eyebrow">{{eyebrow_2}}</span>
+      <h2 class="nf-h2">{{section_title_1}} <span class="nf-grad-text">{{section_title_1_accent}}</span></h2>
+      <p class="nf-lead">{{lead_2}}</p>
     </div>
     <div class="nf-svc-grid">
       <!-- 10 tiles -->
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 20h8M12 18v2"/></svg></div><h3 class="nf-h3">Website Testing</h3><p>Funktionale Tests, Layout-Prüfung und Content-QA über alle Auflösungen.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div><h3 class="nf-h3">App Testing</h3><p>iOS & Android auf echten Geräten — von Onboarding bis Push.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6S2 12 2 12z"/></svg></div><h3 class="nf-h3">UX Reviews</h3><p>Heuristische Reviews & Nutzerpfad-Analysen mit priorisiertem Backlog.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 22c0-4 3.5-7 8-7s8 3 8 7"/></svg></div><h3 class="nf-h3">Accessibility</h3><p>WCAG 2.2, Screenreader, Kontrast & Tastaturbedienung.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2c3 3 3 17 0 20M12 2c-3 3-3 17 0 20"/></svg></div><h3 class="nf-h3">Cross Browser</h3><p>Chrome, Safari, Firefox, Edge — bis zu 3 Versionen tief.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><h3 class="nf-h3">Performance</h3><p>Core Web Vitals, LCP/CLS/INP mit Handlungs­empfehlungen.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6z"/></svg></div><h3 class="nf-h3">Security Checks</h3><p>OWASP-Kategorien, Auth-Flows, Session & Rate-Limit Reviews.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5l3 2"/></svg></div><h3 class="nf-h3">Bug Reports</h3><p>Reproduzierbar, mit Screenshots, Logs und Priorität.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 10h16M10 4v16"/></svg></div><h3 class="nf-h3">Qualitätsmanagement</h3><p>Release-Gates, Regression-Suites & KPI-Tracking.</p></div>
-      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="10" rx="2"/><rect x="14" y="10" width="8" height="10" rx="2"/></svg></div><h3 class="nf-h3">Gerätekompatibilität</h3><p>Reales Gerätelab: 60+ Geräte, OS-Versionen und Auflösungen.</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 20h8M12 18v2"/></svg></div><h3 class="nf-h3">{{card_title_1}}</h3><p>{{card_text_1}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div><h3 class="nf-h3">{{card_title_2}}</h3><p>{{card_text_2}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6S2 12 2 12z"/></svg></div><h3 class="nf-h3">{{card_title_3}}</h3><p>{{card_text_3}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 22c0-4 3.5-7 8-7s8 3 8 7"/></svg></div><h3 class="nf-h3">{{card_title_4}}</h3><p>{{card_text_4}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2c3 3 3 17 0 20M12 2c-3 3-3 17 0 20"/></svg></div><h3 class="nf-h3">{{card_title_5}}</h3><p>{{card_text_5}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><h3 class="nf-h3">{{card_title_6}}</h3><p>{{card_text_6}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6z"/></svg></div><h3 class="nf-h3">{{card_title_7}}</h3><p>{{card_text_7}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5l3 2"/></svg></div><h3 class="nf-h3">{{card_title_8}}</h3><p>{{card_text_8}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 10h16M10 4v16"/></svg></div><h3 class="nf-h3">{{card_title_9}}</h3><p>{{card_text_9}}</p></div>
+      <div class="nf-svc" data-reveal><div class="nf-svc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="10" rx="2"/><rect x="14" y="10" width="8" height="10" rx="2"/></svg></div><h3 class="nf-h3">{{card_title_10}}</h3><p>{{card_text_10}}</p></div>
     </div>
   </div>
 </section>
@@ -135,16 +135,16 @@
 <section id="prozess">
   <div class="nf-wrap">
     <div data-reveal>
-      <span class="nf-eyebrow">Prozess</span>
-      <h2 class="nf-h2">Sechs Schritte — <span class="nf-grad-text">von der Analyse zur Optimierung.</span></h2>
+      <span class="nf-eyebrow">{{eyebrow_3}}</span>
+      <h2 class="nf-h2">{{section_title_2}} <span class="nf-grad-text">{{section_title_2_accent}}</span></h2>
     </div>
     <div class="nf-tl">
-      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">STEP · 01</div><h3 class="nf-h3">Analyse</h3><p>Discovery-Call, Scope-Definition, Zielgruppen & Risiko-Priorisierung.</p></div>
-      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">STEP · 02</div><h3 class="nf-h3">Testplanung</h3><p>Testcases, Devices, Browser-Matrix, Zeitplan & Reporting-Format.</p></div>
-      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">STEP · 03</div><h3 class="nf-h3">Live-Test</h3><p>Manuelle Tests durch echte Nutzer, dokumentiert in Echtzeit.</p></div>
-      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">STEP · 04</div><h3 class="nf-h3">Fehleranalyse</h3><p>Reproduktion, Impact-Bewertung, Root-Cause & Priorität.</p></div>
-      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">STEP · 05</div><h3 class="nf-h3">Qualitätsbericht</h3><p>Strukturierter Report mit KPIs, Screenshots, Videos, Empfehlungen.</p></div>
-      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">STEP · 06</div><h3 class="nf-h3">Optimierung</h3><p>Retest-Zyklus, Regression, kontinuierliche Qualitäts­sicherung.</p></div>
+      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">{{step_num_1}}</div><h3 class="nf-h3">{{card_title_11}}</h3><p>{{step_text_1}}</p></div>
+      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">{{step_num_2}}</div><h3 class="nf-h3">{{card_title_12}}</h3><p>{{step_text_2}}</p></div>
+      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">{{step_num_3}}</div><h3 class="nf-h3">{{card_title_13}}</h3><p>{{step_text_3}}</p></div>
+      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">{{step_num_4}}</div><h3 class="nf-h3">{{card_title_14}}</h3><p>{{step_text_4}}</p></div>
+      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">{{step_num_5}}</div><h3 class="nf-h3">{{card_title_15}}</h3><p>{{step_text_5}}</p></div>
+      <div class="nf-tl-step" data-reveal><div class="nf-tl-num">{{step_num_6}}</div><h3 class="nf-h3">{{card_title_16}}</h3><p>{{step_text_6}}</p></div>
     </div>
   </div>
 </section>
@@ -153,9 +153,9 @@
 <section id="dashboard">
   <div class="nf-wrap">
     <div data-reveal>
-      <span class="nf-eyebrow">Live Plattform</span>
-      <h2 class="nf-h2">Alle Metriken auf einem <span class="nf-grad-text">Dashboard.</span></h2>
-      <p class="nf-lead">Teststatus, Fehlerpriorität, Geräteabdeckung und Live-Performance — in Echtzeit für Ihr gesamtes Team.</p>
+      <span class="nf-eyebrow">{{eyebrow_4}}</span>
+      <h2 class="nf-h2">{{section_title_3}} <span class="nf-grad-text">{{section_title_3_accent}}</span></h2>
+      <p class="nf-lead">{{lead_3}}</p>
     </div>
     <div class="nf-dash" data-reveal>
       <div class="nf-dash-head">
@@ -176,10 +176,10 @@
           </div>
         </div>
         <div class="nf-dash-metrics">
-          <div class="nf-metric"><div class="nf-metric-lbl">Teststatus</div><div class="nf-metric-val" style="color:var(--nf-accent-3)">98,4 %</div></div>
-          <div class="nf-metric"><div class="nf-metric-lbl">Kritische Bugs</div><div class="nf-metric-val" style="color:var(--nf-accent)">3</div></div>
-          <div class="nf-metric"><div class="nf-metric-lbl">Devices heute</div><div class="nf-metric-val" style="color:var(--nf-accent-2)">42</div></div>
-          <div class="nf-metric"><div class="nf-metric-lbl">Coverage</div><div class="nf-metric-val">87 %</div></div>
+          <div class="nf-metric"><div class="nf-metric-lbl">{{metric_label_1}}</div><div class="nf-metric-val" style="color:var(--nf-accent-3)">98,4 %</div></div>
+          <div class="nf-metric"><div class="nf-metric-lbl">{{metric_label_2}}</div><div class="nf-metric-val" style="color:var(--nf-accent)">3</div></div>
+          <div class="nf-metric"><div class="nf-metric-lbl">{{metric_label_3}}</div><div class="nf-metric-val" style="color:var(--nf-accent-2)">42</div></div>
+          <div class="nf-metric"><div class="nf-metric-lbl">{{metric_label_4}}</div><div class="nf-metric-val">87 %</div></div>
         </div>
       </div>
     </div>
@@ -190,17 +190,17 @@
 <section id="unternehmen">
   <div class="nf-wrap">
     <div data-reveal>
-      <span class="nf-eyebrow">Für Unternehmen</span>
-      <h2 class="nf-h2">Weniger Fehler. <span class="nf-grad-text">Bessere Releases.</span></h2>
+      <span class="nf-eyebrow">{{eyebrow_5}}</span>
+      <h2 class="nf-h2">{{section_title_4}} <span class="nf-grad-text">{{section_title_4_accent}}</span></h2>
     </div>
     <div class="nf-two">
       <div data-reveal>
-        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></div><div><h4>Höhere Produktqualität</h4><p>Systematische Tests statt Bauchgefühl — messbar, dokumentiert, wiederholbar.</p></div></div>
-        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M12 4v16"/></svg></div><div><h4>Weniger Supportanfragen</h4><p>Fehler abfangen, bevor Ihre Kunden sie melden. Weniger Tickets, weniger Kosten.</p></div></div>
-        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><div><h4>Schnellere Releases</h4><p>Klare Freigabe-Kriterien und Regression-Suites verkürzen Deploy-Zyklen.</p></div></div>
-        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg></div><div><h4>Zufriedene Nutzer</h4><p>Reibungslose UX steigert Retention, Conversion und NPS spürbar.</p></div></div>
-        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/></svg></div><div><h4>Detaillierte Berichte</h4><p>PDF-Reports und Live-Dashboards für Product, Engineering und Management.</p></div></div>
-        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg></div><div><h4>Flexible Testprojekte</h4><p>Einmalige Audits, laufende Sprint-QA oder dedizierte Test-Teams.</p></div></div>
+        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></div><div><h4>{{benefit_title_1}}</h4><p>{{benefit_text_1}}</p></div></div>
+        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M12 4v16"/></svg></div><div><h4>{{benefit_title_2}}</h4><p>{{benefit_text_2}}</p></div></div>
+        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><div><h4>{{benefit_title_3}}</h4><p>{{benefit_text_3}}</p></div></div>
+        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg></div><div><h4>{{benefit_title_4}}</h4><p>{{benefit_text_4}}</p></div></div>
+        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/></svg></div><div><h4>{{benefit_title_5}}</h4><p>{{benefit_text_5}}</p></div></div>
+        <div class="nf-benefit"><div class="nf-benefit-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg></div><div><h4>{{benefit_title_6}}</h4><p>{{benefit_text_6}}</p></div></div>
       </div>
       <div class="nf-illu" data-reveal aria-hidden="true">
         <svg viewBox="0 0 400 400">
@@ -233,9 +233,9 @@
     <div class="nf-tester" data-reveal>
       <div class="nf-tester-inner">
         <div>
-          <span class="nf-eyebrow">Für Tester</span>
-          <h2 class="nf-h2" style="margin-top:18px">Werde Teil unseres <span class="nf-grad-text">professionellen Tester-Netzwerks.</span></h2>
-          <p class="nf-lead">Remote, flexibel, faire Vergütung. Arbeite an spannenden Projekten führender Marken.</p>
+          <span class="nf-eyebrow">{{eyebrow_6}}</span>
+          <h2 class="nf-h2" style="margin-top:18px">{{section_title_5}} <span class="nf-grad-text">{{section_title_5_accent}}</span></h2>
+          <p class="nf-lead">{{lead_4}}</p>
           <div class="nf-tester-list">
             <div class="nf-tester-item">100 % Remote-Arbeit</div>
             <div class="nf-tester-item">Flexible Projektauswahl</div>
@@ -270,48 +270,48 @@
 <section id="projekte">
   <div class="nf-wrap">
     <div data-reveal>
-      <span class="nf-eyebrow">Offene Projekte</span>
-      <h2 class="nf-h2">Aktuell suchen wir Tester für:</h2>
+      <span class="nf-eyebrow">{{eyebrow_7}}</span>
+      <h2 class="nf-h2">{{section_title_7}}</h2>
     </div>
     <div class="nf-proj-grid">
       <div class="nf-proj" data-reveal>
         <span class="nf-proj-tag">Finance</span>
-        <h3 class="nf-h3">Banking-App testen</h3>
+        <h3 class="nf-h3">{{card_title_17}}</h3>
         <p style="color:var(--nf-mut);font-size:.92rem">Onboarding, Überweisungen, biometrischer Login auf iOS & Android.</p>
         <div class="nf-proj-meta"><div><span>Vergütung</span><strong>80 €</strong></div><div><span>Dauer</span><strong>2 h</strong></div><div><span>Plattform</span><strong>iOS/Android</strong></div><div><span>Level</span><strong>Fortgeschritten</strong></div></div>
         <a href="#bewerbung-form" class="nf-proj-btn">Bewerben →</a>
       </div>
       <div class="nf-proj" data-reveal>
         <span class="nf-proj-tag">Health</span>
-        <h3 class="nf-h3">Gesundheitsportal prüfen</h3>
+        <h3 class="nf-h3">{{card_title_18}}</h3>
         <p style="color:var(--nf-mut);font-size:.92rem">Accessibility, Formular-Logik und Datenschutz-Flows.</p>
         <div class="nf-proj-meta"><div><span>Vergütung</span><strong>65 €</strong></div><div><span>Dauer</span><strong>1,5 h</strong></div><div><span>Plattform</span><strong>Web</strong></div><div><span>Level</span><strong>Einsteiger</strong></div></div>
         <a href="#bewerbung-form" class="nf-proj-btn">Bewerben →</a>
       </div>
       <div class="nf-proj" data-reveal>
         <span class="nf-proj-tag">E-Commerce</span>
-        <h3 class="nf-h3">E-Commerce-Shop analysieren</h3>
+        <h3 class="nf-h3">{{card_title_19}}</h3>
         <p style="color:var(--nf-mut);font-size:.92rem">Checkout, Zahlarten, Rabatt-Codes, Retouren-Flow.</p>
         <div class="nf-proj-meta"><div><span>Vergütung</span><strong>55 €</strong></div><div><span>Dauer</span><strong>1 h</strong></div><div><span>Plattform</span><strong>Web/Mobile</strong></div><div><span>Level</span><strong>Einsteiger</strong></div></div>
         <a href="#bewerbung-form" class="nf-proj-btn">Bewerben →</a>
       </div>
       <div class="nf-proj" data-reveal>
         <span class="nf-proj-tag">AI</span>
-        <h3 class="nf-h3">KI-Webanwendung evaluieren</h3>
+        <h3 class="nf-h3">{{card_title_20}}</h3>
         <p style="color:var(--nf-mut);font-size:.92rem">Chat-UX, Prompt-Handling, Fehler- und Edge-Cases.</p>
         <div class="nf-proj-meta"><div><span>Vergütung</span><strong>95 €</strong></div><div><span>Dauer</span><strong>2,5 h</strong></div><div><span>Plattform</span><strong>Web</strong></div><div><span>Level</span><strong>Fortgeschritten</strong></div></div>
         <a href="#bewerbung-form" class="nf-proj-btn">Bewerben →</a>
       </div>
       <div class="nf-proj" data-reveal>
         <span class="nf-proj-tag">Corporate</span>
-        <h3 class="nf-h3">Unternehmenswebsite testen</h3>
+        <h3 class="nf-h3">{{card_title_21}}</h3>
         <p style="color:var(--nf-mut);font-size:.92rem">Content, Formulare, Cookie-Banner, Performance.</p>
         <div class="nf-proj-meta"><div><span>Vergütung</span><strong>45 €</strong></div><div><span>Dauer</span><strong>1 h</strong></div><div><span>Plattform</span><strong>Web</strong></div><div><span>Level</span><strong>Einsteiger</strong></div></div>
         <a href="#bewerbung-form" class="nf-proj-btn">Bewerben →</a>
       </div>
       <div class="nf-proj" data-reveal>
         <span class="nf-proj-tag">Mobile UX</span>
-        <h3 class="nf-h3">Mobile App auf UX prüfen</h3>
+        <h3 class="nf-h3">{{card_title_22}}</h3>
         <p style="color:var(--nf-mut);font-size:.92rem">Nutzerpfade, Gesten, Fehlerzustände, Onboarding.</p>
         <div class="nf-proj-meta"><div><span>Vergütung</span><strong>70 €</strong></div><div><span>Dauer</span><strong>2 h</strong></div><div><span>Plattform</span><strong>iOS/Android</strong></div><div><span>Level</span><strong>Mittel</strong></div></div>
         <a href="#bewerbung-form" class="nf-proj-btn">Bewerben →</a>
@@ -324,14 +324,14 @@
 <section>
   <div class="nf-wrap">
     <div data-reveal>
-      <span class="nf-eyebrow">Kennzahlen</span>
-      <h2 class="nf-h2">Zahlen, die für sich sprechen.</h2>
+      <span class="nf-eyebrow">{{eyebrow_8}}</span>
+      <h2 class="nf-h2">{{section_title_8}}</h2>
     </div>
     <div class="nf-stats">
-      <div class="nf-stat" data-reveal><div class="nf-stat-val" data-counter data-suffix="+">25000</div><div class="nf-stat-lbl">Durchgeführte Tests</div></div>
-      <div class="nf-stat" data-reveal><div class="nf-stat-val" data-counter data-suffix="+">3000</div><div class="nf-stat-lbl">Aktive Tester</div></div>
-      <div class="nf-stat" data-reveal><div class="nf-stat-val" data-counter data-suffix=" %">99</div><div class="nf-stat-lbl">Kundenzufriedenheit</div></div>
-      <div class="nf-stat" data-reveal><div class="nf-stat-val" data-counter data-suffix="+">60</div><div class="nf-stat-lbl">Unterstützte Plattformen</div></div>
+      <div class="nf-stat" data-reveal><div class="nf-stat-val" data-counter data-suffix="+">{{stat_value_1}}</div><div class="nf-stat-lbl">{{stat_label_1}}</div></div>
+      <div class="nf-stat" data-reveal><div class="nf-stat-val" data-counter data-suffix="+">{{stat_value_2}}</div><div class="nf-stat-lbl">{{stat_label_2}}</div></div>
+      <div class="nf-stat" data-reveal><div class="nf-stat-val" data-counter data-suffix=" %">{{stat_value_3}}</div><div class="nf-stat-lbl">{{stat_label_3}}</div></div>
+      <div class="nf-stat" data-reveal><div class="nf-stat-val" data-counter data-suffix="+">{{stat_value_4}}</div><div class="nf-stat-lbl">{{stat_label_4}}</div></div>
     </div>
   </div>
 </section>
@@ -340,24 +340,24 @@
 <section>
   <div class="nf-wrap">
     <div data-reveal>
-      <span class="nf-eyebrow">Kundenstimmen</span>
-      <h2 class="nf-h2">Vertrauen von <span class="nf-grad-text">führenden Teams.</span></h2>
+      <span class="nf-eyebrow">{{eyebrow_9}}</span>
+      <h2 class="nf-h2">{{section_title_6}} <span class="nf-grad-text">{{section_title_6_accent}}</span></h2>
     </div>
     <div class="nf-test-grid">
       <div class="nf-test" data-reveal>
         <div class="nf-test-stars">★★★★★</div>
-        <p class="nf-test-quote">„Die QA-Reports sind so präzise, dass unser Engineering-Team direkt an die Umsetzung gehen kann. Enorme Zeitersparnis vor jedem Release."</p>
-        <div class="nf-test-who"><div class="nf-test-av">LM</div><div><div class="nf-test-name">Lena Meier</div><div class="nf-test-role">Head of Product · Fintech Scale-up</div></div></div>
+        <p class="nf-test-quote">{{testimonial_quote_1}}</p>
+        <div class="nf-test-who"><div class="nf-test-av">LM</div><div><div class="nf-test-name">{{testimonial_name_1}}</div><div class="nf-test-role">{{testimonial_role_1}}</div></div></div>
       </div>
       <div class="nf-test" data-reveal>
         <div class="nf-test-stars">★★★★★</div>
-        <p class="nf-test-quote">„Das Tester-Netzwerk deckt Geräte und Szenarien ab, die wir intern nie testen könnten. Wir haben unsere Crash-Rate um 70 % reduziert."</p>
-        <div class="nf-test-who"><div class="nf-test-av">TS</div><div><div class="nf-test-name">Timo Schulz</div><div class="nf-test-role">CTO · E-Commerce Plattform</div></div></div>
+        <p class="nf-test-quote">{{testimonial_quote_2}}</p>
+        <div class="nf-test-who"><div class="nf-test-av">TS</div><div><div class="nf-test-name">{{testimonial_name_2}}</div><div class="nf-test-role">{{testimonial_role_2}}</div></div></div>
       </div>
       <div class="nf-test" data-reveal>
         <div class="nf-test-stars">★★★★★</div>
-        <p class="nf-test-quote">„Endlich ein Partner, der Accessibility ernst nimmt. Struktur, Reporting und Kommunikation auf höchstem Niveau."</p>
-        <div class="nf-test-who"><div class="nf-test-av">AK</div><div><div class="nf-test-name">Anna Kraus</div><div class="nf-test-role">Digital Director · Health-Tech</div></div></div>
+        <p class="nf-test-quote">{{testimonial_quote_3}}</p>
+        <div class="nf-test-who"><div class="nf-test-av">AK</div><div><div class="nf-test-name">{{testimonial_name_3}}</div><div class="nf-test-role">{{testimonial_role_3}}</div></div></div>
       </div>
     </div>
   </div>
@@ -368,9 +368,9 @@
   <div class="nf-wrap">
     <div class="nf-fcta" data-reveal>
       <div class="nf-fcta-inner">
-        <span class="nf-eyebrow">Jetzt starten</span>
-        <h2 class="nf-h2" style="margin-top:20px">{{cta_title}}</h2>
-        <p class="nf-lead" style="margin:0 auto">{{cta_sub}}</p>
+        <span class="nf-eyebrow">{{eyebrow_10}}</span>
+        <h2 class="nf-h2" style="margin-top:20px">{{section_title_9}}</h2>
+        <p class="nf-lead" style="margin:0 auto">{{lead_5}}</p>
         <div class="nf-fcta-ctas" style="margin-top:32px">
           <a href="#bewerbung-form" class="nf-btn nf-btn-pri">{{cta_primary}}</a>
           <a href="#bewerbung-form" class="nf-btn nf-btn-sec">{{cta_secondary}}</a>
