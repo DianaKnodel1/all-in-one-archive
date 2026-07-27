@@ -371,11 +371,13 @@ function InterviewPage() {
 
         {ended ? (
           appStatus === "akzeptiert" ? (
-            <WelcomeAccepted
+            <ZusageCard
+              className="mt-4"
               company={company}
               primary={primary}
               recruiter={recruiterName}
-              portal={portal}
+              registrationLink={registrationLink ?? registerFallbackHref}
+              loginHref={`${portalBase}/login`}
             />
           ) : (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-6 text-center space-y-3">
