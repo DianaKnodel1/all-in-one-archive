@@ -33,6 +33,7 @@ import { PaginationBar } from "@/components/PaginationBar";
 type Phase =
   | "termin_offen" | "termin_gebucht" | "abgesagt" | "no_show"
   | "interview_laeuft"
+  | "entscheidung_offen"
   | "angenommen" | "abgelehnt"
   | "registriert" | "email_bestaetigt" | "onboarding_komplett" | "mitarbeiter_aktiv";
 
@@ -43,6 +44,7 @@ const PHASES: { key: Phase | "alle"; label: string; emoji: string }[] = [
   { key: "abgesagt", label: "Termin abgesagt", emoji: "🚫" },
   { key: "no_show", label: "Nicht erschienen", emoji: "⚠️" },
   { key: "interview_laeuft", label: "Interview läuft", emoji: "🎙" },
+  { key: "entscheidung_offen", label: "Entscheidung offen", emoji: "⏳" },
   { key: "angenommen", label: "Zusage erteilt", emoji: "✅" },
   { key: "abgelehnt", label: "Abgelehnt", emoji: "❌" },
   { key: "registriert", label: "Registriert", emoji: "🧾" },
@@ -57,6 +59,7 @@ const PHASE_COLOR: Record<Phase, string> = {
   abgesagt: "bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300",
   no_show: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
   interview_laeuft: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  entscheidung_offen: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300",
   angenommen: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
   abgelehnt: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
   registriert: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300",
@@ -88,7 +91,9 @@ function computePhase(a: any, scheduledAt: Date | null, prof: ProfileInfo): Phas
   if (a.booking_status === "cancelled") return "abgesagt";
   if (rec === "invite" || a.status === "akzeptiert") return "angenommen";
   if (rec === "reject" || a.status === "abgelehnt") return "abgelehnt";
-  if (a.interview_completed_at) return "angenommen";
+  // Interview beendet, aber KI unsicher (oder Auswertung unlesbar): das ist KEINE
+  // Zusage — sonst suggeriert die Liste eine Einladung, die nie verschickt wurde.
+  if (a.interview_completed_at) return "entscheidung_offen";
 
   if (a.interview_started_at) return "interview_laeuft";
   if (scheduledAt) {
@@ -104,6 +109,7 @@ function phaseToStages(phase: Phase): Stage[] {
   const order: Phase[] = [
     "termin_offen","termin_gebucht","abgesagt","no_show",
     "interview_laeuft",
+    "entscheidung_offen",
     "angenommen","abgelehnt",
     "registriert","email_bestaetigt",
     "onboarding_komplett","mitarbeiter_aktiv",
@@ -116,6 +122,7 @@ function phaseToStages(phase: Phase): Stage[] {
   let lvl = 0;
   if (idx >= order.indexOf("termin_gebucht")) lvl = 1;
   if (idx >= order.indexOf("interview_laeuft")) lvl = 2;
+  if (idx >= order.indexOf("entscheidung_offen")) lvl = 2;
   if (idx >= order.indexOf("angenommen")) lvl = 3;
   if (idx >= order.indexOf("registriert")) lvl = 4;
   if (idx >= order.indexOf("onboarding_komplett")) lvl = 5;
@@ -125,7 +132,7 @@ function phaseToStages(phase: Phase): Stage[] {
     : phase === "abgesagt" ? 0
     : phase === "no_show" ? 1
     : phase === "interview_laeuft" ? 1
-    : phase === "angenommen" || phase === "abgelehnt" ? 2
+    : phase === "entscheidung_offen" || phase === "angenommen" || phase === "abgelehnt" ? 2
     : phase === "registriert" || phase === "email_bestaetigt" ? 3
     : 4;
 
