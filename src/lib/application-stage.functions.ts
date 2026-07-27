@@ -75,6 +75,8 @@ export const advanceApplicationStage = createServerFn({ method: "POST" })
       toStage: z.enum(STAGES),
       reason: z.string().max(500).optional().nullable(),
       force: z.boolean().optional().default(false),
+      /** Zusage-Mail auch ohne abgeschlossenes KI-Gespräch senden. */
+      sendInviteWithoutInterview: z.boolean().optional().default(false),
     }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -117,7 +119,9 @@ export const advanceApplicationStage = createServerFn({ method: "POST" })
           } else {
             const { sendRegistrationInviteAfterAiAccept } = await import("@/lib/interview-engine.server");
             const req = getRequest();
-            invite_mail = await sendRegistrationInviteAfterAiAccept(appRow as any, req);
+            invite_mail = await sendRegistrationInviteAfterAiAccept(appRow as any, req, {
+              force: !!data.sendInviteWithoutInterview,
+            });
           }
         }
       } catch (e: any) {

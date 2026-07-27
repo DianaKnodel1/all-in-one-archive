@@ -186,6 +186,38 @@ export const getAppointmentByCancelToken = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     const row = (rows as any[])?.[0];
     if (!row) return { ok: false as const, error: "not_found" as const };
+
+    // Zusätzliche Interview-Infos (Bewerbungs-ID, Landing-Slug, Status),
+    // damit die Terminseite zur Terminzeit direkt ins Gespräch führen kann.
+    let application_id: string | null = null;
+    let interview_status: string | null = null;
+    let landing_slug: string | null = null;
+    try {
+      const { data: apt } = await supabaseAdmin
+        .from("interview_appointments")
+        .select("application_id")
+        .eq("id", row.appointment_id)
+        .maybeSingle();
+      application_id = ((apt as any)?.application_id as string) ?? null;
+      if (application_id) {
+        const { data: appRow } = await supabaseAdmin
+          .from("applications")
+          .select("interview_status, source_slug, source_landing_id")
+          .eq("id", application_id)
+          .maybeSingle();
+        interview_status = ((appRow as any)?.interview_status as string) ?? null;
+        landing_slug = ((appRow as any)?.source_slug as string) ?? null;
+        if (!landing_slug && (appRow as any)?.source_landing_id) {
+          const { data: lp } = await supabaseAdmin
+            .from("landing_pages")
+            .select("slug")
+            .eq("id", (appRow as any).source_landing_id)
+            .maybeSingle();
+          landing_slug = ((lp as any)?.slug as string) ?? null;
+        }
+      }
+    } catch { /* non-fatal */ }
+
     return {
       ok: true as const,
       appointment_id: row.appointment_id as string,
@@ -196,6 +228,9 @@ export const getAppointmentByCancelToken = createServerFn({ method: "POST" })
       applicant_email: row.applicant_email as string | null,
       tenant_name: row.tenant_name as string | null,
       magic_token: row.application_magic_token as string | null,
+      application_id,
+      interview_status,
+      landing_slug,
     };
   });
 

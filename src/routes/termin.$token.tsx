@@ -1,14 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, CalendarX, CalendarClock, CalendarCheck } from "lucide-react";
+import { Loader2, CalendarX, CalendarClock, CalendarCheck, MessageSquare, CheckCircle2 } from "lucide-react";
 import {
   getAppointmentByCancelToken,
   cancelAppointment,
@@ -137,6 +137,13 @@ function CancelPage() {
               </div>
             </div>
 
+            <InterviewStart
+              startsAt={start}
+              applicationId={a.application_id ?? null}
+              landingSlug={a.landing_slug ?? null}
+              interviewStatus={a.interview_status ?? null}
+            />
+
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <CalendarClock className="h-5 w-5 text-primary mt-0.5 shrink-0" />
@@ -224,6 +231,91 @@ function Center({ title, children }: { title: string; children: React.ReactNode 
         <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
         <CardContent className="text-sm text-muted-foreground">{children}</CardContent>
       </Card>
+    </div>
+  );
+}
+
+// Einstieg ins KI-Bewerbungsgespräch: vor dem Termin Countdown, ab 5 Minuten
+// vor Beginn ein aktiver Button. Die 5 Minuten entsprechen exakt dem
+// Server-Gate in /api/public/interview-chat.
+function InterviewStart({
+  startsAt,
+  applicationId,
+  landingSlug,
+  interviewStatus,
+}: {
+  startsAt: Date;
+  applicationId: string | null;
+  landingSlug: string | null;
+  interviewStatus: string | null;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!applicationId) return null;
+
+  if (interviewStatus === "done" || interviewStatus === "taken_over") {
+    return (
+      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 flex items-start gap-3">
+        <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
+        <div className="text-sm">
+          <div className="font-medium">Ihr Gespräch ist bereits abgeschlossen.</div>
+          <p className="text-muted-foreground mt-0.5">Wir melden uns zeitnah mit dem nächsten Schritt bei Ihnen.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const readyAt = startsAt.getTime() - 5 * 60 * 1000;
+  const ready = now >= readyAt;
+  const remainingMs = Math.max(0, readyAt - now);
+  const totalMin = Math.floor(remainingMs / 60000);
+  const days = Math.floor(totalMin / (60 * 24));
+  const hours = Math.floor((totalMin % (60 * 24)) / 60);
+  const mins = totalMin % 60;
+  const secs = Math.floor((remainingMs % 60000) / 1000);
+  const countdown =
+    days > 0
+      ? `${days} Tag${days === 1 ? "" : "e"} ${hours} Std ${mins} Min`
+      : hours > 0
+        ? `${hours} Std ${mins} Min`
+        : `${mins}:${String(secs).padStart(2, "0")} Min`;
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const qs = new URLSearchParams({ landing: landingSlug ?? "", portal: origin }).toString();
+  const interviewUrl = `${origin}/interview/${applicationId}?${qs}`;
+
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+      <div className="flex items-start gap-3">
+        <MessageSquare className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+        <div>
+          <div className="font-medium">Ihr Bewerbungsgespräch</div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {ready
+              ? "Sie können jetzt starten – planen Sie etwa 15–20 Minuten ein."
+              : `Der Einstieg wird kurz vor dem Termin freigeschaltet – noch ${countdown}.`}
+          </p>
+        </div>
+      </div>
+      {ready ? (
+        <a
+          href={interviewUrl}
+          className="block w-full text-center rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-semibold hover:opacity-90"
+        >
+          Gespräch jetzt starten
+        </a>
+      ) : (
+        <div className="w-full text-center rounded-md border bg-muted/40 px-4 py-2.5 text-sm font-medium text-muted-foreground">
+          Gespräch startet in {countdown}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Sie erhalten den Link zusätzlich rund 30 Minuten vor dem Termin per E-Mail.
+      </p>
     </div>
   );
 }

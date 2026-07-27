@@ -1,26 +1,30 @@
-## Was der Screenshot zeigt
+## Zwei Themen
 
-Die Meldung ist diesmal eine **andere** als vorher: „Failed to send a request to the Edge Function". Das ist kein Fehler *aus* der Funktion, sondern heißt: die Funktion hat **gar nicht geantwortet** — sie wurde nach Ablauf der Laufzeit abgebrochen.
+### A) LH Marketing SMTP (erledigt, keine Codeänderung)
+Die Prüfung zeigt: Host/Port/Benutzer sind korrekt gespeichert, das Passwort hat 15 Zeichen. Der Mailanbieter antwortet auf beiden Ports mit `535 authentication failed` — das kommt vom Anbieter, nicht aus dem Portal. Also: bei privateemail.com ein neues (App-)Passwort erzeugen, im Portal eintragen, Test-Mail senden. Danach wird der Tenant automatisch entpausiert. Kein Teil dieses Plans.
 
-Dazu passt der Befund im Code: der Mail-Versand in `send-invitation-email` baut die SMTP-Verbindung **ohne jedes Timeout** auf (`nodemailer.createTransport` ohne `connectionTimeout`/`greetingTimeout`/`socketTimeout`, `sendMail` ohne Zeitlimit). Nur der Verify-Schritt hat 15 s. Wenn der Mailserver von LH Marketing die Verbindung annimmt, aber nicht sauber antwortet (typisch bei falschem Port/SSL-Modus oder geblocktem Port 465/587 vom Backend-Server aus), hängt die Funktion, bis die Plattform sie killt — und im Portal kommt genau diese generische Meldung an. Bei den anderen Mandanten antwortet SMTP sofort, deshalb funktioniert es dort.
+### B) „Termin um 22 Uhr startet nicht"
+Aktueller Stand im Code: Die Terminseite (`/termin/<cancel_token>`, Screenshot 1) zeigt nur Datum/Uhrzeit, „Neuen Termin wählen" und „Absagen" — **es gibt dort keinen Einstieg ins Gespräch**. Der einzige Weg ins Interview ist die Mail „In 30 Minuten startet Ihr Bewerbungsgespräch", die vom Cron ~25–40 Min vor Terminbeginn verschickt wird und auf `https://<landing-domain>/bewerbung?token=…` zeigt. Fällt diese Mail aus (kein Magic-Token, keine Landing-Domain, SMTP pausiert) oder wird sie übersehen, kommt der Bewerber nicht ins Gespräch.
 
-Hinweis: dass Versand über das Webmail-Postfach klappt, sagt nichts über SMTP-Zugang von außen — Webmail geht nicht über SMTP-Auth.
+**Geplant:**
+1. Terminseite um einen Gesprächsbereich erweitern:
+   - vor dem Termin: Countdown „Ihr Gespräch startet in HH:MM" (Button inaktiv),
+   - ab 5 Minuten vor Beginn (gleiche Schwelle wie das Server-Gate): aktiver Button **„Gespräch jetzt starten"**, der direkt auf die Interview-Seite der Bewerbung führt,
+   - nach abgeschlossenem Gespräch: Hinweis statt Button.
+2. Die dafür nötigen Felder (Bewerbungs-ID, Landing-Slug, Portal-Basis, Interview-Status) in der bestehenden Server-Funktion für den Termin-Link mitliefern.
+3. Denselben Startbereich auf dem Bestätigungsschritt nach der Buchung anzeigen, damit der Link sofort bekannt ist.
+4. Prüfschritt für deinen Server: kontrollieren, ob für die betroffene Bewerbung `magic_token` und Landing-Domain gesetzt sind — sonst kann die 30-Minuten-Mail gar nicht rausgehen.
 
-## Umsetzung
+### C) „Willkommen im Team"-Mail ohne Interview
+Die Mail wird an genau drei Stellen ausgelöst: nach positiver KI-Entscheidung am Gesprächsende (Chat und Voice) und beim Admin-Stufenwechsel auf „Vermittlung: Zusage" / „Fast-Track angenommen". Welcher dieser Wege bei dem Test gefeuert hat, lässt sich nur an deiner Datenbank belegen — das ist Schritt 1.
 
-**1. Harte Timeouts im Mail-Versand** (`supabase/functions/send-invitation-email/index.ts`)
-- `connectionTimeout: 10000`, `greetingTimeout: 10000`, `socketTimeout: 20000` am Transport.
-- `sendMail` zusätzlich gegen ein 25-s-Limit rennen lassen, damit die Funktion **immer** antwortet.
-- Bei Timeout: Log-Eintrag `failed` mit klarem Grund (`smtp_connect_timeout` / `smtp_send_timeout` inkl. Host/Port) und HTTP 502 mit dieser Klartextmeldung.
+**Geplant:**
+1. Nachweis holen (Abfrage auf deinem Backend-Server): Interview-Status, Nachrichtenanzahl, Empfehlung, Stufenverlauf und Zeitpunkt der versendeten Einladung für die betroffene Bewerbung. Erst danach steht die Ursache fest.
+2. Unabhängig davon eine harte Schutzregel einziehen: Die Registrierungs-Einladung darf nur rausgehen, wenn das Gespräch wirklich stattgefunden hat — also Interview abgeschlossen **und** ein Verlauf mit echten Antworten vorhanden. Fehlt das, wird nicht gesendet, sondern der Grund protokolliert.
+3. Für Admins bleibt der Weg offen, aber bewusst: Bei manueller Zusage ohne stattgefundenes Gespräch erscheint ein Hinweis, dass noch kein Interview vorliegt, und die Mail geht nur nach ausdrücklicher Bestätigung raus.
+4. Zusätzlich einmalig im System nachsehen, ob es weitere Bewerbungen mit Einladung, aber ohne Gesprächsverlauf gibt.
 
-Dieselben Timeouts in den übrigen Versand-Funktionen ergänzen, die noch ohne laufen (`resend-signup-confirmation`, `send-booking-confirmation`, `send-reminders`, `email-resend`, …) — sonst hängt dort dasselbe.
-
-**2. Fehleranzeige im Portal** (`src/routes/admin.tenants.tsx`)
-- Netzwerk-/Timeout-Fehler beim Aufruf (kein JSON-Body) nicht mehr als „konnte nicht versendet werden" abtun, sondern als eigenen Hinweis zeigen: „Der Mailserver hat nicht rechtzeitig geantwortet — Host/Port/SSL prüfen (465 = SSL, 587 = STARTTLS)."
-
-**3. Diagnose-Skript** `scripts/smtp-probe.sh`
-Prüft vom Backend-Server aus für einen Mandanten, ob Port 465 und 587 überhaupt erreichbar sind und was der Server als Greeting schickt — damit unterscheidbar wird: Port geblockt, falscher SSL-Modus oder falsche Zugangsdaten.
-
-## Danach
-
-Deploy der geänderten Functions auf dem Backend-Server, dann Test-Mail erneut. Statt der generischen Meldung steht dann entweder der konkrete SMTP-Fehler (z. B. „535 Authentication failed") oder „Verbindung zu host:port nach 10 s ohne Antwort" — damit ist klar, ob es an Zugangsdaten oder am Port liegt.
+## Technische Details
+- Betroffene Dateien: `src/routes/termin.$token.tsx`, `src/routes/termin.buchen.$token.tsx`, `src/lib/appointments.functions.ts` (Rückgabe um `application_id`, `interview_status`, `landing_slug` erweitern), `src/lib/interview-engine.server.ts` (Guard in `sendRegistrationInviteAfterAiAccept`), `src/lib/application-stage.functions.ts` (Guard + `force`-Parameter), Admin-UI der Bewerbungen für den Bestätigungsdialog.
+- Die 5-Minuten-Vorlaufschwelle im Frontend entspricht exakt dem bestehenden Server-Gate in `src/routes/api/public/interview-chat.ts`, damit Button und Server nie widersprüchlich reagieren.
+- Keine Migration nötig; Zeitzone bleibt Europe/Berlin wie zuletzt gefixt.
