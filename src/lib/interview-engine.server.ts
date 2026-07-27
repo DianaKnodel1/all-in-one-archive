@@ -196,11 +196,24 @@ export const toAiDecision = (rec: "invite" | "reject" | "unsure") =>
 export const toApplicationStatus = (rec: "invite" | "reject" | "unsure") =>
   rec === "invite" ? "akzeptiert" : rec === "reject" ? "abgelehnt" : "neu";
 
+// Manche Landing-Pages tragen als Firmenname nur die Domain („personalservice-gmbh.de").
+// Im Gespräch soll trotzdem ein lesbarer Firmenname erscheinen.
+export function prettifyCompanyName(raw: string): string {
+  const v = raw.trim();
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(v) || v.includes(" ")) return v;
+  const base = v.replace(/^www\./i, "").replace(/\.[a-z]{2,}$/i, "");
+  return base
+    .split(/[-_.]+/)
+    .filter(Boolean)
+    .map((w) => (/^(gmbh|ug|ag|kg|ohg|mbh)$/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+
 export async function loadInterviewContext(app: ApplicationRow): Promise<InterviewContext> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   let systemPrompt = DEFAULT_INTERVIEW_PROMPT;
   let companyName = "unserem Unternehmen";
-  let recruiterName = "Sabine Schneider";
+  let recruiterName = "Ihr HR-Team";
   let voiceId: string | null = null;
   let interviewMode: "chat" | "voice" | "both" = "chat";
   let landingSlug: string | null = app.source_slug ?? null;
@@ -235,24 +248,30 @@ export async function loadInterviewContext(app: ApplicationRow): Promise<Intervi
       .from("landing_pages").select(sel).eq("id", app.target_landing_id).maybeSingle();
     fasttrack = ft ?? null;
   }
-  // Source-Landing hat Vorrang (dort pflegt der Admin Recruiter-Name etc.);
-  // Fasttrack-Landing dient nur als Fallback für fehlende Felder.
+  // Das Gespräch führt IMMER die Fast-Track-Firma: Ist eine verknüpfte
+  // Fast-Track-Landing vorhanden, hat DIESE Vorrang. Die Quell-/Vermittlungs-
+  // Landing dient nur noch als Ersatz für dort nicht gepflegte Felder.
   if (landing || fasttrack) {
-    const custom = landing?.interview_system_prompt?.trim?.() || fasttrack?.interview_system_prompt?.trim?.();
+    const custom = fasttrack?.interview_system_prompt?.trim?.() || landing?.interview_system_prompt?.trim?.();
     if (custom) systemPrompt = custom;
-    const fn = landing?.branding?.firmenname?.trim?.() || fasttrack?.branding?.firmenname?.trim?.();
-    if (fn) companyName = fn;
+    const fn = fasttrack?.branding?.firmenname?.trim?.() || landing?.branding?.firmenname?.trim?.();
+    if (fn) companyName = prettifyCompanyName(fn);
     const rn =
-      landing?.branding?.recruiter_name?.trim?.() ||
-      landing?.recruiter_name?.trim?.() ||
       fasttrack?.branding?.recruiter_name?.trim?.() ||
-      fasttrack?.recruiter_name?.trim?.();
+      fasttrack?.recruiter_name?.trim?.() ||
+      landing?.branding?.recruiter_name?.trim?.() ||
+      landing?.recruiter_name?.trim?.();
     if (rn) recruiterName = rn;
-    recruiterAvatarUrl = landing?.recruiter_avatar_url || fasttrack?.recruiter_avatar_url || null;
-    voiceId = landing?.interview_voice_id || fasttrack?.interview_voice_id || null;
-    const mode = landing?.interview_mode || fasttrack?.interview_mode;
+    recruiterAvatarUrl =
+      fasttrack?.recruiter_avatar_url ||
+      fasttrack?.branding?.recruiter_avatar_url ||
+      landing?.recruiter_avatar_url ||
+      landing?.branding?.recruiter_avatar_url ||
+      null;
+    voiceId = fasttrack?.interview_voice_id || landing?.interview_voice_id || null;
+    const mode = fasttrack?.interview_mode || landing?.interview_mode;
     if (mode === "voice" || mode === "both" || mode === "chat") interviewMode = mode;
-    landingSlug = landing?.slug || landing?.source_slug || fasttrack?.slug || fasttrack?.source_slug || landingSlug;
+    landingSlug = fasttrack?.slug || fasttrack?.source_slug || landing?.slug || landing?.source_slug || landingSlug;
   }
 
   const recruiterFirst = recruiterName.trim().split(/\s+/)[0] || recruiterName;
