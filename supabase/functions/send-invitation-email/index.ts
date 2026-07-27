@@ -395,7 +395,7 @@ serve(async (req) => {
     const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
     if (!verifyRes.ok) {
       await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", verifyRes.reason, smtpMeta);
-      await bumpRecipientFailure(supabaseAdmin, to, tenant.id, verifyRes.reason ?? "smtp_verify_failed");
+      if (!isTestMode) await bumpRecipientFailure(supabaseAdmin, to, tenant.id, verifyRes.reason ?? "smtp_verify_failed");
       return json({ error: `SMTP-Verbindung fehlgeschlagen: ${verifyRes.reason}`, paused: verifyRes.paused }, 502);
     }
 
