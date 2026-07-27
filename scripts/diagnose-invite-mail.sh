@@ -59,9 +59,9 @@ sqlt "SELECT 'ID           : '||a.id
        ||E'\nAI-Decision  : '||coalesce(a.ai_decision,'-')
        ||E'\nBeendet am   : '||coalesce(a.interview_completed_at::text,'-')
        ||E'\nUser-Turns   : '||(SELECT count(*) FROM jsonb_array_elements(coalesce(a.interview_messages,'[]'::jsonb)) m WHERE m->>'role'='user')
-       ||E'\nEinladung    : '||coalesce(a.invite_mail_status,'(nie versucht)')
-       ||coalesce('  — '||a.invite_mail_error,'')
-       ||coalesce('  @ '||a.invite_mail_at::text,'')
+       ||E'\nEinladung    : '||coalesce(to_jsonb(a)->>'invite_mail_status','(nie versucht / Migration fehlt)')
+       ||coalesce('  — '||(to_jsonb(a)->>'invite_mail_error'),'')
+       ||coalesce('  @ '||(to_jsonb(a)->>'invite_mail_at'),'')
        ||E'\n--------------------------------------------------------------'
    FROM applications a WHERE ${MATCH} ORDER BY a.created_at DESC LIMIT 5;"
 
