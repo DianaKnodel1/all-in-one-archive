@@ -132,3 +132,26 @@ export const advanceApplicationStage = createServerFn({ method: "POST" })
 
     return { stage: result as string, invite_mail };
   });
+
+/**
+ * Registrierungs-Einladung („Willkommen im Team") erneut versenden — z. B. wenn
+ * der erste Versuch am SMTP des Mandanten gescheitert ist. Erzeugt einen frischen
+ * Token und umgeht den Interview-Guard bewusst (Admin-Entscheidung).
+ */
+export const resendRegistrationInvite = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ applicationId: z.string().uuid() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: appRow, error: appErr } = await supabaseAdmin
+      .from("applications")
+      .select("id, full_name, first_name, last_name, email, tenant_id, status, source_slug, source_landing_id, target_landing_id")
+      .eq("id", data.applicationId)
+      .maybeSingle();
+    if (appErr || !appRow) throw new Error(appErr?.message ?? "Bewerbung nicht gefunden");
+    const { sendRegistrationInviteAfterAiAccept } = await import("@/lib/interview-engine.server");
+    return await sendRegistrationInviteAfterAiAccept(appRow as any, getRequest(), { force: true });
+  });
