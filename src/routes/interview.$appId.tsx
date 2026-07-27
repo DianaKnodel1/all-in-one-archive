@@ -74,6 +74,10 @@ function InterviewPage() {
   const [serverBranding, setServerBranding] = useState<{ recruiter_name?: string; recruiter_avatar_url?: string | null; company_name?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const applyServerBranding = (data: any) => {
+    if (data?.branding) setServerBranding(data.branding);
+  };
+
 
   
 
