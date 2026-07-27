@@ -6,7 +6,8 @@ import { createFileRoute, useParams, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, CheckCircle2, UserPlus } from "lucide-react";
+import { Loader2, Send, CheckCircle2 } from "lucide-react";
+import { ZusageCard } from "@/components/interview/ZusageCard";
 
 type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
@@ -247,6 +248,11 @@ function InterviewPage() {
 
   const company = branding?.firmenname || "uns";
   const primary = branding?.primary_color || "#2563eb";
+  const portalBase =
+    (portal || "").replace(/\/+$/, "") ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+  // Ohne Token (z. B. Mailversand-Fehler) zeigt die Karte den Hinweis auf die E-Mail.
+  const registerFallbackHref: string | null = null;
 
 
 
