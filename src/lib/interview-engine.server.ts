@@ -274,7 +274,9 @@ export async function loadInterviewContext(app: ApplicationRow): Promise<Intervi
     landingSlug = fasttrack?.slug || fasttrack?.source_slug || landing?.slug || landing?.source_slug || landingSlug;
   }
 
-  const recruiterFirst = recruiterName.trim().split(/\s+/)[0] || recruiterName;
+  // Ohne gepflegten Namen ("Ihr HR-Team") darf nicht auf einen Vornamen gekürzt werden.
+  const hasRealName = recruiterName !== "Ihr HR-Team";
+  const recruiterFirst = hasRealName ? recruiterName.trim().split(/\s+/)[0] || recruiterName : recruiterName;
   const fullName = (app.full_name || "").trim();
   const brandingFirstName = app.first_name?.trim() || fullName.split(/\s+/)[0] || "";
   const candidateFirst = brandingFirstName || "";
