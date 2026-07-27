@@ -92,6 +92,8 @@ interface Payload {
   /** Optional: application_id → aktiviert zentrales SMTP-Routing (sender-resolver).
    *  Ohne applicationId bleibt tenantId aus dem Payload maßgeblich (Legacy-Verhalten). */
   applicationId?: string;
+  /** Admin-Test aus /admin/tenants: umgeht Empfänger-Sperre und Kontingent. */
+  testMode?: boolean;
 }
 
 // Mapping template → EmailKind für den zentralen Resolver.
