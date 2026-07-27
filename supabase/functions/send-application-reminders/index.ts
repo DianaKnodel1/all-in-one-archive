@@ -13,6 +13,9 @@ import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { resolveSender, type EmailKind } from "../_shared/sender-resolver.ts";
 import { renderEmail } from "../_shared/email-wrapper.ts";
 import {
+
+// Alle Termin-Zeiten in E-Mails in deutscher Ortszeit (Container läuft in UTC).
+const APP_TZ = "Europe/Berlin";
   MAX_PER_1H_PER_TENANT as LIMIT_1H,
   MAX_PER_12H_PER_TENANT as LIMIT_12H,
   MAX_PER_RUN_PER_TENANT as LIMIT_RUN,
@@ -741,8 +744,8 @@ serve(async (req) => {
         rebook_link: rebookLink || calendlyLink,
         portal_link: portalLink,
         portal_url: portalUrl,
-        appointment_date: scheduledDate ? scheduledDate.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" }) : "",
-        appointment_time: scheduledDate ? scheduledDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "",
+        appointment_date: scheduledDate ? scheduledDate.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", timeZone: APP_TZ }) : "",
+        appointment_time: scheduledDate ? scheduledDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: APP_TZ }) : "",
       };
       const subject = render(tmplSubject, vars);
       const html = buildHtml(tmplSubject, tmplBody, tenant.email_signature ?? "", tenant, vars);
