@@ -1,14 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, CalendarX, CalendarClock, CalendarCheck } from "lucide-react";
+import { Loader2, CalendarX, CalendarClock, CalendarCheck, MessageSquare, CheckCircle2 } from "lucide-react";
 import {
   getAppointmentByCancelToken,
   cancelAppointment,
@@ -136,6 +136,13 @@ function CancelPage() {
                 Ihr Termin startet um {format(start, "HH:mm")} Uhr
               </div>
             </div>
+
+            <InterviewStart
+              startsAt={start}
+              applicationId={a.application_id ?? null}
+              landingSlug={a.landing_slug ?? null}
+              interviewStatus={a.interview_status ?? null}
+            />
 
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
               <div className="flex items-start gap-3">
