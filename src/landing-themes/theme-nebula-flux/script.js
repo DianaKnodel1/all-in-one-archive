@@ -1,8 +1,7 @@
 (function(){
   // Accent override
   try{
-    var accEl = document.querySelector('[data-editable="accent_color"]');
-    var acc = accEl && accEl.textContent && accEl.textContent.trim();
+    var acc = '{{accent_color}}';
     if(acc && /^#[0-9a-f]{3,8}$/i.test(acc)) document.documentElement.style.setProperty('--nf-accent',acc);
   }catch(e){}
 
