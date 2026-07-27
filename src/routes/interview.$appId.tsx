@@ -63,6 +63,7 @@ function InterviewPage() {
   const [ended, setEnded] = useState(false);
   const [appStatus, setAppStatus] = useState<string | null>(null);
   const [registrationLink, setRegistrationLink] = useState<string | null>(null);
+  const [inviteMailFailed, setInviteMailFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -218,8 +219,9 @@ function InterviewPage() {
       setMessages(data.history ?? []);
       if (data.ended) setEnded(true);
       if (data.application_status) setAppStatus(data.application_status);
-      const link = (data as any)?.invite_mail?.registration_link;
-      if (link) setRegistrationLink(link);
+      const im = (data as any)?.invite_mail;
+      if (im?.registration_link) setRegistrationLink(im.registration_link);
+      if (im && im.sent === false) setInviteMailFailed(true);
     } catch (e: any) {
       setError(e?.message ?? "Unbekannter Fehler");
     } finally {
@@ -236,8 +238,9 @@ function InterviewPage() {
     try {
       const data = await postInterview({ applicationId: appId, action: "end" });
       if (data?.application_status) setAppStatus(data.application_status);
-      const link = (data as any)?.invite_mail?.registration_link;
-      if (link) setRegistrationLink(link);
+      const im = (data as any)?.invite_mail;
+      if (im?.registration_link) setRegistrationLink(im.registration_link);
+      if (im && im.sent === false) setInviteMailFailed(true);
       setEnded(true);
     } catch (e: any) {
       setError(e?.message ?? "Unbekannter Fehler");
@@ -383,6 +386,7 @@ function InterviewPage() {
               primary={primary}
               recruiter={recruiterName}
               registrationLink={registrationLink ?? registerFallbackHref}
+              mailFailed={inviteMailFailed}
               loginHref={`${portalBase}/login`}
             />
           ) : (

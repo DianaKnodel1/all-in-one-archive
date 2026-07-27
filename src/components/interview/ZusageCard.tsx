@@ -11,6 +11,7 @@ export function ZusageCard({
   registrationLink,
   loginHref,
   className,
+  mailFailed,
 }: {
   company: string;
   primary: string;
@@ -20,6 +21,8 @@ export function ZusageCard({
   registrationLink?: string | null;
   loginHref?: string;
   className?: string;
+  /** true = die Zusage-Mail konnte nicht zugestellt werden → Link hier direkt nutzen. */
+  mailFailed?: boolean;
 }) {
   const login = loginHref || "/login";
   return (
@@ -58,6 +61,7 @@ export function ZusageCard({
       </div>
 
       {registrationLink ? (
+        <>
         <Button
           asChild
           size="lg"
@@ -69,6 +73,13 @@ export function ZusageCard({
             Jetzt registrieren
           </a>
         </Button>
+        {mailFailed && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+            ✉️ Die Bestätigungs-E-Mail ist noch unterwegs. Nutzen Sie zur Sicherheit
+            direkt den Button oben — der Link funktioniert auch ohne E-Mail.
+          </div>
+        )}
+        </>
       ) : (
         <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
           📬 Sie erhalten in wenigen Minuten eine E-Mail mit Ihrem persönlichen

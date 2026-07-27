@@ -298,6 +298,7 @@ function VoiceInterviewPage() {
               recruiter={config?.recruiterName ?? "HR-Team"}
               firstName={firstName}
               registrationLink={registerUrl}
+              mailFailed={endResult?.invite_mail ? endResult.invite_mail.sent === false : false}
             />
           </div>
         </div>
