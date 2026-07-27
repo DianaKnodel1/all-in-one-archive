@@ -9,6 +9,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { sendRegistrationInviteAfterAiAccept } from "@/lib/interview-engine.server";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -333,94 +334,6 @@ const toAiDecision = (rec: "invite" | "reject" | "unsure") =>
 
 const toApplicationStatus = (rec: "invite" | "reject" | "unsure") =>
   rec === "invite" ? "akzeptiert" : rec === "reject" ? "abgelehnt" : "neu";
-
-async function sendRegistrationInviteAfterAiAccept(app: ApplicationRow, request: Request) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  if (!app.email || !app.tenant_id) {
-    return { sent: false, skipped: true, reason: "missing_email_or_tenant" };
-  }
-
-  const email = app.email.toLowerCase().trim();
-  const token = `${crypto.randomUUID()}-${crypto.randomUUID().slice(0, 8)}`;
-  const { data: tokenRow, error: tokenErr } = await supabaseAdmin
-    .from("invitation_tokens")
-    .insert({
-      token,
-      email,
-      tenant_id: app.tenant_id,
-      application_id: app.id,
-    } as any)
-    .select("token")
-    .single();
-
-  if (tokenErr || !tokenRow?.token) {
-    console.error("[interview-chat] invitation token error:", tokenErr);
-    return { sent: false, error: tokenErr?.message ?? "token_failed" };
-  }
-
-  // Portal-Domain zuerst aus der Fast-Track-Zielseite ableiten
-  // (bei Vermittlung hat der Tenant selbst keine portal.-Subdomain).
-  let portalDomain: string | null = null;
-  const targetLandingId = (app as any).target_landing_id ?? null;
-  if (targetLandingId) {
-    const { data: lp } = await supabaseAdmin
-      .from("landing_pages")
-      .select("domain")
-      .eq("id", targetLandingId)
-      .maybeSingle();
-    portalDomain = (lp as any)?.domain ?? null;
-  }
-  if (!portalDomain) {
-    const { data: tenant } = await supabaseAdmin
-      .from("tenants")
-      .select("domain, primary_domain")
-      .eq("id", app.tenant_id)
-      .maybeSingle();
-    portalDomain = (tenant as any)?.primary_domain || (tenant as any)?.domain || null;
-  }
-  const fallbackOrigin = new URL(request.url).origin.replace(/\/+$/, "");
-  const base = portalDomain ? `https://portal.${portalDomain}` : fallbackOrigin;
-  const registrationLink = `${base}/register?token=${encodeURIComponent(tokenRow.token)}`;
-  const name = app.full_name || email;
-  const firstName = app.first_name || String(name).trim().split(/\s+/)[0] || "";
-  const lastName = app.last_name || String(name).trim().split(/\s+/).slice(1).join(" ");
-
-  const { error: mailErr } = await supabaseAdmin.functions.invoke("send-invitation-email", {
-    body: {
-      to: email,
-      fullName: name,
-      firstName,
-      lastName,
-      registrationLink,
-      tenantId: app.tenant_id,
-    },
-  });
-
-  if (mailErr) {
-    console.warn("[interview-chat] invitation mail failed:", mailErr);
-    return { sent: false, error: mailErr.message ?? "mail_failed", registration_link: registrationLink };
-  }
-
-  // Falls durch alte/manuelle Prozesse bereits ein Drip-Eintrag offen ist,
-  // überspringen wir ihn, damit keine doppelte Erst-Einladung rausgeht.
-  await supabaseAdmin
-    .from("invite_resend_queue")
-    .update({ status: "skipped", last_error: "ai_accept_invite_sent" } as any)
-    .eq("status", "queued")
-    .eq("email", email)
-    .then(() => {}, () => {});
-
-  await supabaseAdmin.from("activity_log").insert({
-    action: "bewerbung_ai_akzeptiert",
-    entity_type: "application",
-    entity_id: app.id,
-    comment: `KI hat ${name} akzeptiert; Registrierungseinladung wurde versendet.`,
-    old_status: app.status ?? null,
-    new_status: "akzeptiert",
-  } as any).then(() => {}, () => {});
-
-  return { sent: true, registration_link: registrationLink };
-}
 
 export const Route = createFileRoute("/api/public/interview-chat")({
   server: {
