@@ -253,6 +253,16 @@ export const adminDeleteSchedule = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Manuell: Terminplan sofort auf die verknüpfte Landing spiegeln.
+export const adminSyncSchedule = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ schedule_id: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    await requireAdmin(context);
+    const mirrored = await syncPartner(context.supabase, data.schedule_id);
+    return { ok: true, mirrored_schedule_id: mirrored };
+  });
+
 // Wochenregeln
 export const adminListRules = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
