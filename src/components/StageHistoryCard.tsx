@@ -83,11 +83,43 @@ export function StageHistoryCard({
   async function takeover() {
     setSaving(true);
     try {
-      await advance({ data: { applicationId, toStage: "fasttrack_angenommen", reason: "admin: übernahme" } });
-      toast.success("Als Mitarbeiter übernommen.");
+      const res: any = await advance({ data: { applicationId, toStage: "fasttrack_angenommen", reason: "admin: übernahme" } });
+      if (res?.invite_mail?.reason === "no_completed_interview") {
+        toast.warning("Übernommen – aber keine Zusage-Mail verschickt: Das KI-Gespräch wurde noch nicht abgeschlossen.", {
+          action: {
+            label: "Trotzdem senden",
+            onClick: () => { void forceInvite(); },
+          },
+          duration: 12000,
+        });
+      } else {
+        toast.success("Als Mitarbeiter übernommen.");
+      }
       await reload();
     } catch (e: any) {
       toast.error(e?.message ?? "Übernahme fehlgeschlagen");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function forceInvite() {
+    setSaving(true);
+    try {
+      const res: any = await advance({
+        data: {
+          applicationId,
+          toStage: "fasttrack_angenommen",
+          reason: "admin: zusage ohne interview",
+          force: true,
+          sendInviteWithoutInterview: true,
+        },
+      });
+      if (res?.invite_mail?.sent) toast.success("Zusage-Mail wurde versendet.");
+      else toast.error(res?.invite_mail?.error ?? "Zusage-Mail konnte nicht versendet werden.");
+      await reload();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Versand fehlgeschlagen");
     } finally {
       setSaving(false);
     }
