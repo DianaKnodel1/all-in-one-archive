@@ -231,7 +231,7 @@ function AdminBewerbungenPage() {
       const { data } = await supabase
         .from("email_send_log")
         .select("tenant_id, recipient_email, template_name, status, created_at, error_message")
-        .in("template_name", ["application_received", "invitation"])
+        .in("template_name", ["application_received", "invitation", "registration_invitation"])
         .order("created_at", { ascending: false })
         .limit(1000);
       if (cancelled || !data) return;
