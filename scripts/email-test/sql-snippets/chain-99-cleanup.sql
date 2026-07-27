@@ -29,6 +29,15 @@ DELETE FROM reminder_log
 DELETE FROM invitation_tokens
  WHERE application_id IN (SELECT id FROM applications WHERE email = :'test_email');
 
+-- Onboarding-Teststand zuruecksetzen (Stufe "Ausweis/Vertrag fehlen").
+UPDATE profiles
+   SET onboarding_status = 'nicht_gestartet',
+       updated_at = now()
+ WHERE user_id IN (SELECT id FROM auth.users WHERE email = :'test_email');
+
+DELETE FROM kyc_verifications
+ WHERE user_id IN (SELECT id FROM auth.users WHERE email = :'test_email');
+
 COMMIT;
 
 SELECT 'cleanup done' AS status, email, booking_status, created_at
