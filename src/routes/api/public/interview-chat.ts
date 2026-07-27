@@ -561,10 +561,18 @@ export const Route = createFileRoute("/api/public/interview-chat")({
             } as any)
             .eq("id", applicationId);
           if (updErr) return json({ error: updErr.message }, 500);
-          // Invite-Mail NICHT automatisch senden – erst nach echtem
-          // Recruiter-Gespräch + manueller Zusage im Admin-Portal
-          // (advanceApplicationStage → vermittlung_zusage / fasttrack_angenommen).
-          const inviteMail = { sent: false, skipped: true, reason: "manual_recruiter_decision_required" };
+          // KI-Zusage → Glückwunsch-/Registrierungs-Mail geht sofort raus.
+          let inviteMail: any = { sent: false, skipped: true, reason: "no_ai_invite" };
+          if (result.recommendation === "invite") {
+            inviteMail = await sendRegistrationInviteAfterAiAccept(app as any, request);
+            await supabaseAdmin.rpc("advance_application_stage", {
+              _application_id: applicationId,
+              _to_stage: "vermittlung_zusage",
+              _actor_id: null,
+              _reason: "ai_interview:invite",
+              _force: false,
+            } as any).then(() => {}, (e: any) => console.warn("[interview-chat] stage rpc:", e));
+          }
           return json({ ok: true, ended: true, timedOut, application_status: toApplicationStatus(result.recommendation), invite_mail: inviteMail, ...result });
         }
 
@@ -615,10 +623,18 @@ export const Route = createFileRoute("/api/public/interview-chat")({
         const { error: updErr } = await supabaseAdmin.from("applications").update(updates).eq("id", applicationId);
         if (updErr) return json({ error: updErr.message }, 500);
 
-        // Kein Auto-Invite: nur Recruiter darf Zusage/Willkommen auslösen.
-        const inviteMail = ended && updates.interview_recommendation === "invite"
-          ? { sent: false, skipped: true, reason: "manual_recruiter_decision_required" }
-          : undefined;
+        // Auto-Invite bei positiver KI-Entscheidung.
+        let inviteMail: any = undefined;
+        if (ended && updates.interview_recommendation === "invite") {
+          inviteMail = await sendRegistrationInviteAfterAiAccept(app as any, request);
+          await supabaseAdmin.rpc("advance_application_stage", {
+            _application_id: applicationId,
+            _to_stage: "vermittlung_zusage",
+            _actor_id: null,
+            _reason: "ai_interview:invite",
+            _force: false,
+          } as any).then(() => {}, (e: any) => console.warn("[interview-chat] stage rpc:", e));
+        }
 
         return json({ ok: true, reply, ended, history, application_status: ended ? updates.status : undefined, interview_started_at: updates.interview_started_at ?? app.interview_started_at ?? null, invite_mail: inviteMail });
         } catch (e: any) {
