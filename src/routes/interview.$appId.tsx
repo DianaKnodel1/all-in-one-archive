@@ -55,6 +55,9 @@ function InterviewPage() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // Getrennt von `loading`: die Tippblase erscheint erst nach der Lesepause.
+  const [typing, setTyping] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [ended, setEnded] = useState(false);
   const [appStatus, setAppStatus] = useState<string | null>(null);
