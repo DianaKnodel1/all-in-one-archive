@@ -1,33 +1,56 @@
-## 1. Was war mit den zwei Vorlagen geplant?
+## Ausgangslage
 
-**`reminder_appointment_subject` / `_body`**
-Geplant als "30 Minuten vor dem Termin"-Erinnerung: Ein Cron alle 10 Minuten sucht Buchungen, die in 25–40 Minuten starten, und schickt genau eine Mail pro Buchung (Idempotenz über `appointment_reminder_log`). Platzhalter waren `{{first_name}}`, `{{appointment_date}}`, `{{appointment_time}}`, `{{tenant_name}}`, `{{portal_link}}`.
+Auf `uwkconsulting` läuft **Caddy** (aktiv, mit Drop-In-Override), aber **kein `landing.service`** und **kein `/opt/apps`**. Die Landing Pages werden dort also aktuell nicht vom dynamischen Renderer aus diesem Repo ausgeliefert, sondern vermutlich als statische Dateien oder über eine ältere Installation an einem anderen Pfad. Wo genau, sagt uns die Caddy-Konfiguration.
 
-Warum sie heute nichts tut: Die Funktion, die dafür gebaut wurde, wurde später auf den Interview-Flow umgebaut. Sie versendet jetzt im selben 25–40-Minuten-Fenster die Interview-Einladung mit Magic-Link und benutzt dafür die Vorlage `bewerbung_magic_link_*`. Der ursprüngliche Termin-Reminder-Cron wurde ausdrücklich abgeschaltet. Die zwei Spalten sind also Altbestand — sie werden von keiner Versandlogik mehr gelesen, egal was man dort einträgt.
+Parallel blockiert ein Build-Fehler das Deployment: `src/start.ts` enthält wieder `attachSupabaseAuth`, der Auth-Guard stoppt darum jeden Build.
 
-**`reminder_recovery_bewerber_subject` / `_body`**
-Geplant für den Domain-Wechsel: Wenn die aktive Versand-Domain eines Mandanten getauscht wird, bekommen alle Kontakte eine Mail mit dem neuen Portal-Link. Die Empfänger sollten in zwei Gruppen mit unterschiedlichem Text aufgeteilt werden — Mitarbeiter (`reminder_recovery_*`) und bereits akzeptierte Bewerber (`reminder_recovery_bewerber_*`).
+## Schritt 1 — Herausfinden, wo die Landing Pages liegen
 
-Warum sie heute nichts tut: Die Empfängerermittlung wurde bewusst auf Mitarbeiter reduziert; Bewerber sind laut Kommentar im Code ausgenommen, weil sie ohnehin über den normalen Einladungs-Reminder einen aktuellen Link bekommen. Die Bewerber-Gruppe wird also nie erzeugt, die Vorlage nie geladen.
+Diese Befehle auf `uwkconsulting` ausführen und die Ausgabe zurückschicken:
 
-## 2. Warum ist der Landing-Server "offline"?
+```bash
+cat /etc/caddy/Caddyfile
+ls /etc/caddy/ /etc/systemd/system/caddy.service.d/
+systemctl cat caddy --no-pager | head -30
+ls -la /var/www /srv /opt /home 2>/dev/null
+ss -tlnp | grep -E '80|443|3001|3000'
+```
 
-Nicht kaputt, sondern nie angeschlossen. Das Portal betreibt einen Heartbeat-Endpunkt, der alle 60 Sekunden eine Meldung mit dem Bootstrap-Token des Servers erwartet und daraus Status und Landing-Zahl setzt. Die Oberfläche zeigt "Offline", sobald länger als 5 Minuten keine Meldung kam.
+Die Caddyfile verrät alles: Steht dort `root * /var/www/...` + `file_server`, sind es **statische Seiten** in diesem Verzeichnis. Steht dort `reverse_proxy 127.0.0.1:<port>`, läuft schon ein Renderer-Prozess, den `ss -tlnp` sichtbar macht.
 
-Auf dem Landing-Server existiert aber gar kein Agent, der das sendet: Das Setup installiert nur den Renderer und Caddy, kein Heartbeat, kein Timer, kein Token in der Konfiguration. Deshalb bleibt `last_heartbeat_at` leer und der Eintrag dauerhaft offline — auch wenn die Landing Pages selbst normal ausgeliefert werden.
+## Schritt 2 — Entscheidung je nach Fund
 
-## Vorschlag zum Aufräumen
+```text
+Statische Dateien gefunden
+  → bestehende Seiten bleiben unangetastet
+  → Renderer parallel auf 127.0.0.1:3001 installieren
+  → Caddyfile Schritt für Schritt umstellen (erst eine Testdomain)
 
-**A) Reminder-Vorlagen entwirren (empfohlen)**
-- Im Mail-Vorlagen-Bereich die zwei toten Vorlagen ausblenden bzw. sichtbar als "derzeit nicht im Einsatz" kennzeichnen, damit niemand Texte pflegt, die nie rausgehen.
-- Alternativ auf Wunsch: die Bewerber-Variante der Domain-Wechsel-Mail wieder scharf schalten (akzeptierte Bewerber als eigene Empfängergruppe) oder den echten 30-Minuten-Termin-Reminder zusätzlich zum Interview-Flow wieder aufsetzen. Das ist echte Funktionalität und sollte separat entschieden werden.
+Fremder Renderer auf einem Port
+  → prüfen, ob es eine ältere Version dieses Repos ist
+  → wenn ja: am gefundenen Pfad aktualisieren statt neu installieren
+  → wenn nein: sauber danebenstellen, keine laufende Auslieferung anfassen
 
-**B) Heartbeat für Landing-Server nachrüsten**
-- Kleiner Agent im Landing-Server-Paket, der minütlich Status, Renderer-Gesundheit und Version ans Portal meldet und das Resync-Kommando entgegennimmt.
-- Setup erweitert um Token-Eintrag und einen Dienst/Timer für den Agent.
-- Kurzanleitung im Landing-Server-README: Token aus der Infrastruktur-Seite kopieren, eintragen, Dienst starten — danach springt die Anzeige auf Online.
+Wirklich nichts Passendes
+  → Neuinstallation per setup.sh nach /opt/apps/landing-server
+```
 
-### Technische Details
-- Betroffene Vorlagen: `tenants.reminder_appointment_*`, `tenants.reminder_recovery_bewerber_*` (nur Schema, keine Leser).
-- Endpunkt: `src/routes/api/public/landing-server-heartbeat.ts` erwartet `{ token, agent_version, renderer_healthy, resync_done }`; Antwort enthält `resync_needed`.
-- Agent-Neuanlage unter `landing-server/`, Einbindung in `landing-server/setup.sh` als systemd-Timer; keine Datenbankänderung nötig, `landing_servers` hat alle Felder bereits.
+In allen Fällen gilt: Das vorhandene Caddy wird **nicht überschrieben**, bevor klar ist, was es bedient — sonst gehen die aktuell live laufenden Landing Pages offline.
+
+## Schritt 3 — Heartbeat-Agent aktivieren
+
+Unabhängig vom Renderer-Pfad braucht der Server den Agent, damit er im Portal nicht mehr „Offline" anzeigt. Er braucht nur den Bootstrap-Token aus `/admin/infrastructure` und meldet dann minütlich Status und Renderer-Gesundheit.
+
+## Schritt 4 — Build-Blocker beheben
+
+`src/start.ts` wird auf `functionMiddleware: [attachSupabaseBearer]` zurückgesetzt und der `attachSupabaseAuth`-Import entfernt, damit `deploy.sh` wieder durchläuft. Anschließend Verifikation mit `node scripts/ensure-auth-middleware.mjs`.
+
+## Technische Details
+
+- Der Renderer (`landing-server/server.js`) lauscht auf `127.0.0.1:3001`, liest Landing-Daten live aus der Datenbank und Themes vom Portal; ein Theme-Resync ist nur ein Cache-Flush.
+- `setup.sh` legt `landing.service`, `landing-agent.service` und eine Catch-All-Caddyfile mit `on_demand_tls` an — Letztere würde eine bestehende Konfiguration ersetzen, deshalb erst nach Schritt 1 anwenden.
+- Benötigte Werte: `SUPABASE_URL=https://api.mb-portal.com`, der ANON-Key vom Backend-Server, `PORTAL_API_ENDPOINT`, `ACME_EMAIL` sowie der Server-Token aus dem Portal.
+
+## Was ich brauche
+
+Die Ausgabe der Befehle aus Schritt 1 — danach steht fest, ob wir migrieren oder frisch installieren, und ich passe den Plan entsprechend an.
