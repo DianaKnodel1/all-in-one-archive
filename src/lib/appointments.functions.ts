@@ -118,7 +118,12 @@ export const getAvailableSlots = createServerFn({ method: "POST" })
 // ---------------------------------------------------------------------------
 const BookIn = z.object({
   token: z.string().trim().min(8).max(128),
-  starts_at: z.string().datetime(),
+  // Postgres liefert timestamptz mal mit `Z`, mal mit Offset (`+00:00`).
+  // Beides akzeptieren und auf ISO-UTC normalisieren.
+  starts_at: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), "invalid_datetime")
+    .transform((v) => new Date(v).toISOString()),
   applicant_timezone: z.string().max(80).optional(),
 });
 
