@@ -281,13 +281,28 @@ function ScheduleDetail({ schedule, landingPages, onSave, onDelete }: {
         </CardContent>
       </Card>
 
-      <RulesEditor scheduleId={schedule.id} />
+      <RulesEditor scheduleId={schedule.id} slotMinutes={Number(form.slot_duration_minutes) || 30} />
       <ExceptionsEditor scheduleId={schedule.id} />
     </div>
   );
 }
 
-function RulesEditor({ scheduleId }: { scheduleId: string }) {
+function slotPreview(start: string, end: string, slotMinutes: number) {
+  const toMin = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : NaN;
+  };
+  const s = toMin(start), e = toMin(end);
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s || slotMinutes <= 0) return null;
+  const count = Math.floor((e - s) / slotMinutes);
+  if (count < 1) return { count: 0, last: null as string | null };
+  const lastStart = s + (count - 1) * slotMinutes;
+  const fmt = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return { count, last: fmt(lastStart) };
+}
+
+function RulesEditor({ scheduleId, slotMinutes }: { scheduleId: string; slotMinutes: number }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const listFn = useServerFn(adminListRules);
