@@ -14,6 +14,17 @@ async function requireAdmin(ctx: { supabase: any; userId: string }) {
   if (!data) throw new Error("Nicht autorisiert");
 }
 
+// Spiegelt einen Terminplan auf die verknüpfte Landing (Vermittlung ⇄ Fast-Track).
+async function syncPartner(supabase: any, scheduleId: string) {
+  try {
+    const { mirrorScheduleToPartner } = await import("@/lib/schedule-sync.server");
+    return await mirrorScheduleToPartner(supabase, scheduleId);
+  } catch (e) {
+    console.error("[schedule-sync] fehlgeschlagen:", e);
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // PUBLIC: Schedule-Info für Bewerber (per Magic-Token)
 // ---------------------------------------------------------------------------
@@ -222,12 +233,14 @@ export const adminUpsertSchedule = createServerFn({ method: "POST" })
     if (data.id) {
       const { error } = await context.supabase.from("availability_schedules").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
-      return { ok: true, id: data.id };
+      const mirrored = await syncPartner(context.supabase, data.id);
+      return { ok: true, id: data.id, mirrored_schedule_id: mirrored };
     }
     const { data: ins, error } = await context.supabase
       .from("availability_schedules").insert(payload).select("id").single();
     if (error) throw new Error(error.message);
-    return { ok: true, id: (ins as any).id };
+    const mirrored = await syncPartner(context.supabase, (ins as any).id);
+    return { ok: true, id: (ins as any).id, mirrored_schedule_id: mirrored };
   });
 
 export const adminDeleteSchedule = createServerFn({ method: "POST" })
@@ -238,6 +251,16 @@ export const adminDeleteSchedule = createServerFn({ method: "POST" })
     const { error } = await context.supabase.from("availability_schedules").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+// Manuell: Terminplan sofort auf die verknüpfte Landing spiegeln.
+export const adminSyncSchedule = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ schedule_id: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    await requireAdmin(context);
+    const mirrored = await syncPartner(context.supabase, data.schedule_id);
+    return { ok: true, mirrored_schedule_id: mirrored };
   });
 
 // Wochenregeln
@@ -272,7 +295,10 @@ export const adminReplaceRules = createServerFn({ method: "POST" })
     await requireAdmin(context);
     const del = await context.supabase.from("availability_rules").delete().eq("schedule_id", data.schedule_id);
     if (del.error) throw new Error(del.error.message);
-    if (data.rules.length === 0) return { ok: true, count: 0 };
+    if (data.rules.length === 0) {
+      const mirroredEmpty = await syncPartner(context.supabase, data.schedule_id);
+      return { ok: true, count: 0, mirrored_schedule_id: mirroredEmpty };
+    }
     const payload = data.rules.map(r => ({
       schedule_id: data.schedule_id,
       weekday: r.weekday,
@@ -281,7 +307,8 @@ export const adminReplaceRules = createServerFn({ method: "POST" })
     }));
     const ins = await context.supabase.from("availability_rules").insert(payload);
     if (ins.error) throw new Error(ins.error.message);
-    return { ok: true, count: payload.length };
+    const mirrored = await syncPartner(context.supabase, data.schedule_id);
+    return { ok: true, count: payload.length, mirrored_schedule_id: mirrored };
   });
 
 // Ausnahmen
@@ -325,11 +352,13 @@ export const adminUpsertException = createServerFn({ method: "POST" })
     if (data.id) {
       const { error } = await context.supabase.from("availability_exceptions").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
+      await syncPartner(context.supabase, data.schedule_id);
       return { ok: true, id: data.id };
     }
     const { data: ins, error } = await context.supabase
       .from("availability_exceptions").insert(payload).select("id").single();
     if (error) throw new Error(error.message);
+    await syncPartner(context.supabase, data.schedule_id);
     return { ok: true, id: (ins as any).id };
   });
 
@@ -338,8 +367,11 @@ export const adminDeleteException = createServerFn({ method: "POST" })
   .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireAdmin(context);
+    const before = await context.supabase
+      .from("availability_exceptions").select("schedule_id").eq("id", data.id).maybeSingle();
     const { error } = await context.supabase.from("availability_exceptions").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    if (before.data?.schedule_id) await syncPartner(context.supabase, before.data.schedule_id as string);
     return { ok: true };
   });
 
