@@ -68,37 +68,6 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const setDnsFn = useServerFn(setLandingDnsRecord);
-  const [smtpOkIds, setSmtpOkIds] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from("tenant_smtp_health" as any)
-        .select("tenant_id,last_verify_ok");
-      if (cancelled || !data) return;
-      setSmtpOkIds(
-        new Set(
-          (data as any[])
-            .filter((r) => r.last_verify_ok === true)
-            .map((r) => String(r.tenant_id)),
-        ),
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tenants]);
-
-  const pauseTrigger = (t: Tenant) => {
-    const by = (t as any).emails_paused_by as string | null;
-    if (!by) return "unbekannt";
-    if (by.startsWith("manual:")) return "manuell";
-    if (by === "auto:domain_down") return "automatisch (Domains offline)";
-    if (by.startsWith("auto:")) return `automatisch (${by.slice(5)})`;
-    return "manuell";
-  };
-
   const leaderInitials = (leaderName || "T").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const smtpConfigured = !!(smtpHost.trim() && smtpUsername.trim() && smtpPassword.trim() && senderEmail.trim());
 
