@@ -281,13 +281,28 @@ function ScheduleDetail({ schedule, landingPages, onSave, onDelete }: {
         </CardContent>
       </Card>
 
-      <RulesEditor scheduleId={schedule.id} />
+      <RulesEditor scheduleId={schedule.id} slotMinutes={Number(form.slot_duration_minutes) || 30} />
       <ExceptionsEditor scheduleId={schedule.id} />
     </div>
   );
 }
 
-function RulesEditor({ scheduleId }: { scheduleId: string }) {
+function slotPreview(start: string, end: string, slotMinutes: number) {
+  const toMin = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : NaN;
+  };
+  const s = toMin(start), e = toMin(end);
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s || slotMinutes <= 0) return null;
+  const count = Math.floor((e - s) / slotMinutes);
+  if (count < 1) return { count: 0, last: null as string | null };
+  const lastStart = s + (count - 1) * slotMinutes;
+  const fmt = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return { count, last: fmt(lastStart) };
+}
+
+function RulesEditor({ scheduleId, slotMinutes }: { scheduleId: string; slotMinutes: number }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const listFn = useServerFn(adminListRules);
@@ -337,8 +352,16 @@ function RulesEditor({ scheduleId }: { scheduleId: string }) {
         <CardDescription>Wann finden regelmäßig Bewerbungsgespräche statt?</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        {rules.map((r, idx) => (
-          <div key={idx} className="flex items-center gap-2">
+        <p className="text-xs text-muted-foreground">
+          Ein Termin muss vollständig <strong>innerhalb</strong> des Fensters liegen. Bei {slotMinutes} Min.
+          Slot-Dauer ist der letzte Start also {slotMinutes} Min. vor der Endzeit (z.&nbsp;B. 09:00–12:00 → letzter
+          Termin {slotPreview("09:00", "12:00", slotMinutes)?.last ?? "–"}). Für Termine bis Mitternacht die Endzeit
+          auf 23:59 setzen.
+        </p>
+        {rules.map((r, idx) => {
+          const preview = slotPreview(r.start_time, r.end_time, slotMinutes);
+          return (
+          <div key={idx} className="flex flex-wrap items-center gap-2">
             <Select value={String(r.weekday)}
               onValueChange={v => setDraft(rules.map((x, i) => i === idx ? { ...x, weekday: Number(v) } : x))}>
               <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
@@ -356,8 +379,16 @@ function RulesEditor({ scheduleId }: { scheduleId: string }) {
               onClick={() => setDraft(rules.filter((_, i) => i !== idx))}>
               <Trash2 className="h-4 w-4" />
             </Button>
+            {preview && (
+              <span className="text-xs text-muted-foreground">
+                {preview.count === 0
+                  ? "kein Termin – Fenster kürzer als die Slot-Dauer"
+                  : `${preview.count} Termine · letzter Start ${preview.last} Uhr`}
+              </span>
+            )}
           </div>
-        ))}
+          );
+        })}
         {rules.length === 0 && (
           <p className="text-xs text-muted-foreground">Noch keine Regeln. Fügen Sie unten eine hinzu.</p>
         )}
