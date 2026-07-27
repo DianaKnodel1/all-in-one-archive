@@ -4,7 +4,7 @@ export const Route = createFileRoute("/admin/tenants")({
   component: AdminTenantsPage,
 });
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { compressImage } from "@/lib/image-compression";
