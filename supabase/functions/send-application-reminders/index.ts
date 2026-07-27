@@ -18,7 +18,7 @@ import {
   MAX_PER_12H_PER_TENANT as LIMIT_12H,
   MAX_PER_RUN_PER_TENANT as LIMIT_RUN,
 } from "../_shared/limits.ts";
-import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
+import { formatAppointmentDate, formatAppointmentTime } from "../_shared/format-datetime.ts";
 
 const FUNCTION_VERSION = "2026-07-15-rebook-after-cancel-v9-smtp-rate-limit-safe";
 

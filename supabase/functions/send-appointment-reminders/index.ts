@@ -18,7 +18,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { renderEmail } from "../_shared/email-wrapper.ts";
 import { guardSend } from "../_shared/send-guard.ts";
-import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
+import { formatAppointmentDate, formatAppointmentTime } from "../_shared/format-datetime.ts";
 
 
 const FUNCTION_VERSION = "2026-07-09-interview-invite-30min-v1";
