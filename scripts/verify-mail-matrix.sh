@@ -70,7 +70,11 @@ RLOGS="$(sqlt "SELECT reminder_kind, status, count(*)
                 GROUP BY 1,2;")"
 
 has_fn()   { printf '%s\n' "$FNS"   | grep -qx "$1"; }
-cron_line(){ printf '%s\n' "$CRONS" | grep -F "$1 ::" | head -1; }
+# Job-Namen koennen mit '-' oder '_' angelegt sein -> beide akzeptieren
+cron_line(){
+  local pat; pat="$(printf '%s' "$1" | sed 's/[-_]/[-_]/g')"
+  printf '%s\n' "$CRONS" | grep -E "^${pat} ::" | head -1
+}
 log_sent() { printf '%s\n%s\n' "$LOGS" "$RLOGS" | awk -F'|' -v t="$1" '$1==t && ($2=="sent"||$2=="delivered"){s+=$3} END{print s+0}'; }
 log_fail() { printf '%s\n%s\n' "$LOGS" "$RLOGS" | awk -F'|' -v t="$1" '$1==t && ($2=="failed"||$2=="error"||$2=="bounced"){s+=$3} END{print s+0}'; }
 log_skip() { printf '%s\n' "$RLOGS" | awk -F'|' -v t="$1" '$1==t && $2=="skipped"{s+=$3} END{print s+0}'; }
@@ -82,8 +86,11 @@ row() { # nr | name | function | template | cron-job ("-" = ereignisgesteuert)
     local cl; cl="$(cron_line "$job")"
     if [ -z "$cl" ]; then ok=0; note="${note}Cron '$job' fehlt; "
     else
-      case "$cl" in *":: t") note="${note}cron: $(echo "$cl"|awk -F' :: ' '{print $2}'); ";;
-                    *) ok=0; note="${note}Cron '$job' INAKTIV; ";; esac
+      case "$cl" in
+        *":: t"|*":: true"|*":: on"|*":: yes")
+          note="${note}cron: $(echo "$cl"|awk -F' :: ' '{print $2}'); ";;
+        *) ok=0; note="${note}Cron '$job' INAKTIV; ";;
+      esac
     fi
   else note="${note}ereignisgesteuert; "; fi
   local s f; s="$(log_sent "$tpl")"; f="$(log_fail "$tpl")"
