@@ -21,6 +21,7 @@ import {
   adminListExceptions,
   adminUpsertException,
   adminDeleteException,
+  adminSyncSchedule,
 } from "@/lib/appointments.functions";
 
 export const Route = createFileRoute("/admin/verfuegbarkeit")({
@@ -48,15 +49,36 @@ function AdminAvailabilityPage() {
 
   const schedules = useQuery({ queryKey: ["schedules"], queryFn: () => listFn() });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [landingPages, setLandingPages] = useState<Array<{ id: string; slug: string | null; tenant_id: string | null }>>([]);
+  const [landingPages, setLandingPages] = useState<Array<{ id: string; slug: string | null; tenant_id: string | null; linked_fasttrack_landing_id?: string | null }>>([]);
+  const syncFn = useServerFn(adminSyncSchedule);
 
   useMemo(() => {
-    supabase.from("landing_pages").select("id, slug, tenant_id").order("slug").then(({ data }) => {
+    supabase.from("landing_pages").select("id, slug, tenant_id, linked_fasttrack_landing_id").order("slug").then(({ data }) => {
       if (data) setLandingPages(data as any);
     });
   }, []);
 
   const selected = schedules.data?.rows.find((r: any) => r.id === selectedId);
+
+  // Partner-Landing (Vermittlung ⇄ Fast-Track) des gewählten Kalenders
+  const partnerLanding = useMemo(() => {
+    const lpId = (selected as any)?.landing_page_id;
+    if (!lpId) return null;
+    const own = landingPages.find((l) => l.id === lpId);
+    if (own?.linked_fasttrack_landing_id) {
+      return landingPages.find((l) => l.id === own.linked_fasttrack_landing_id) ?? null;
+    }
+    return landingPages.find((l) => l.linked_fasttrack_landing_id === lpId) ?? null;
+  }, [selected, landingPages]);
+
+  const syncMut = useMutation({
+    mutationFn: (id: string) => syncFn({ data: { schedule_id: id } }),
+    onSuccess: () => {
+      toast({ title: "Termine gespiegelt", description: "Die verknüpfte Landing hat jetzt dieselben Zeiten." });
+      qc.invalidateQueries({ queryKey: ["schedules"] });
+    },
+    onError: (e: any) => toast({ title: "Fehler", description: e?.message, variant: "destructive" }),
+  });
 
   const upsertMut = useMutation({
     mutationFn: (payload: any) => upsertFn({ data: payload }),
@@ -128,6 +150,25 @@ function AdminAvailabilityPage() {
         </Card>
 
         {selected ? (
+          <div className="space-y-4">
+            {partnerLanding && (
+              <div className="rounded-lg border-2 border-primary/40 bg-primary/5 p-3 text-xs flex items-center justify-between gap-3">
+                <div>
+                  🔗 <strong>Verknüpfte Seiten:</strong> Diese Zeiten gelten automatisch auch für{" "}
+                  <strong>{partnerLanding.slug ?? partnerLanding.id.slice(0, 8)}</strong>. Beim Speichern wird
+                  dort derselbe Terminplan (Wochenzeiten, Slot-Dauer, Vorlauf, Sperrtage) hinterlegt.
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={syncMut.isPending}
+                  onClick={() => syncMut.mutate(selected.id)}
+                >
+                  {syncMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Jetzt spiegeln"}
+                </Button>
+              </div>
+            )}
           <ScheduleDetail
             key={selected.id}
             schedule={selected}
@@ -139,6 +180,7 @@ function AdminAvailabilityPage() {
               }
             }}
           />
+          </div>
         ) : (
           <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">
             Wählen Sie links einen Kalender oder legen Sie einen neuen an.
