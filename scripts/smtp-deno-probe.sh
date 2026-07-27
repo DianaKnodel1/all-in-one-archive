@@ -60,7 +60,6 @@ fi
 echo "  runtime: $($EDGE_BIN --version 2>&1 | tr "\n" " " | sed "s/[[:space:]]*$//")"
 
 MAIN_DIR="$(mktemp -d /tmp/smtp-probe-main.XXXXXX)"
-PORT_NUM="${PROBE_PORT:-9997}"
 cat > "$MAIN_DIR/index.ts" <<TS
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 
@@ -80,96 +79,39 @@ function classify(message: string) {
   return "SMTP_ERROR";
 }
 
-Deno.serve(async (req) => {
-  const url = new URL(req.url);
-  if (url.pathname === "/_internal/health") {
-    return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+for (const p of ports) {
+  const mode = p === 465 ? "SSL" : "STARTTLS";
+  const transporter = nodemailer.createTransport({
+    host,
+    port: p,
+    secure: p === 465,
+    auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  });
+  try {
+    await Promise.race([
+      transporter.verify(),
+      new Promise((_r, reject) => setTimeout(() => reject(new Error("verify timeout 12s")), 12000)),
+    ]);
+    console.log("PROBE_RESULT  Port " + p + " (" + mode + "): LOGIN OK");
+  } catch (err) {
+    const message = String((err as Error)?.message ?? err);
+    console.log("PROBE_RESULT  Port " + p + " (" + mode + "): FEHLER [" + classify(message) + "] -> " + message);
   }
-
-  const results = [];
-  for (const p of ports) {
-    const transporter = nodemailer.createTransport({
-      host,
-      port: p,
-      secure: p === 465,
-      auth: { user, pass },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    });
-    try {
-      await Promise.race([
-        transporter.verify(),
-        new Promise((_resolve, reject) => setTimeout(() => reject(new Error("verify timeout 12s")), 12000)),
-      ]);
-      results.push({ port: p, secure: p === 465, ok: true });
-    } catch (err) {
-      const message = String((err as Error)?.message ?? err);
-      results.push({ port: p, secure: p === 465, ok: false, code: classify(message), message });
-    }
-  }
-  return new Response(JSON.stringify({ ok: true, results }), { headers: { "content-type": "application/json" } });
-});
+}
+Deno.exit(0);
 TS
 
-LOG_FILE="/tmp/smtp-probe-edge-runtime.log"
-rm -f "$LOG_FILE"
-PROBE_HTTP_PORT="$PORT_NUM" "$EDGE_BIN" start --main-service "$MAIN_DIR" -p "$PORT_NUM" >"$LOG_FILE" 2>&1 &
-PID="$!"
-cleanup() { kill "$PID" >/dev/null 2>&1 || true; rm -rf "$MAIN_DIR"; }
-trap cleanup EXIT
-
-http_get() {
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsS --max-time 35 "$1"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -T 35 -O - "$1"
-  else
-    echo "NO_HTTP_CLIENT"
-    return 127
-  fi
-}
-
-ready=0
-for i in $(seq 1 25); do
-  if http_get "http://127.0.0.1:$PORT_NUM/_internal/health" >/dev/null 2>&1; then ready=1; break; fi
-  if ! kill -0 "$PID" >/dev/null 2>&1; then break; fi
-  sleep 0.2
-done
-
-if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-  echo "  FEHLER: Im Edge-Container fehlt curl/wget für den lokalen Probe-Aufruf."
-  exit 0
-fi
-
-if [ "$ready" != "1" ]; then
-  echo "  Edge-Probe konnte nicht starten. Runtime-Log:"
-  tail -30 "$LOG_FILE" | sed "s/^/    /"
-  exit 0
-fi
-
-RESP="$(http_get "http://127.0.0.1:$PORT_NUM/probe" 2>&1 || true)"
-if [ -z "$RESP" ]; then
-  echo "  FEHLER: keine Antwort vom Probe-Service"
-  tail -30 "$LOG_FILE" | sed "s/^/    /"
-elif command -v python3 >/dev/null 2>&1; then
-  printf "%s" "$RESP" | python3 -c '\''
-import json, sys
-try:
-    payload = json.load(sys.stdin)
-except Exception:
-    print("  FEHLER: unlesbare Antwort")
-    sys.exit(0)
-for r in payload.get("results", []):
-    port = r.get("port")
-    mode = "SSL" if r.get("secure") else "STARTTLS"
-    if r.get("ok"):
-        print(f"  Port {port} ({mode}): LOGIN OK")
-    else:
-        print(f"  Port {port} ({mode}): FEHLER [{r.get('code')}] -> {r.get('message')}")
-'\''
+OUT="$("$EDGE_BIN" start --main-service "$MAIN_DIR" -p 9997 2>&1)"
+rm -rf "$MAIN_DIR"
+RESULTS="$(printf "%s\n" "$OUT" | grep "PROBE_RESULT" | sed "s/^.*PROBE_RESULT//" | sed "s/^/ /")"
+if [ -n "$RESULTS" ]; then
+  printf "%s\n" "$RESULTS"
 else
-  echo "  Rohantwort: $RESP"
+  echo "  Kein Ergebnis. Runtime-Ausgabe:"
+  printf "%s\n" "$OUT" | tail -30 | sed "s/^/    /"
 fi'
   echo
 done <<< "$ROWS"
