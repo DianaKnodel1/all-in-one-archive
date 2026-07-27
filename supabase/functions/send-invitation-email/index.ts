@@ -188,7 +188,8 @@ serve(async (req) => {
     }
 
     // --- Recipient-Suppression: 3 Fails in Folge → dauerhaft gesperrt ---
-    try {
+    const isTestMode = body.testMode === true;
+    if (!isTestMode) try {
       const { data: sup } = await supabaseAdmin
         .from("email_recipient_failures")
         .select("suppressed_at, consecutive_failures, last_error")
