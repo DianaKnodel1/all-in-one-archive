@@ -1,34 +1,26 @@
-## Ausgangslage (geprüft im Code)
+## Was der Screenshot zeigt
 
-- Eine Pause wird gesetzt: manuell über den Admin-Button (`emails_paused_by = manual:admin`) oder automatisch vom Domain-Health-Cron, wenn alle Domains eines Mandanten down sind (`auto:domain_down`). Historisch gibt es außerdem `auto:smtp_verify`.
-- Aufgehoben wird sie **nur** manuell (Admin-Button „Freigeben" oder `scripts/tenant-pause-status.sh --release`). SMTP-Daten einzutragen ändert nichts.
-- Zusätzliches Problem: Der SMTP-Test bricht bei pausierten Mandanten **vor** dem eigentlichen Test mit `TENANT_PAUSED` ab. Man kann also gar nicht nachweisen, dass die neuen Zugangsdaten funktionieren, solange die Pause aktiv ist — ein Henne-Ei-Problem.
+Die Meldung ist diesmal eine **andere** als vorher: „Failed to send a request to the Edge Function". Das ist kein Fehler *aus* der Funktion, sondern heißt: die Funktion hat **gar nicht geantwortet** — sie wurde nach Ablauf der Laufzeit abgebrochen.
 
-## Was gebaut wird
+Dazu passt der Befund im Code: der Mail-Versand in `send-invitation-email` baut die SMTP-Verbindung **ohne jedes Timeout** auf (`nodemailer.createTransport` ohne `connectionTimeout`/`greetingTimeout`/`socketTimeout`, `sendMail` ohne Zeitlimit). Nur der Verify-Schritt hat 15 s. Wenn der Mailserver von LH Marketing die Verbindung annimmt, aber nicht sauber antwortet (typisch bei falschem Port/SSL-Modus oder geblocktem Port 465/587 vom Backend-Server aus), hängt die Funktion, bis die Plattform sie killt — und im Portal kommt genau diese generische Meldung an. Bei den anderen Mandanten antwortet SMTP sofort, deshalb funktioniert es dort.
 
-**1. SMTP-Test läuft auch bei pausiertem Mandanten**
-In `supabase/functions/smtp-test/index.ts` wird der harte Abbruch bei `emails_paused` entfernt. Der Pausen-Zustand wird stattdessen nur noch als Information in der Antwort mitgegeben (`was_paused`, `paused_by`, `paused_reason`), damit die Oberfläche darauf reagieren kann.
+Hinweis: dass Versand über das Webmail-Postfach klappt, sagt nichts über SMTP-Zugang von außen — Webmail geht nicht über SMTP-Auth.
 
-**2. Automatische Freigabe nach erfolgreichem Test**
-Nach erfolgreichem `verify()` gilt:
-- Pause stammt von `auto:domain_down`, `auto:smtp_verify` oder ist ohne Auslöser gesetzt → Pause wird automatisch aufgehoben (`emails_paused = false`, Grund/Zeitpunkt/Auslöser geleert), `tenant_smtp_health` auf `consecutive_fails = 0`, `last_verify_ok = true` gesetzt und ein Eintrag `emails_reaktiviert` ins `activity_log` geschrieben.
-- Pause stammt von `manual:admin` → **bleibt bestehen**. Die Antwort enthält `resume_blocked: "manual"`, damit die Oberfläche klar sagt: SMTP ist in Ordnung, die Pause wurde bewusst vom Admin gesetzt und muss per Button freigegeben werden.
+## Umsetzung
 
-**3. Hinweis im Mandanten-Admin**
-In `src/routes/admin.tenants.tsx`:
-- Neue Badge/Zeile bei pausierten Mandanten, deren SMTP zuletzt erfolgreich geprüft wurde: „SMTP OK — pausiert, jetzt freigeben" mit direktem Freigeben-Button.
-- Der bestehende Pausen-Badge zeigt zusätzlich den Auslöser an (manuell vs. automatisch), damit sofort klar ist, warum pausiert wurde.
-- Nach dem SMTP-Test: Bei automatischer Freigabe eine Erfolgsmeldung „SMTP OK — Versand wieder freigegeben", bei manueller Pause die Meldung „SMTP OK — Pause wurde manuell gesetzt, bitte freigeben".
+**1. Harte Timeouts im Mail-Versand** (`supabase/functions/send-invitation-email/index.ts`)
+- `connectionTimeout: 10000`, `greetingTimeout: 10000`, `socketTimeout: 20000` am Transport.
+- `sendMail` zusätzlich gegen ein 25-s-Limit rennen lassen, damit die Funktion **immer** antwortet.
+- Bei Timeout: Log-Eintrag `failed` mit klarem Grund (`smtp_connect_timeout` / `smtp_send_timeout` inkl. Host/Port) und HTTP 502 mit dieser Klartextmeldung.
 
-**4. Doku-Abgleich**
-Kurzer Vermerk zu den Pausen-Auslösern und der neuen Auto-Freigabe in `scripts/tenant-pause-status.sh` (Kommentarkopf), damit das Skript nicht mehr das alte Verhalten beschreibt.
+Dieselben Timeouts in den übrigen Versand-Funktionen ergänzen, die noch ohne laufen (`resend-signup-confirmation`, `send-booking-confirmation`, `send-reminders`, `email-resend`, …) — sonst hängt dort dasselbe.
 
-## Technische Details
+**2. Fehleranzeige im Portal** (`src/routes/admin.tenants.tsx`)
+- Netzwerk-/Timeout-Fehler beim Aufruf (kein JSON-Body) nicht mehr als „konnte nicht versendet werden" abtun, sondern als eigenen Hinweis zeigen: „Der Mailserver hat nicht rechtzeitig geantwortet — Host/Port/SSL prüfen (465 = SSL, 587 = STARTTLS)."
 
-- Betroffene Dateien: `supabase/functions/smtp-test/index.ts`, `src/routes/admin.tenants.tsx`, `scripts/tenant-pause-status.sh`.
-- Keine Schemaänderung nötig; `tenant_smtp_health` und die `emails_paused_*`-Spalten existieren bereits.
-- Der Edge-Function-Teil muss nach dem Deploy einmalig ausgerollt werden (`bash scripts/deploy-edge-function.sh smtp-test` auf dem Backend-Server).
+**3. Diagnose-Skript** `scripts/smtp-probe.sh`
+Prüft vom Backend-Server aus für einen Mandanten, ob Port 465 und 587 überhaupt erreichbar sind und was der Server als Greeting schickt — damit unterscheidbar wird: Port geblockt, falscher SSL-Modus oder falsche Zugangsdaten.
 
-## Für dich danach
+## Danach
 
-MuS Marketing, W3 Personal und ODB brauchen zuerst SMTP-Zugangsdaten; UWK Consulting und ODB werden nach erfolgreichem SMTP-Test automatisch freigegeben, sofern die Pause nicht manuell gesetzt wurde.
+Deploy der geänderten Functions auf dem Backend-Server, dann Test-Mail erneut. Statt der generischen Meldung steht dann entweder der konkrete SMTP-Fehler (z. B. „535 Authentication failed") oder „Verbindung zu host:port nach 10 s ohne Antwort" — damit ist klar, ob es an Zugangsdaten oder am Port liegt.

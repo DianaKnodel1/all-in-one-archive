@@ -635,7 +635,17 @@ function buildErrorFeedback(
     ? "Bitte Host, Port und Zugangsdaten prüfen."
     : "Bitte SMTP-Verbindung separat testen und danach die E-Mail-Logs prüfen.";
 
-  if (errorCode === "AUTH_ERROR" || normalized.includes("authorization.failed") || normalized.includes("smtp auth fehlgeschlagen") || normalized.includes("authentication failed") || normalized.includes("invalid login") || normalized.includes("535")) {
+  if (
+    normalized.includes("failed to send a request") ||
+    normalized.includes("functionsfetcherror") ||
+    normalized.includes("failed to fetch") ||
+    normalized.includes("networkerror")
+  ) {
+    // Die Funktion hat gar nicht geantwortet — fast immer ein hängender Mailserver.
+    title = mode === "smtp" ? "SMTP-Test ohne Antwort" : "Test-Mail ohne Antwort";
+    message = "Der Mailserver hat nicht rechtzeitig geantwortet, der Versand wurde abgebrochen.";
+    hint = "Bitte Host, Port und Verschlüsselung prüfen: Port 465 = SSL, Port 587 = STARTTLS. Wenn der Anbieter beide Ports sperrt, hilft nur eine Freigabe für die Server-IP.";
+  } else if (errorCode === "AUTH_ERROR" || normalized.includes("authorization.failed") || normalized.includes("smtp auth fehlgeschlagen") || normalized.includes("authentication failed") || normalized.includes("invalid login") || normalized.includes("535")) {
     title = "SMTP Authentifizierung fehlgeschlagen";
     message = "Der Mailserver hat Benutzername oder Passwort abgelehnt.";
     hint = "Bitte SMTP-Benutzername, Passwort, Port und Verschlüsselung prüfen.";
