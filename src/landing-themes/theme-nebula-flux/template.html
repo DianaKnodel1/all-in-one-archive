@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title data-editable="seo_title">Qualität sichtbar machen — Premium Testing Platform</title>
-<meta name="description" data-editable-attr="content|seo_description" content="Professionelle Qualitätssicherung für Websites, Apps und digitale Produkte." />
-<meta property="og:title" data-editable-attr="content|seo_title" content="" />
-<meta property="og:description" data-editable-attr="content|seo_description" content="" />
+<title>{{seo_title}}</title>
+<meta name="description" content="{{seo_description}}" />
+<meta property="og:title" content="{{seo_title}}" />
+<meta property="og:description" content="{{seo_description}}" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<span data-editable="accent_color" style="display:none">#22d3ee</span>
+<span style="display:none">{{accent_color}}</span>
 <div class="nf-bg" aria-hidden="true"></div>
 <div class="nf-noise" aria-hidden="true"></div>
 
@@ -25,8 +25,8 @@
     <a href="#" class="nf-brand">
       <span class="nf-brand-mark" aria-hidden="true"></span>
       <span>
-        <span class="nf-brand-name" data-editable="brand_name">NEBULA</span>
-        <span class="nf-brand-sub" data-editable="brand_tagline">Digital Quality Platform</span>
+        <span class="nf-brand-name">{{brand_name}}</span>
+        <span class="nf-brand-sub">{{brand_tagline}}</span>
       </span>
     </a>
     <nav class="nf-nav" aria-label="Hauptnavigation">
@@ -36,7 +36,7 @@
       <a href="#tester">Tester</a>
       <a href="#projekte">Projekte</a>
     </nav>
-    <a href="#bewerbung-form" class="nf-btn nf-btn-pri" data-editable="nav_cta">Projekt starten</a>
+    <a href="#bewerbung-form" class="nf-btn nf-btn-pri">{{nav_cta}}</a>
   </div>
 </header>
 
@@ -44,20 +44,18 @@
 <section class="nf-hero">
   <div class="nf-wrap nf-hero-grid">
     <div data-reveal>
-      <span class="nf-eyebrow" data-editable="hero_eyebrow">Next-Gen Quality Assurance</span>
+      <span class="nf-eyebrow">{{hero_eyebrow}}</span>
       <h1 class="nf-h1" style="margin-top:22px">
-        <span data-editable="hero_title">Qualität sichtbar machen.</span>
+        <span>{{hero_title}}</span>
         <span class="nf-grad-text"> Vertrauen digital schaffen.</span>
       </h1>
-      <p class="nf-lead" style="margin-top:22px" data-editable="hero_subtitle">
-        Professionelle Qualitätssicherung für Websites, Apps und digitale Produkte — durchgeführt von echten Testern und unterstützt durch moderne Analyseprozesse.
-      </p>
+      <p class="nf-lead" style="margin-top:22px">{{hero_subtitle}}</p>
       <div class="nf-hero-ctas">
         <a href="#bewerbung-form" class="nf-btn nf-btn-pri">
-          <span data-editable="hero_cta_primary">Jetzt Projekt starten</span>
+          <span>{{hero_cta_primary}}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </a>
-        <a href="#tester" class="nf-btn nf-btn-sec" data-editable="hero_cta_secondary">Tester werden</a>
+        <a href="#tester" class="nf-btn nf-btn-sec">{{hero_cta_secondary}}</a>
       </div>
       <div class="nf-hero-badges">
         <span class="nf-badge">ISO 27001 Prozesse</span>
@@ -371,11 +369,11 @@
     <div class="nf-fcta" data-reveal>
       <div class="nf-fcta-inner">
         <span class="nf-eyebrow">Jetzt starten</span>
-        <h2 class="nf-h2" style="margin-top:20px" data-editable="cta_title">Jede digitale Erfahrung beginnt mit perfekter Qualität.</h2>
-        <p class="nf-lead" style="margin:0 auto" data-editable="cta_sub">Starten Sie heute Ihr Testprojekt oder werden Sie Teil unseres Tester-Netzwerks.</p>
+        <h2 class="nf-h2" style="margin-top:20px">{{cta_title}}</h2>
+        <p class="nf-lead" style="margin:0 auto">{{cta_sub}}</p>
         <div class="nf-fcta-ctas" style="margin-top:32px">
-          <a href="#bewerbung-form" class="nf-btn nf-btn-pri" data-editable="cta_primary">Projekt anfragen</a>
-          <a href="#bewerbung-form" class="nf-btn nf-btn-sec" data-editable="cta_secondary">Kostenlos registrieren</a>
+          <a href="#bewerbung-form" class="nf-btn nf-btn-pri">{{cta_primary}}</a>
+          <a href="#bewerbung-form" class="nf-btn nf-btn-sec">{{cta_secondary}}</a>
         </div>
       </div>
     </div>
@@ -390,8 +388,8 @@
         <div class="nf-brand">
           <span class="nf-brand-mark" aria-hidden="true"></span>
           <span>
-            <span class="nf-brand-name" data-editable="brand_name">NEBULA</span>
-            <span class="nf-brand-sub" data-editable="brand_tagline">Digital Quality Platform</span>
+            <span class="nf-brand-name">{{brand_name}}</span>
+            <span class="nf-brand-sub">{{brand_tagline}}</span>
           </span>
         </div>
         <p style="margin-top:16px;max-width:280px">Enterprise-Grade Quality Assurance für digitale Produkte.</p>
@@ -415,8 +413,8 @@
       </div>
     </div>
     <div class="nf-ftr-bottom">
-      <span>© <span id="nf-year">2026</span> <span data-editable="footer_company">Nebula Quality GmbH</span> · Alle Rechte vorbehalten</span>
-      <span data-editable="footer_email">hello@example.com</span>
+      <span>© <span id="nf-year">2026</span> <span>{{footer_company}}</span> · Alle Rechte vorbehalten</span>
+      <span>{{footer_email}}</span>
     </div>
   </div>
 </footer>
