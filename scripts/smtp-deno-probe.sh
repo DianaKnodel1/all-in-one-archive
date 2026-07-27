@@ -80,7 +80,12 @@ function classify(message: string) {
   return "SMTP_ERROR";
 }
 
-Deno.serve({ port: Number(Deno.env.get("PROBE_HTTP_PORT") ?? "9997"), hostname: "127.0.0.1" }, async () => {
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  if (url.pathname === "/_internal/health") {
+    return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+  }
+
   const results = [];
   for (const p of ports) {
     const transporter = nodemailer.createTransport({
