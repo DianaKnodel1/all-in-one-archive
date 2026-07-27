@@ -18,13 +18,16 @@
 #   SKIP="no_show_24h,password_reset"   Stufen überspringen (Kommaliste)
 #   PAUSE_SECONDS=6                      Pause zwischen Sends (SMTP-Rate-Limit)
 #   FORCE_SEND=true                     Umgeht dry_run-Sicherheitscheck (NICHT empfohlen)
+#   PORTAL_URL          Basis-URL des Portals, z.B. https://portal.example.de
+#                       Nur für die Interview-Stufe (KI-Gespräch). Fehlt sie,
+#                       werden Stufe 9/10 automatisch übersprungen.
 #
 # Nutzung:
 #   bash scripts/email-test/run-full-chain.sh
 # =============================================================================
 set -euo pipefail
 
-SUITE_VERSION="2026-07-24.4"
+SUITE_VERSION="2026-07-27.1"
 
 : "${SUPABASE_URL:?set SUPABASE_URL}"
 : "${SERVICE_ROLE:?set SERVICE_ROLE}"
