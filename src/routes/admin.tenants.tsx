@@ -678,6 +678,28 @@ function buildErrorFeedback(
     title = "Keine Berechtigung für den Test";
     message = "Deine Admin-Sitzung ist abgelaufen oder nicht mehr gültig.";
     hint = "Bitte Seite neu laden und erneut anmelden.";
+  } else if (normalized.includes("recipient_suppressed")) {
+    title = "Empfänger ist gesperrt";
+    message = "Diese Adresse wurde nach mehreren Fehlversuchen dauerhaft gesperrt.";
+    hint = `Andere Test-Adresse verwenden oder die Sperre im E-Mail-Center aufheben. Server-Meldung: ${rawError}`;
+  } else if (normalized.includes("versand blockiert") || normalized.includes("1h_cap") || normalized.includes("24h_cap") || normalized.includes("outside_send_window")) {
+    title = "Versand-Kontingent erreicht";
+    message = "Der Mandant hat das Stunden- oder Tageslimit ausgeschöpft.";
+    hint = `Bitte später erneut testen. Server-Meldung: ${rawError}`;
+  } else if (normalized.includes("pausiert")) {
+    title = "Mail-Versand ist pausiert";
+    message = "Für diesen Mandanten ist der Versand manuell pausiert.";
+    hint = `Unter Mandanten „Versand fortsetzen“ klicken. Server-Meldung: ${rawError}`;
+  } else if (normalized.includes("deaktiviert")) {
+    title = "Mandant ist deaktiviert";
+    message = "Für deaktivierte Mandanten wird nichts versendet.";
+    hint = "Mandant zuerst aktivieren.";
+  } else if (rawError.trim()) {
+    // Unbekannte Ursache: Server-Meldung nicht verschlucken.
+    message = rawError.trim();
+    hint = mode === "smtp"
+      ? "Bitte Host, Port und Zugangsdaten prüfen."
+      : "Bitte SMTP-Verbindung separat testen und danach die E-Mail-Logs prüfen.";
   }
 
   return {

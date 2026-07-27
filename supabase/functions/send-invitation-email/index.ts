@@ -92,6 +92,8 @@ interface Payload {
   /** Optional: application_id → aktiviert zentrales SMTP-Routing (sender-resolver).
    *  Ohne applicationId bleibt tenantId aus dem Payload maßgeblich (Legacy-Verhalten). */
   applicationId?: string;
+  /** Admin-Test aus /admin/tenants: umgeht Empfänger-Sperre und Kontingent. */
+  testMode?: boolean;
 }
 
 // Mapping template → EmailKind für den zentralen Resolver.
@@ -186,7 +188,8 @@ serve(async (req) => {
     }
 
     // --- Recipient-Suppression: 3 Fails in Folge → dauerhaft gesperrt ---
-    try {
+    const isTestMode = body.testMode === true;
+    if (!isTestMode) try {
       const { data: sup } = await supabaseAdmin
         .from("email_recipient_failures")
         .select("suppressed_at, consecutive_failures, last_error")
@@ -374,7 +377,9 @@ serve(async (req) => {
 
     // Kontingent-Schutz: verhindert SMTP-Blocks (150/h, 2.400/Tag) und
     // protokolliert die Blockade als "skipped" im E-Mail-Center.
-    const allowance = await guardSend({
+    const allowance = isTestMode
+      ? { allowed: true as const, count1h: 0, count24h: 0 }
+      : await guardSend({
       admin: supabaseAdmin,
       tenantId: tenant.id,
       templateName: templateNameOverride || "invitation",
@@ -384,13 +389,13 @@ serve(async (req) => {
       metadata: smtpMeta,
     });
     if (!allowance.allowed) {
-      return json({ error: `Versand blockiert: ${allowance.reason}`, skipped: true, reason: allowance.reason }, 429);
+      return json({ error: `Versand blockiert: ${(allowance as any).reason}`, skipped: true, reason: (allowance as any).reason }, 429);
     }
 
     const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
     if (!verifyRes.ok) {
       await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", verifyRes.reason, smtpMeta);
-      await bumpRecipientFailure(supabaseAdmin, to, tenant.id, verifyRes.reason ?? "smtp_verify_failed");
+      if (!isTestMode) await bumpRecipientFailure(supabaseAdmin, to, tenant.id, verifyRes.reason ?? "smtp_verify_failed");
       return json({ error: `SMTP-Verbindung fehlgeschlagen: ${verifyRes.reason}`, paused: verifyRes.paused }, 502);
     }
 
@@ -408,7 +413,7 @@ serve(async (req) => {
     } catch (sendErr: any) {
       const reason = String(sendErr?.message ?? sendErr);
       await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", reason, smtpMeta);
-      await bumpRecipientFailure(supabaseAdmin, to, tenant.id, reason);
+      if (!isTestMode) await bumpRecipientFailure(supabaseAdmin, to, tenant.id, reason);
       return json({ error: `E-Mail konnte nicht gesendet werden: ${reason}` }, 502);
     }
   } catch (err: any) {
