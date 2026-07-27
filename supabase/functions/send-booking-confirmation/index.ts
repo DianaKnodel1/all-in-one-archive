@@ -15,6 +15,9 @@ import { resolveSender } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo, type LogoResolution } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
 
+// Alle Termin-Zeiten in E-Mails in deutscher Ortszeit (Container läuft in UTC).
+const APP_TZ = "Europe/Berlin";
+
 const FUNCTION_VERSION = "2026-07-18-booking-confirmation-v3-lookback72h";
 const REMINDER_KIND = "booking_confirmation";
 const LOOKBACK_MIN = 4320; // 72h – überbrückt längere Cron-Ausfälle; Idempotenz via reminder_log
@@ -299,8 +302,8 @@ serve(async (req) => {
         full_name: app.full_name || `${firstName} ${app.last_name || ""}`.trim(),
         tenant_name: tenant.name,
         recruiter_name: recruiterName,
-        appointment_date: starts.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
-        appointment_time: starts.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
+        appointment_date: starts.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: APP_TZ }),
+        appointment_time: starts.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: APP_TZ }),
         duration_minutes: String(duration),
         cancel_url: cancelUrl,
         // Portal-URL: Fast-Track-Portal (portal.<fast-track-domain>), dort läuft das KI-Interview.
