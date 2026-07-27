@@ -10,6 +10,13 @@ import { Loader2, Send, CheckCircle2, UserPlus } from "lucide-react";
 
 type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
+// Menschlichere Reaktionszeit: die KI "liest" erst kurz, bevor die Tippblase erscheint.
+const READ_DELAY_MIN_MS = 1200;
+const READ_DELAY_MAX_MS = 2500;
+const readDelay = () =>
+  READ_DELAY_MIN_MS + Math.random() * (READ_DELAY_MAX_MS - READ_DELAY_MIN_MS);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function postInterview(body: unknown) {
   const res = await fetch("/api/public/interview-chat", {
     method: "POST",
