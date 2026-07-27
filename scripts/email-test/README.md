@@ -34,8 +34,7 @@ Die Willkommens-/Registrierungsmail geht erst raus, wenn ein Recruiter im Admin
 die Bewerbung auf `vermittlung_zusage` bzw. `fasttrack_angenommen` setzt. Die
 Test-Suite bildet beides getrennt ab (Stufe 9 = Interview, Stufe 10 = Zusage).
 
-```text
-
+```bash
 # Klassischer Einzel-Landing-Test (kein Vermittlungsflow): stattdessen
 # nur TEST_LANDING_ID setzen – wird dann als Source UND Target genutzt.
 # export TEST_LANDING_ID="<uuid>"
