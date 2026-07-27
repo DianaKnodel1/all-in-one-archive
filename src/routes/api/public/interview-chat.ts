@@ -9,7 +9,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sendRegistrationInviteAfterAiAccept } from "@/lib/interview-engine.server";
+import { sendRegistrationInviteAfterAiAccept, prettifyCompanyName } from "@/lib/interview-engine.server";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
