@@ -319,14 +319,3 @@ function InterviewStart({
     </div>
   );
 }
-
-function CenterUnused({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <Card className="max-w-md w-full">
-        <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
-        <CardContent className="text-sm text-muted-foreground">{children}</CardContent>
-      </Card>
-    </div>
-  );
-}
