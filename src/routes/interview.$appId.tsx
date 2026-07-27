@@ -69,6 +69,9 @@ function InterviewPage() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [scheduledAt, setScheduledAt] = useState<number | null>(null);
   const [branding, setBranding] = useState<{ firmenname?: string; primary_color?: string; logo_url?: string | null; recruiter_name?: string; recruiter_avatar_url?: string | null } | null>(null);
+  // Vom Server aufgelöstes Branding (Fast-Track-Firma). Hat Vorrang vor der
+  // direkten Datenbank-Abfrage, die bei unveröffentlichten Seiten leer bleibt.
+  const [serverBranding, setServerBranding] = useState<{ recruiter_name?: string; recruiter_avatar_url?: string | null; company_name?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
 
