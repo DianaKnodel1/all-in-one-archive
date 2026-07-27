@@ -14,7 +14,10 @@
 set -uo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 DIR="src/landing-themes"
-BUILTIN="impressum_url datenschutz_url landing_domain logo_image favicon_image"
+BUILTIN="impressum_url datenschutz_url landing_domain logo_image favicon_image logo_text firmenname \
+seo_title seo_description seo_image address contact_address contact_email contact_phone contact_block \
+legal_block footer_address footer_email footer_phone sitz_stadt sitz_stadt_upper hrb hrb_nummer email \
+telefon strasse plz stadt geschaeftsfuehrer registergericht steuernummer ust_id portal_url"
 
 echo "=============================================================="
 echo " THEME-CHECK  $(date '+%Y-%m-%d %H:%M:%S')"
@@ -44,7 +47,11 @@ for d in "$DIR"/theme-*/; do
       grep -qx "$k" <<<"$keys" || miss="$miss $k"
     done
     [ -n "$miss" ] && probs+=("Platzhalter ohne meta.json-Slot:$miss")
-    unused=""; for k in $keys; do grep -qx "$k" <<<"$ph" || unused="$unused $k"; done
+    extra=$(cat "$d"/style.css "$d"/script.js 2>/dev/null | grep -o '{{[a-z0-9_]*}}' | tr -d '{}' | sort -u)
+    unused=""; for k in $keys; do
+      case " $BUILTIN " in *" $k "*) continue;; esac
+      grep -qx "$k" <<<"$ph" || grep -qx "$k" <<<"$extra" || unused="$unused $k"
+    done
     [ -n "$unused" ] && probs+=("Slots ohne Platzhalter im Template:$unused")
   else
     probs+=("meta.json fehlt")
