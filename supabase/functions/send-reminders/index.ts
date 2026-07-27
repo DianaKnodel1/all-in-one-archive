@@ -1149,6 +1149,8 @@ function baseVars(t: TenantRow, extra: Vars): Vars {
     login_link: "",
     confirmation_link: "",
     booking_link: "",
+    missing_documents: "",
+    missing_list: "",
     ...extra,
   };
 }
