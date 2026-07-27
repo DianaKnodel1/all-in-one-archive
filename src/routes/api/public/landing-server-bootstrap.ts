@@ -202,6 +202,7 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 
 echo "[bootstrap] 5/7 Renderer + Themes laden …"
 curl -fsSL "$SERVER_FILES_BASE/server.js"  -o "$INSTALL_DIR/server.js"
+curl -fsSL "$SERVER_FILES_BASE/legal-content.js"  -o "$INSTALL_DIR/legal-content.js"
 curl -fsSL "$SERVER_FILES_BASE/package.json"  -o "$INSTALL_DIR/package.json"
 curl -fsSL "$SERVER_FILES_BASE/heartbeat.sh" -o "$INSTALL_DIR/heartbeat.sh"
 if head -c 32 "$INSTALL_DIR/server.js" | grep -qi '<!DOCTYPE html\|<html'; then
@@ -215,6 +216,10 @@ if grep -q 'Bun\.serve' "$INSTALL_DIR/server.js"; then
 fi
 if ! grep -q 'node:http\|createServer' "$INSTALL_DIR/server.js"; then
   echo "[bootstrap] ❌ server.js sieht nicht wie der Node-Renderer aus." >&2
+  exit 1
+fi
+if [ ! -s "$INSTALL_DIR/legal-content.js" ] || ! grep -q 'renderImpressum' "$INSTALL_DIR/legal-content.js"; then
+  echo "[bootstrap] ❌ legal-content.js fehlt oder ist ungültig." >&2
   exit 1
 fi
 chmod +x "$INSTALL_DIR/heartbeat.sh"

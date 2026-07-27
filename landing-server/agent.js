@@ -19,7 +19,7 @@
 
 import { execFile } from "node:child_process";
 
-const AGENT_VERSION = "1.0.0";
+const AGENT_VERSION = "1.0.1";
 
 const TOKEN = (process.env.LANDING_SERVER_TOKEN || "").trim();
 const PORTAL_BASE = (
@@ -81,7 +81,8 @@ async function resyncThemes() {
     }
     if (!flushed) {
       console.log("[agent] Fallback: Renderer wird neu gestartet");
-      await sh("systemctl", ["restart", "landing.service"]);
+      const modern = await sh("systemctl", ["restart", "landing-server.service"]);
+      if (!modern.ok) await sh("systemctl", ["restart", "landing.service"]);
     }
     resyncDonePending = true;
     console.log("[agent] Theme-Resync abgeschlossen");

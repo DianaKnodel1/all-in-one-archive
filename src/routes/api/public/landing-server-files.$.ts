@@ -6,6 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { THEMES } from "@/lib/landing-themes";
 import { THEME_ASSETS } from "@/lib/theme-assets.generated";
 import landingServerSource from "../../../../landing-server/server.js?raw";
+import legalContentSource from "../../../../landing-server/legal-content.js?raw";
 
 function mimeFor(name: string): string {
   const ext = name.toLowerCase().split(".").pop() || "";
@@ -57,13 +58,24 @@ resync_themes() {
       curl -fsSL "$SERVER_FILES_BASE/themes/$THEME_ID/assets/$ASSET_FILE" -o "$THEMES_DIR/$THEME_ID/assets/$ASSET_FILE" 2>/dev/null || true
     done
   done
-  # server.js zusätzlich syncen (atomic via .new + mv)
-  if curl -fsSL "$SERVER_FILES_BASE/server.js" -o /opt/landing-server/server.js.new 2>/dev/null; then
-    if [ -s /opt/landing-server/server.js.new ]; then
-      mv /opt/landing-server/server.js.new /opt/landing-server/server.js
-      echo "[heartbeat] server.js aktualisiert." >&2
+  # Renderer-Dateien zusätzlich syncen (server.js braucht legal-content.js; nur gemeinsam austauschen)
+  if curl -fsSL "$SERVER_FILES_BASE/server.js" -o /opt/landing-server/server.js.new 2>/dev/null \
+    && curl -fsSL "$SERVER_FILES_BASE/legal-content.js" -o /opt/landing-server/legal-content.js.new 2>/dev/null; then
+    if [ -s /opt/landing-server/server.js.new ] && [ -s /opt/landing-server/legal-content.js.new ]; then
+      if head -c 32 /opt/landing-server/server.js.new | grep -qi '<!DOCTYPE html\|<html'; then
+        echo "[heartbeat] server.js Download enthält HTML — überspringe Update." >&2
+        rm -f /opt/landing-server/server.js.new /opt/landing-server/legal-content.js.new
+      elif ! grep -q 'legal-content.js' /opt/landing-server/server.js.new; then
+        echo "[heartbeat] server.js sieht unerwartet aus — überspringe Update." >&2
+        rm -f /opt/landing-server/server.js.new /opt/landing-server/legal-content.js.new
+      else
+        mv /opt/landing-server/legal-content.js.new /opt/landing-server/legal-content.js
+        mv /opt/landing-server/server.js.new /opt/landing-server/server.js
+        chown landing:landing /opt/landing-server/server.js /opt/landing-server/legal-content.js 2>/dev/null || true
+        echo "[heartbeat] server.js + legal-content.js aktualisiert." >&2
+      fi
     else
-      rm -f /opt/landing-server/server.js.new
+      rm -f /opt/landing-server/server.js.new /opt/landing-server/legal-content.js.new
     fi
   fi
   systemctl restart landing-server.service 2>/dev/null || systemctl restart landing.service 2>/dev/null || true
@@ -105,6 +117,11 @@ export const Route = createFileRoute("/api/public/landing-server-files/$")({
         if (path === "server.js" || path === "server.ts") {
           return new Response(landingServerSource, {
             headers: { "content-type": "text/plain; charset=utf-8" },
+          });
+        }
+        if (path === "legal-content.js") {
+          return new Response(legalContentSource, {
+            headers: { "content-type": "application/javascript; charset=utf-8" },
           });
         }
         if (path === "package.json") {
