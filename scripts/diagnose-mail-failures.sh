@@ -57,8 +57,17 @@ sqlt "SELECT rpad(coalesce(t.name,'(ohne Mandant)'),26)||' '||count(*)||' Fehler
          AND l.status NOT IN ('sent','delivered')
        GROUP BY 1 ORDER BY count(*) DESC;" | sed 's/^/  /'
 
+hd "Fehlversuche pro Zeitraum (aktuell vs. historisch)"
+sqlt "SELECT 'letzte 24h: '||count(*) FILTER (WHERE created_at > now() - interval '24 hours')
+          ||' | 7 Tage: '||count(*) FILTER (WHERE created_at > now() - interval '7 days')
+          ||' | 30 Tage: '||count(*) FILTER (WHERE created_at > now() - interval '30 days')
+          ||' | gesamt: '||count(*)
+          ||' | aeltester: '||to_char(min(created_at),'DD.MM.YYYY')
+          ||' | neuester: '||to_char(max(created_at),'DD.MM.YYYY HH24:MI')
+        FROM email_send_log WHERE status NOT IN ('sent','delivered');" | sed 's/^/  /'
+
 hd "Letzte 15 Fehlversuche im Detail"
-sqlt "SELECT to_char(created_at,'DD.MM. HH24:MI')||' | '||rpad(coalesce(template_name,'-'),28)
+sqlt "SELECT to_char(created_at,'DD.MM.YYYY HH24:MI')||' | '||rpad(coalesce(template_name,'-'),28)
             ||' | '||rpad(status,10)||' | '||left(regexp_replace(coalesce(error_message,'-'),'\s+',' ','g'),110)
         FROM email_send_log
        WHERE status NOT IN ('sent','delivered')
@@ -74,4 +83,6 @@ echo
 echo "Lesart:  'authentication failed (535)' = SMTP-Passwort falsch."
 echo "         'smtp=NEIN'                    = keine Zugangsdaten hinterlegt."
 echo "         'pausiert=true'                = Versand automatisch gestoppt."
+echo "         '554 ... too many messages'    = Provider-Ratelimit, kein Code-Fehler."
+echo "         Sind die 30-Tage-Bloecke leer, sind ALLE Fehler aelter als 30 Tage."
 echo "         Andere Meldungen bitte an Lovable schicken — das waere ein Code-Fehler."
