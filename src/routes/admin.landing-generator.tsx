@@ -1330,6 +1330,9 @@ document.addEventListener('submit', function(e){
                     <p className="text-[10px] text-muted-foreground mt-1">
                       Bewerber wird beim CTA-Klick auf die gewählte Fasttrack-Page weitergeleitet (mit <code>?ref=&lt;diese-landing-id&gt;</code>). Die Bewerbung wird dort erzeugt; Tracking läuft über <code>source_landing_id</code> → <code>target_landing_id</code>.
                     </p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      🔗 Die <strong>Terminzeiten beider Seiten werden automatisch synchron gehalten</strong> — beim Speichern eines Kalenders unter „Verfügbarkeiten" wird der Plan auf die verknüpfte Seite gespiegelt.
+                    </p>
                   </Field>
                 </div>
               )}
