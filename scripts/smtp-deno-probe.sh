@@ -45,6 +45,9 @@ ROWS="$(docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -At -F '
 while IFS='|' read -r NAME HOST PORT USER PASS SENDER; do
   [ -z "$HOST" ] && continue
   echo "--- $NAME  ($USER @ $HOST:$PORT) ---"
+  if [ -n "$SENDER" ] && [ -n "$USER" ] && [ "$SENDER" != "$USER" ]; then
+    echo "  Hinweis: Absender ($SENDER) weicht vom SMTP-Login ($USER) ab."
+  fi
   docker exec -i \
     -e P_HOST="$HOST" -e P_PORT="$PORT" -e P_USER="$USER" -e P_PASS="$PASS" \
     "$FN_CONTAINER" sh -lc '
@@ -111,12 +114,28 @@ PID="$!"
 cleanup() { kill "$PID" >/dev/null 2>&1 || true; rm -rf "$MAIN_DIR"; }
 trap cleanup EXIT
 
+http_get() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 35 "$1"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -T 35 -O - "$1"
+  else
+    echo "NO_HTTP_CLIENT"
+    return 127
+  fi
+}
+
 ready=0
 for i in $(seq 1 25); do
-  if curl -fsS "http://127.0.0.1:$PORT_NUM/_internal/health" >/dev/null 2>&1; then ready=1; break; fi
+  if http_get "http://127.0.0.1:$PORT_NUM/_internal/health" >/dev/null 2>&1; then ready=1; break; fi
   if ! kill -0 "$PID" >/dev/null 2>&1; then break; fi
   sleep 0.2
 done
+
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+  echo "  FEHLER: Im Edge-Container fehlt curl/wget für den lokalen Probe-Aufruf."
+  exit 0
+fi
 
 if [ "$ready" != "1" ]; then
   echo "  Edge-Probe konnte nicht starten. Runtime-Log:"
@@ -124,7 +143,7 @@ if [ "$ready" != "1" ]; then
   exit 0
 fi
 
-RESP="$(curl -fsS --max-time 35 "http://127.0.0.1:$PORT_NUM/probe" 2>&1 || true)"
+RESP="$(http_get "http://127.0.0.1:$PORT_NUM/probe" 2>&1 || true)"
 if [ -z "$RESP" ]; then
   echo "  FEHLER: keine Antwort vom Probe-Service"
   tail -30 "$LOG_FILE" | sed "s/^/    /"
