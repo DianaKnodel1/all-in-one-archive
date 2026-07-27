@@ -14,4 +14,4 @@ echo ""
 echo "═══ 2) Letzte Buchungen (UTC vs. Berliner Zeit) ═══"
 docker exec -i supabase-db psql -U supabase_admin -d postgres -c \
 "SELECT id, starts_at AS utc, starts_at AT TIME ZONE 'Europe/Berlin' AS berlin, status
-   FROM appointment_bookings ORDER BY created_at DESC LIMIT 5;"
+   FROM bookings ORDER BY created_at DESC LIMIT 5;"
