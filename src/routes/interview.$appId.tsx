@@ -63,6 +63,7 @@ function InterviewPage() {
   const [ended, setEnded] = useState(false);
   const [appStatus, setAppStatus] = useState<string | null>(null);
   const [registrationLink, setRegistrationLink] = useState<string | null>(null);
+  const [inviteMailFailed, setInviteMailFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
