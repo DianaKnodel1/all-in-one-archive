@@ -1209,9 +1209,24 @@ function AdminTenantsPage() {
                     {t.is_active ? "Aktiv" : "Inaktiv"}
                   </Badge>
                   {(t as any).emails_paused && (
-                    <Badge variant="destructive" className="text-[10px]" title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}>
-                      ⏸ Mails pausiert
-                    </Badge>
+                    <>
+                      <Badge
+                        variant="destructive"
+                        className="text-[10px]"
+                        title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}
+                      >
+                        ⏸ Mails pausiert · {pauseTrigger(t)}
+                      </Badge>
+                      {smtpOkIds.has(t.id) && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                          title="Letzter SMTP-Test war erfolgreich — der Versand kann freigegeben werden."
+                        >
+                          SMTP OK — jetzt freigeben
+                        </Badge>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
