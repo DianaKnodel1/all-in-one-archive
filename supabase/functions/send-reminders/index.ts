@@ -686,6 +686,22 @@ async function runCompleteRegistration(ctx: SendCtx) {
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
   const userMap = new Map<string, any>((usersList?.users ?? []).map(u => [u.id, u]));
 
+  // Welche Unterlagen fehlen konkret? (Ausweis / Arbeitsvertrag)
+  const { data: kycRows } = await ctx.admin
+    .from("kyc_verifications")
+    .select("user_id,status")
+    .in("user_id", userIds);
+  const kycOk = new Set<string>(
+    (kycRows ?? [])
+      .filter((k: any) => k.status === "verifiziert" || k.status === "eingereicht" || k.status === "in_pruefung")
+      .map((k: any) => k.user_id),
+  );
+  const { data: contractRows } = await ctx.admin
+    .from("contracts")
+    .select("user_id")
+    .in("user_id", userIds);
+  const contractOk = new Set<string>((contractRows ?? []).map((c: any) => c.user_id));
+
   for (const p of profiles ?? []) {
     const u = userMap.get((p as any).user_id);
     if (!u || !u.email_confirmed_at || !u.email) continue; // nur bestätigte Accounts
@@ -703,7 +719,22 @@ async function runCompleteRegistration(ctx: SendCtx) {
 
     const firstName = ((p as any).full_name ?? "").split(" ")[0] ?? "";
     const loginLink = `https://${portalHost(tenant)}/login`;
-    const vars = baseVars(tenant, { first_name: firstName, login_link: loginLink, portal_link: loginLink, booking_link: loginLink, confirmation_link: loginLink });
+    const missing: string[] = [];
+    if (!kycOk.has((p as any).user_id)) missing.push("Personalausweis (Identitätsprüfung)");
+    if (!contractOk.has((p as any).user_id) && !(p as any).contract_signed_at) missing.push("Unterschriebener Arbeitsvertrag");
+    const missingList = missing.length ? missing.join(", ") : "Pflichtangaben in deinem Profil";
+    const missingHtml = missing.length
+      ? `<ul style="font-size:15px;line-height:1.7;color:#475569;margin:0 0 24px;padding-left:20px">${missing.map(m => `<li>${m}</li>`).join("")}</ul>`
+      : `<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">Es fehlen noch Pflichtangaben in deinem Profil.</p>`;
+    const vars = baseVars(tenant, {
+      first_name: firstName,
+      login_link: loginLink,
+      portal_link: loginLink,
+      booking_link: loginLink,
+      confirmation_link: loginLink,
+      missing_documents: missingHtml,
+      missing_list: missingList,
+    });
     const subject = renderSubject(tenant.reminder_completion_subject, DEFAULT_TEMPLATES.completion.subject, vars);
     const html = renderBodyHtml(tenant, tenant.reminder_completion_body, DEFAULT_TEMPLATES.completion.body, vars);
 
