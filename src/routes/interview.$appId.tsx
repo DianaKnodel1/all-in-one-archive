@@ -289,7 +289,7 @@ function InterviewPage() {
   const recruiterName = branding?.recruiter_name || "Sabine Schneider";
   const avatarUrl = branding?.recruiter_avatar_url || null;
   const initials = recruiterName.split(" ").map((s) => s[0]).join("").slice(0, 2).toUpperCase();
-  const status = loading ? `${recruiterName.split(" ")[0]} schreibt …` : ended ? "Gespräch beendet" : "online";
+  const status = typing ? `${recruiterName.split(" ")[0]} schreibt …` : ended ? "Gespräch beendet" : "online";
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -351,7 +351,7 @@ function InterviewPage() {
               </div>
             );
           })}
-          {loading && !ended && (
+          {typing && !ended && (
             <div className="flex justify-start mt-2">
               <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
                 <div className="flex items-end gap-1.5 h-4">
