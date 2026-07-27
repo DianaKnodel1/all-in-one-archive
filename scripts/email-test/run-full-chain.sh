@@ -625,6 +625,8 @@ run_stage no_booking_72h                "Kein Termin – 72h Erinnerung"     sta
 run_stage no_show_24h                   "No-Show – erneut buchen"          stage_no_show_24h
 run_stage rebook_after_cancel_24h       "Rebook 24h nach Absage"           stage_rebook_after_cancel_24h
 run_stage rebook_after_cancel_72h       "Rebook 72h nach Absage"           stage_rebook_after_cancel_72h
+run_stage interview_ai_decision         "Termin wahrgenommen + KI-Interview" stage_interview_ai_decision
+run_stage zusage_after_interview        "Recruiter-Zusage → Willkommen"    stage_zusage_after_interview
 run_stage welcome_invitation            "Willkommens-/Registrierungs-Mail" stage_welcome_invitation
 run_stage signup_confirmation           "E-Mail-Bestätigung"               stage_signup_confirmation
 run_stage signup_confirmation_resend    "Bestätigung erneut senden"        stage_signup_confirmation_resend
