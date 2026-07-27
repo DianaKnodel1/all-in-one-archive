@@ -735,9 +735,15 @@ function TestEmailButton({ tenantId, smtpConfigured }: { tenantId: string; smtpC
 
       const feedback: TestFeedback = {
         success: true,
-        title: "SMTP-Verbindung erfolgreich",
+        title: data?.auto_resumed
+          ? "SMTP OK — Versand wieder freigegeben"
+          : data?.resume_blocked === "manual"
+            ? "SMTP OK — Pause wurde manuell gesetzt"
+            : "SMTP-Verbindung erfolgreich",
         message: data?.message || "Die Verbindung zum Mailserver konnte hergestellt werden.",
-        hint: "Der nächste Test prüft zusätzlich den echten Login und den Versand an die Zieladresse.",
+        hint: data?.resume_blocked === "manual"
+          ? "Die Zugangsdaten stimmen. Die Pause wurde bewusst von einem Admin gesetzt und muss über „Versand fortsetzen“ freigegeben werden."
+          : "Der nächste Test prüft zusätzlich den echten Login und den Versand an die Zieladresse.",
         debugDetails: data?.debug ? JSON.stringify(data.debug, null, 2) : undefined,
       };
       setSmtpResult(feedback);
