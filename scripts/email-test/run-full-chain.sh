@@ -432,6 +432,97 @@ stage_rebook_after_cancel_72h() {
 
 
 # ---------- Stufe 9: Willkommens-/Registrierungs-Einladung ------------------
+# ---------- Stufe 9: Termin wahrgenommen → KI-Interview ---------------------
+# Führt das komplette Bewerbungsgespräch gegen /api/public/interview-chat und
+# liest die KI-Entscheidung aus. WICHTIG: Der Endpunkt verschickt bei einer
+# Zusage bewusst KEINE Mail mehr — das übernimmt Stufe 10 (Recruiter-Zusage).
+portal_post() {
+  local path="$1" body="$2"
+  curl -sS -X POST "${PORTAL_URL%/}$path" \
+    -H "Content-Type: application/json" \
+    -d "$body"
+}
+
+stage_interview_ai_decision() {
+  if [[ -z "${PORTAL_URL:-}" ]]; then
+    echo "   ⏭️  PORTAL_URL nicht gesetzt — Interview-Stufe übersprungen."
+    return 0
+  fi
+  psql_run "$SNIP/chain-10-interview-attended.sql" || return 1
+  load_app_context || return 1
+
+  local out
+  out=$(portal_post /api/public/interview-chat \
+    "$(jq -nc --arg id "$APP_ID" '{applicationId:$id, action:"init"}')") || return 1
+  if echo "$out" | jq -e '.error? != null' >/dev/null; then
+    echo "   ❌ Interview-Start fehlgeschlagen: $out"
+    return 1
+  fi
+  echo "   Gruß der KI: $(echo "$out" | jq -r '.reply // "" | .[0:90]')"
+
+  # Standardantworten, die die sechs Pflichtthemen des Prompts abdecken.
+  local answers=(
+    "Hallo, ich arbeite aktuell in Teilzeit im Einzelhandel und habe die Anzeige online gefunden."
+    "Ich habe fünf Jahre Kundenservice-Erfahrung und arbeite sehr sorgfältig am PC."
+    "Mich reizt das Homeoffice und die freie Zeiteinteilung, weil ich zwei Kinder habe."
+    "Teilzeit mit 120 Stunden im Monat wäre für mich ideal."
+    "Starten könnte ich ab dem Ersten des nächsten Monats, am liebsten vormittags."
+    "Nein, danke — Sie haben alles beantwortet, ich habe keine Fragen mehr."
+  )
+  local ended="false" a
+  for a in "${answers[@]}"; do
+    out=$(portal_post /api/public/interview-chat \
+      "$(jq -nc --arg id "$APP_ID" --arg t "$a" '{applicationId:$id, action:"message", text:$t}')") || return 1
+    if echo "$out" | jq -e '.error? != null' >/dev/null; then
+      echo "   ❌ Interview-Nachricht fehlgeschlagen: $out"
+      return 1
+    fi
+    ended=$(echo "$out" | jq -r '.ended // false')
+    [[ "$ended" == "true" ]] && break
+    sleep 2
+  done
+
+  if [[ "$ended" != "true" ]]; then
+    out=$(portal_post /api/public/interview-chat \
+      "$(jq -nc --arg id "$APP_ID" '{applicationId:$id, action:"end"}')") || return 1
+  fi
+
+  local decision score
+  decision=$(psql_value "SELECT COALESCE(ai_decision,'-') FROM applications WHERE email = '$TEST_EMAIL' LIMIT 1;")
+  score=$(psql_value "SELECT COALESCE(interview_score::text,'-') FROM applications WHERE email = '$TEST_EMAIL' LIMIT 1;")
+  echo "   KI-Entscheidung: $decision (Score $score) — Mailversand erfolgt bewusst erst durch die Recruiter-Zusage."
+  if [[ "$decision" == "-" ]]; then
+    echo "   ❌ Keine KI-Entscheidung gespeichert."
+    return 1
+  fi
+  return 0
+}
+
+# ---------- Stufe 10: Recruiter-Zusage → Willkommens-Mail -------------------
+# Bildet exakt ab, was advanceApplicationStage (vermittlung_zusage /
+# fasttrack_angenommen) im Admin-Portal tut: Invitation-Token anlegen und
+# die Willkommens-/Registrierungsmail mit genau diesem Token verschicken.
+stage_zusage_after_interview() {
+  psql_run "$SNIP/chain-11-recruiter-zusage.sql" || return 1
+  load_app_context || return 1
+  local token
+  token=$(psql_value "SELECT t.token FROM invitation_tokens t JOIN applications a ON a.id = t.application_id WHERE a.email = '$TEST_EMAIL' ORDER BY t.created_at DESC LIMIT 1;")
+  if [[ -z "$token" ]]; then
+    echo "   ❌ Kein Invitation-Token erzeugt."
+    return 1
+  fi
+  local link="https://portal.${TENANT_DOMAIN}/register?token=${token}"
+  invoke_fn send-invitation-email \
+    "$(jq -nc \
+        --arg to "$TEST_EMAIL" \
+        --arg link "$link" \
+        --arg tid "$TEST_TENANT_ID" \
+        --arg appId "$APP_ID" \
+        '{to:$to, fullName:"Test Kette", firstName:"Test", lastName:"Kette", registrationLink:$link, tenantId:$tid, applicationId:$appId}')" \
+    | jq -c '{status: (.status // "?"), error: (.error // null), success: (.success // null)}'
+}
+
+# ---------- Stufe 11: Willkommens-/Registrierungs-Einladung -----------------
 stage_welcome_invitation() {
   psql_run "$SNIP/chain-09-welcome-invitation.sql" || return 1
   load_app_context || return 1
