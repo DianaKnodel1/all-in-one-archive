@@ -1113,7 +1113,9 @@ const DEFAULT_TEMPLATES = {
     subject: "Bitte schließe deine Registrierung ab – {{tenant_name}}",
     body: `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Bitte schließe deine Registrierung ab</h1>
 <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">Hallo {{first_name}},</p>
-<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">in deinem Account bei <strong>{{tenant_name}}</strong> fehlen noch ein paar Angaben (z.B. Personalausweis, Arbeitsvertrag oder Pflichtdaten). Bitte melde dich an und vervollständige dein Profil.</p>
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 12px">in deinem Account bei <strong>{{tenant_name}}</strong> fehlt noch Folgendes:</p>
+{{missing_documents}}
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">Bitte melde dich im Portal an und reiche die fehlenden Unterlagen ein.</p>
 {{cta:Jetzt vervollständigen|{{login_link}}}}
 <p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Login: {{login_link}}</p>`,
   },
