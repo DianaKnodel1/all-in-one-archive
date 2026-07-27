@@ -361,10 +361,13 @@ export async function finalizeInterview(app: ApplicationRow, messages: Msg[], re
     .eq("id", app.id);
   if (updErr) throw new Error(updErr.message);
 
-  // Stage-Lifecycle: KI darf NICHT eigenständig auf "zusage" springen.
-  // Zusage/Willkommens-Mail erfolgt ausschließlich manuell durch den Recruiter
-  // nach dem echten Bewerbungsgespräch (advanceApplicationStage im Admin-UI).
-  const stage = result.recommendation === "reject" ? "vermittlung_absage" : null;
+  // Stage-Lifecycle: positive KI-Entscheidung => sofort Zusage + Registrierungs-Mail.
+  const stage =
+    result.recommendation === "reject"
+      ? "vermittlung_absage"
+      : result.recommendation === "invite"
+        ? "vermittlung_zusage"
+        : null;
   if (stage) {
     await supabaseAdmin.rpc("advance_application_stage", {
       _application_id: app.id,
@@ -374,6 +377,9 @@ export async function finalizeInterview(app: ApplicationRow, messages: Msg[], re
       _force: false,
     } as any).then(() => {}, (e) => console.warn("[interview-engine] stage rpc:", e));
   }
-  const invite_mail = { sent: false, skipped: true, reason: "manual_recruiter_decision_required" };
+  const invite_mail =
+    result.recommendation === "invite"
+      ? await sendRegistrationInviteAfterAiAccept(app, request)
+      : { sent: false, skipped: true, reason: "no_ai_invite" };
   return { ...result, application_status: newStatus, invite_mail };
 }
