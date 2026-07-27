@@ -14,12 +14,11 @@ import { resolveSender, type EmailKind } from "../_shared/sender-resolver.ts";
 import { renderEmail } from "../_shared/email-wrapper.ts";
 import {
 
-// Alle Termin-Zeiten in E-Mails in deutscher Ortszeit (Container läuft in UTC).
-const APP_TZ = "Europe/Berlin";
   MAX_PER_1H_PER_TENANT as LIMIT_1H,
   MAX_PER_12H_PER_TENANT as LIMIT_12H,
   MAX_PER_RUN_PER_TENANT as LIMIT_RUN,
 } from "../_shared/limits.ts";
+import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
 
 const FUNCTION_VERSION = "2026-07-15-rebook-after-cancel-v9-smtp-rate-limit-safe";
 
@@ -747,8 +746,8 @@ serve(async (req) => {
         rebook_link: rebookLink || calendlyLink,
         portal_link: portalLink,
         portal_url: portalUrl,
-        appointment_date: scheduledDate ? scheduledDate.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", timeZone: APP_TZ }) : "",
-        appointment_time: scheduledDate ? scheduledDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: APP_TZ }) : "",
+        appointment_date: scheduledDate ? formatAppointmentDate(scheduledDate, false) : "",
+        appointment_time: scheduledDate ? formatAppointmentTime(scheduledDate) : "",
       };
       const subject = render(tmplSubject, vars);
       const html = buildHtml(tmplSubject, tmplBody, tenant.email_signature ?? "", tenant, vars);

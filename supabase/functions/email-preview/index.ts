@@ -21,9 +21,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { renderEmail } from "../_shared/email-wrapper.ts";
 import { pickLandingLogo, resolveEmailLogo } from "../_shared/email-logo.ts";
+import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
 
-// Alle Termin-Zeiten in E-Mails in deutscher Ortszeit (Container läuft in UTC).
-const APP_TZ = "Europe/Berlin";
 
 const FUNCTION_VERSION = "2026-07-23-email-preview-v1";
 
@@ -322,8 +321,8 @@ function sampleVars(kind: string, tenantName: string): Record<string, string> {
     full_name: "Max Mustermann",
     tenant_name: tenantName,
     recruiter_name: "Anna Schmidt",
-    appointment_date: start.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: APP_TZ }),
-    appointment_time: start.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: APP_TZ }),
+    appointment_date: formatAppointmentDate(start),
+    appointment_time: formatAppointmentTime(start),
     duration_minutes: "20",
     booking_link: "https://portal.example.com/termin/buchen/PREVIEW-TOKEN",
     cancel_url: "https://portal.example.com/termin/PREVIEW-TOKEN",
