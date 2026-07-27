@@ -166,15 +166,26 @@ export async function runSummary(messages: Msg[]): Promise<{ summary: string; sc
     ],
     { jsonMode: true },
   );
+  // Manche Modelle liefern das JSON in ```json-Blöcken oder mit Vor-/Nachtext.
+  // Ohne Bereinigung landet die Auswertung im Fallback (score 50 / unsure) und
+  // eine eigentlich erteilte Zusage geht verloren.
+  const cleaned = (() => {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const body = fenced ? fenced[1] : raw;
+    const start = body.indexOf("{");
+    const end = body.lastIndexOf("}");
+    return start >= 0 && end > start ? body.slice(start, end + 1) : body.trim();
+  })();
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(cleaned);
     const rec = parsed.recommendation;
     return {
       summary: String(parsed.summary ?? ""),
       score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
       recommendation: rec === "invite" || rec === "reject" || rec === "unsure" ? rec : "unsure",
     };
-  } catch {
+  } catch (e) {
+    console.error("[interview] Auswertung nicht lesbar, Fallback unsure:", (e as any)?.message, raw.slice(0, 400));
     return { summary: raw.slice(0, 2000), score: 50, recommendation: "unsure" };
   }
 }
