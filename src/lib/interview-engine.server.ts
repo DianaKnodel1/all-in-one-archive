@@ -362,7 +362,7 @@ export async function sendRegistrationInviteAfterAiAccept(
   const firstName = app.first_name || String(name).trim().split(/\s+/)[0] || "";
   const lastName = app.last_name || String(name).trim().split(/\s+/).slice(1).join(" ");
 
-  const { error: mailErr } = await supabaseAdmin.functions.invoke("send-invitation-email", {
+  const { data: mailData, error: mailErr } = await supabaseAdmin.functions.invoke("send-invitation-email", {
     body: {
       to: email,
       fullName: name,
@@ -372,10 +372,13 @@ export async function sendRegistrationInviteAfterAiAccept(
       tenantId: app.tenant_id,
     },
   });
-  if (mailErr) {
-    console.warn("[interview-engine] invitation mail failed:", mailErr);
-    await record("failed", mailErr.message ?? "mail_failed");
-    return { sent: false, error: mailErr.message ?? "mail_failed", registration_link: registrationLink };
+  // Manche Funktionen antworten mit HTTP 200 und { error: ... } — das ist ebenfalls ein Fehlschlag.
+  const softErr = (mailData as any)?.error ? String((mailData as any).error) : null;
+  if (mailErr || softErr) {
+    const msg = mailErr?.message ?? softErr ?? "mail_failed";
+    console.warn("[interview-engine] invitation mail failed:", msg);
+    await record("failed", msg);
+    return { sent: false, error: msg, registration_link: registrationLink };
   }
   await record("sent", null);
   await supabaseAdmin
