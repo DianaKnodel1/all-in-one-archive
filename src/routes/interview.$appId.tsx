@@ -171,7 +171,10 @@ function InterviewPage() {
   // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, typing]);
+
+  // Timer aufräumen
+  useEffect(() => () => { if (typingTimerRef.current) clearTimeout(typingTimerRef.current); }, []);
 
   // KI Chat ist bewusst ein reiner Text-Chat — keine TTS, keine Stimme.
   // Sprachausgabe läuft ausschließlich über /interview/voice/$appId (KI Telefon).
@@ -185,6 +188,10 @@ function InterviewPage() {
     // optimistic
     setMessages((prev) => [...prev, { role: "user", text, ts: new Date().toISOString() }]);
     const startedAt = Date.now();
+    // Lesepause: erst nach 1,2–2,5 s erscheint die Tippblase.
+    const readMs = readDelay();
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => setTyping(true), readMs);
     try {
       const data = await postInterview({ applicationId: appId, action: "message", text });
       // Menschlichere Antwortzeit: kurze Denkpause + „Tipp"-Zeit abhängig von Antwortlänge
@@ -192,15 +199,19 @@ function InterviewPage() {
       const chars = reply.length;
       // ~35ms pro Zeichen "Tippen", + 900ms Denkpause, gedeckelt bei 6s
       const targetMs = Math.min(6000, 900 + chars * 35);
+      // Lesepause zählt mit, aber es wird immer mindestens ~600 ms sichtbar getippt.
+      const minVisible = readMs + 600;
       const elapsed = Date.now() - startedAt;
-      const wait = Math.max(0, targetMs - elapsed);
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      const wait = Math.max(0, Math.max(targetMs, minVisible) - elapsed);
+      if (wait > 0) await sleep(wait);
       setMessages(data.history ?? []);
       if (data.ended) setEnded(true);
       if (data.application_status) setAppStatus(data.application_status);
     } catch (e: any) {
       setError(e?.message ?? "Unbekannter Fehler");
     } finally {
+      if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
+      setTyping(false);
       setLoading(false);
     }
   }
