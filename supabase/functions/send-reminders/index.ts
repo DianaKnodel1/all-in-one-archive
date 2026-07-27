@@ -675,7 +675,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
   const cutoff = new Date(Date.now() - MIN_DAYS_BETWEEN * 86400_000).toISOString();
   const { data: profiles, error } = await ctx.admin
     .from("profiles")
-    .select("user_id,full_name,tenant_id,onboarding_status,status,updated_at,created_at")
+    .select("user_id,full_name,tenant_id,onboarding_status,status,contract_signed_at,updated_at,created_at")
     .neq("onboarding_status", "abgeschlossen")
     .not("status", "in", '("deaktiviert","abgelehnt")')
     .lte("created_at", cutoff);
@@ -685,6 +685,22 @@ async function runCompleteRegistration(ctx: SendCtx) {
   if (userIds.length === 0) return;
   const { data: usersList } = await ctx.admin.auth.admin.listUsers({ page: 1, perPage: 5000 });
   const userMap = new Map<string, any>((usersList?.users ?? []).map(u => [u.id, u]));
+
+  // Welche Unterlagen fehlen konkret? (Ausweis / Arbeitsvertrag)
+  const { data: kycRows } = await ctx.admin
+    .from("kyc_verifications")
+    .select("user_id,status")
+    .in("user_id", userIds);
+  const kycOk = new Set<string>(
+    (kycRows ?? [])
+      .filter((k: any) => k.status === "verifiziert" || k.status === "eingereicht" || k.status === "in_pruefung")
+      .map((k: any) => k.user_id),
+  );
+  const { data: contractRows } = await ctx.admin
+    .from("contracts")
+    .select("user_id")
+    .in("user_id", userIds);
+  const contractOk = new Set<string>((contractRows ?? []).map((c: any) => c.user_id));
 
   for (const p of profiles ?? []) {
     const u = userMap.get((p as any).user_id);
@@ -703,7 +719,22 @@ async function runCompleteRegistration(ctx: SendCtx) {
 
     const firstName = ((p as any).full_name ?? "").split(" ")[0] ?? "";
     const loginLink = `https://${portalHost(tenant)}/login`;
-    const vars = baseVars(tenant, { first_name: firstName, login_link: loginLink, portal_link: loginLink, booking_link: loginLink, confirmation_link: loginLink });
+    const missing: string[] = [];
+    if (!kycOk.has((p as any).user_id)) missing.push("Personalausweis (Identitätsprüfung)");
+    if (!contractOk.has((p as any).user_id) && !(p as any).contract_signed_at) missing.push("Unterschriebener Arbeitsvertrag");
+    const missingList = missing.length ? missing.join(", ") : "Pflichtangaben in deinem Profil";
+    const missingHtml = missing.length
+      ? `<ul style="font-size:15px;line-height:1.7;color:#475569;margin:0 0 24px;padding-left:20px">${missing.map(m => `<li>${m}</li>`).join("")}</ul>`
+      : `<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">Es fehlen noch Pflichtangaben in deinem Profil.</p>`;
+    const vars = baseVars(tenant, {
+      first_name: firstName,
+      login_link: loginLink,
+      portal_link: loginLink,
+      booking_link: loginLink,
+      confirmation_link: loginLink,
+      missing_documents: missingHtml,
+      missing_list: missingList,
+    });
     const subject = renderSubject(tenant.reminder_completion_subject, DEFAULT_TEMPLATES.completion.subject, vars);
     const html = renderBodyHtml(tenant, tenant.reminder_completion_body, DEFAULT_TEMPLATES.completion.body, vars);
 
@@ -1082,7 +1113,9 @@ const DEFAULT_TEMPLATES = {
     subject: "Bitte schließe deine Registrierung ab – {{tenant_name}}",
     body: `<h1 style="font-size:22px;margin:0 0 16px;color:#0f172a">Bitte schließe deine Registrierung ab</h1>
 <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 16px">Hallo {{first_name}},</p>
-<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">in deinem Account bei <strong>{{tenant_name}}</strong> fehlen noch ein paar Angaben (z.B. Personalausweis, Arbeitsvertrag oder Pflichtdaten). Bitte melde dich an und vervollständige dein Profil.</p>
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 12px">in deinem Account bei <strong>{{tenant_name}}</strong> fehlt noch Folgendes:</p>
+{{missing_documents}}
+<p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">Bitte melde dich im Portal an und reiche die fehlenden Unterlagen ein.</p>
 {{cta:Jetzt vervollständigen|{{login_link}}}}
 <p style="font-size:13px;color:#94a3b8;margin:24px 0 0">Login: {{login_link}}</p>`,
   },
@@ -1118,6 +1151,8 @@ function baseVars(t: TenantRow, extra: Vars): Vars {
     login_link: "",
     confirmation_link: "",
     booking_link: "",
+    missing_documents: "",
+    missing_list: "",
     ...extra,
   };
 }
