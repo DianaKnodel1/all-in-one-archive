@@ -202,18 +202,6 @@
       "default": "Zahlen, die für sich sprechen."
     },
     {
-      "key": "section_title_9",
-      "label": "Abschnitt — Überschrift",
-      "type": "text",
-      "default": "{{cta_title}}"
-    },
-    {
-      "key": "eyebrow_1",
-      "label": "Abschnitt — Kleintitel",
-      "type": "text",
-      "default": "{{hero_eyebrow}}"
-    },
-    {
       "key": "eyebrow_2",
       "label": "Abschnitt — Kleintitel",
       "type": "text",
@@ -292,12 +280,6 @@
       "default": "3.000+ Tester"
     },
     {
-      "key": "lead_1",
-      "label": "Abschnitt — Einleitung",
-      "type": "text",
-      "default": "{{hero_subtitle}}"
-    },
-    {
       "key": "lead_2",
       "label": "Abschnitt — Einleitung",
       "type": "longtext",
@@ -314,12 +296,6 @@
       "label": "Abschnitt — Einleitung",
       "type": "longtext",
       "default": "Remote, flexibel, faire Vergütung. Arbeite an spannenden Projekten führender Marken."
-    },
-    {
-      "key": "lead_5",
-      "label": "Abschnitt — Einleitung",
-      "type": "text",
-      "default": "{{cta_sub}}"
     },
     {
       "key": "card_title_1",
