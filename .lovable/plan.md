@@ -1,44 +1,29 @@
-## Ziel
+## Befund
 
-Im Chat-Kopf und in der Begrüßung sollen der echte Recruiter-Name (z. B. Merlin Schneider), sein Profilbild und der richtige Firmenname erscheinen — nicht „Sabine Schneider" und nicht der Domain-Slug „personalservice-gmbh.de".
+Die Erinnerungsmail 30 Minuten vor dem Termin läuft über die Funktion `send-appointment-reminders` (Cron alle 10 Minuten, Kandidatenfenster „Termin startet in 25–40 Minuten").
 
-## Was ich im Code sehe
+Für einen Termin um **01:00 Uhr** müsste die Mail gegen **00:30 Uhr** rausgehen. Genau das verhindert die zentrale Versandkontrolle: Erinnerungen dürfen nur im **Sendefenster 06:00–22:00 Uhr (Europe/Berlin)** verschickt werden (`_shared/limits.ts`, `_shared/send-guard.ts`). Der Versand wurde also bewusst blockiert und als `skipped` mit Grund `outside_send_window` protokolliert — kein SMTP- oder Cron-Fehler.
 
-Es gibt zwei Stellen, die die Anzeige bestimmen, und beide können das Falsche liefern:
+Dazu passt: Buchungen sind inzwischen bis 23:59 Uhr möglich, das Sendefenster wurde nie mitgezogen. Jeder Termin zwischen 00:00 und 06:30 Uhr bekommt derzeit keine Erinnerung.
 
-1. **Server (Begrüßungstext der KI):** Bei einer Vermittlungs-/Broker-Bewerbung hat aktuell die **Quell-Landing Vorrang** vor der verknüpften Fast-Track-Landing. Firmenname und Recruiter:in werden also von der Vermittlungsseite genommen, obwohl das Gespräch die Fast-Track-Firma führt. Fehlt dort ein Recruiter-Name, greift der fest verdrahtete Fallback „Sabine Schneider".
-2. **Chat-Kopfzeile (Browser):** Die Seite liest die Landing-Daten direkt aus der Datenbank. Öffentlich lesbar sind aber nur **veröffentlichte** Landing-Pages. Ist die verknüpfte Fast-Track-Seite nicht veröffentlicht, kommt nichts zurück und die Seite fällt auf die Vermittlungsseite bzw. auf „Sabine Schneider" ohne Bild zurück.
+## Vorschlag
 
-Ob bei dir zusätzlich einfach kein Recruiter-Name/Bild gepflegt ist, muss vor dem Fix einmal geprüft werden — das ist Schritt 1.
+1. **Bestätigen** (Backend-Server, nur lesend): Prüfen, ob für diesen Termin ein `skipped`-Eintrag mit `skip_reason = outside_send_window` in `email_send_log` steht. Damit ist die Ursache belegt, bevor etwas geändert wird.
 
-## Schritt 1 — Datenlage prüfen (Backend-Server)
+2. **Termin-Erinnerung vom Sendefenster ausnehmen.** Diese Mail ist kein Werbe-Reminder, sondern gehört zum gebuchten Termin — der Empfänger erwartet sie exakt zu dieser Uhrzeit. In `send-appointment-reminders` wird die Prüfung deshalb auf die Art „terminbezogen" umgestellt: **Stunden- und Tageskontingent (150/h, 2.400/Tag) bleiben aktiv**, nur die Uhrzeit-Sperre entfällt. Die übrigen Reminder (Nachfass, Onboarding, Registrierung) bleiben unverändert bei 06–22 Uhr.
 
-Ein Prüfbefehl, der Quell- und Fast-Track-Seite nebeneinander zeigt (Name, Bild, Firmenname, Veröffentlichungsstatus, Verknüpfung). Ergebnis entscheidet, ob es nur ein Pflege-Thema ist oder wirklich die Auflösungslogik.
+3. **Nachträglich verschickte Mails vermeiden:** Da das Zeitfenster eng ist (25–40 Min), gibt es kein Nachholen alter Termine — nur künftige Termine profitieren.
 
-## Schritt 2 — Serverseitige Auflösung korrigieren
+4. **Prüfskript erweitern:** `scripts/check-mail-health.sh` bekommt eine Ausgabe „Erinnerungen der letzten 24 h nach Ergebnis (gesendet/übersprungen + Grund)", damit solche stillen Blockaden sofort sichtbar sind.
 
-- Bei Bewerbungen aus einer Vermittlungs-/Broker-Landing bekommt die **verknüpfte Fast-Track-Landing Vorrang** für Firmenname, Recruiter-Name, Profilbild und Interview-Prompt; die Quell-Landing dient nur noch als Ersatz für fehlende Felder.
-- Betrifft die gemeinsame Interview-Logik sowie den Chat- und den Voice-Einstieg, damit alle Wege dasselbe Ergebnis liefern.
-- Der harte Fallback „Sabine Schneider" wird durch eine neutrale Formulierung („Ihr HR-Team" bzw. der gepflegte Firmenname) ersetzt, damit nie wieder ein erfundener Name erscheint.
-- Sieht der Firmenname wie eine Domain aus (z. B. `personalservice-gmbh.de`), wird er für die Anzeige lesbar aufbereitet, statt die Domain vorzulesen.
+5. **Deploy:** Backend-Server (`scripts/deploy-backend-local.sh`), danach Gegenprobe mit einem Testtermin in ~35 Minuten.
 
-## Schritt 3 — Kopfzeile aus derselben Quelle speisen
+### Technische Details
 
-- Die Interview-Seite erhält Recruiter-Name, Profilbild und Firmenname künftig **mit der Server-Antwort** beim Start des Gesprächs, statt selbst in der Datenbank zu suchen. Damit stimmen Kopfzeile und Begrüßungstext immer überein und unveröffentlichte Fast-Track-Seiten sind kein Problem mehr.
-- Die bisherige Direktabfrage bleibt nur als Notfall-Ersatz erhalten.
-- Gleiches für die Voice-Variante des Gesprächs.
+- `supabase/functions/_shared/send-guard.ts`: neue Versandart neben `transactional`/`reminder`, die das Zeitfenster überspringt, Kontingente aber weiterhin zählt und jede Entscheidung wie bisher in `email_send_log` schreibt.
+- `supabase/functions/send-appointment-reminders/index.ts`: `guardSend({ kind: ... })` auf die neue Art umstellen.
+- Keine Datenbank-Migration nötig.
 
-## Schritt 4 — Kleines Prüfskript
+### Offene Frage
 
-Ein Skript, das für eine Landing-Page anzeigt, welcher Recruiter, welches Bild und welcher Firmenname im Gespräch tatsächlich verwendet würden — damit sich so ein Fall künftig in einer Minute klären lässt.
-
-## Schritt 5 — Deploy
-
-Portal (`git pull && bash scripts/deploy.sh`) und Backend-Server; danach ein Testgespräch über die BV-Agentur-Fast-Track-Seite.
-
-## Technische Details
-
-- `src/lib/interview-engine.server.ts`: Priorität in `loadInterviewContext` umdrehen (fasttrack vor landing), `recruiterAvatarUrl` mit ausgeben, Fallback-Name neutralisieren.
-- `src/routes/api/public/interview-chat.ts`: identische Priorität im Inline-Zweig; `init`-Antwort um `recruiter_name`, `recruiter_avatar_url`, `company_name` erweitern.
-- `src/routes/interview.$appId.tsx` und `src/routes/interview.voice.$appId.tsx`: Branding aus der Init-Antwort übernehmen, DB-Abfrage nur als Fallback, `"Sabine Schneider"`-Literale entfernen.
-- Neues Skript `scripts/check-interview-branding.sh`.
+Falls du Erinnerungen nachts bewusst **nicht** willst, wäre die Alternative, stattdessen das Buchungsfenster auf 06:00–22:00 zu begrenzen. Sag kurz Bescheid, welche Variante dir lieber ist — Standard ist der Vorschlag oben (Erinnerung immer, passend zum Termin).
