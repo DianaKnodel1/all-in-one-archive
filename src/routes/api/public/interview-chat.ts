@@ -493,7 +493,9 @@ export const Route = createFileRoute("/api/public/interview-chat")({
               interview_status: "done",
               interview_summary: result.summary,
               interview_score: result.score,
-              interview_recommendation: result.recommendation,
+              // "error" ist kein gültiger Wert in der DB — dann bleibt die
+              // Empfehlung leer und die Oberfläche zeigt "Auswertung fehlgeschlagen".
+              interview_recommendation: result.recommendation === "error" ? null : result.recommendation,
               ai_decision: toAiDecision(result.recommendation),
               ai_reason: result.summary,
               interview_completed_at: new Date().toISOString(),
@@ -553,7 +555,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
           updates.interview_status = "done";
           updates.interview_summary = result.summary;
           updates.interview_score = result.score;
-          updates.interview_recommendation = result.recommendation;
+          updates.interview_recommendation = result.recommendation === "error" ? null : result.recommendation;
           updates.ai_decision = toAiDecision(result.recommendation);
           updates.ai_reason = result.summary;
           updates.interview_completed_at = new Date().toISOString();
