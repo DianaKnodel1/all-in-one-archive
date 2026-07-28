@@ -127,7 +127,13 @@ serve(async (req) => {
     }
 
     const tenant: any = await resolveTenant(admin, host);
-    if (!tenant) return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!tenant) {
+      await logMailAbort(admin, {
+        source: "send-password-reset", templateName: "password_reset", recipient: email,
+        tenantId: null, status: "failed", reason: `tenant_not_resolved (host: ${host ?? "n/a"})`,
+      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     if (tenant.emails_paused) {
       // Generic OK (keine Enumeration), aber loggen
       await logEmail(admin, tenant, email, "(Passwort-Reset)", null, "failed", `skipped: tenant paused (${tenant.emails_paused_reason ?? "n/a"})`);
@@ -160,16 +166,19 @@ serve(async (req) => {
       const { data, error } = await admin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo } } as any);
       if (error) {
         // user_not_found etc. → ok-Antwort, kein Send
+        await logEmail(admin, tenant, email, "(Passwort-Reset)", null, "failed", `skipped: kein Recovery-Link (${error.message ?? "user_not_found"})`);
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       const hashed = (data as any)?.properties?.hashed_token ?? null;
       if (hashed) {
         actionLink = `${redirectTo}?token_hash=${encodeURIComponent(hashed)}&type=recovery`;
       }
-    } catch {
+    } catch (e: any) {
+      await logEmail(admin, tenant, email, "(Passwort-Reset)", null, "failed", `generateLink exception: ${String(e?.message ?? e).slice(0, 300)}`);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!actionLink) {
+      await logEmail(admin, tenant, email, "(Passwort-Reset)", null, "failed", "hashed_token fehlt — kein Recovery-Link erzeugt");
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
