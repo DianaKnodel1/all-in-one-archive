@@ -453,7 +453,9 @@ export async function finalizeInterview(app: ApplicationRow, messages: Msg[], re
       interview_messages: messages,
       interview_summary: result.summary,
       interview_score: result.score,
-      interview_recommendation: result.recommendation,
+      // "error" ist kein gültiger DB-Wert — dann bleibt die Empfehlung leer
+      // und die Oberfläche zeigt "Auswertung fehlgeschlagen".
+      interview_recommendation: result.recommendation === "error" ? null : result.recommendation,
       ai_decision: toAiDecision(result.recommendation),
       ai_reason: result.summary,
       interview_completed_at: new Date().toISOString(),
