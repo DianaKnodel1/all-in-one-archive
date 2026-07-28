@@ -109,7 +109,7 @@ function phaseToStages(phase: Phase): Stage[] {
   const order: Phase[] = [
     "termin_offen","termin_gebucht","abgesagt","no_show",
     "interview_laeuft",
-    "entscheidung_offen",
+    "auswertung_fehler",
     "angenommen","abgelehnt",
     "registriert","email_bestaetigt",
     "onboarding_komplett","mitarbeiter_aktiv",
@@ -122,7 +122,7 @@ function phaseToStages(phase: Phase): Stage[] {
   let lvl = 0;
   if (idx >= order.indexOf("termin_gebucht")) lvl = 1;
   if (idx >= order.indexOf("interview_laeuft")) lvl = 2;
-  if (idx >= order.indexOf("entscheidung_offen")) lvl = 2;
+  if (idx >= order.indexOf("auswertung_fehler")) lvl = 2;
   if (idx >= order.indexOf("angenommen")) lvl = 3;
   if (idx >= order.indexOf("registriert")) lvl = 4;
   if (idx >= order.indexOf("onboarding_komplett")) lvl = 5;
@@ -132,7 +132,7 @@ function phaseToStages(phase: Phase): Stage[] {
     : phase === "abgesagt" ? 0
     : phase === "no_show" ? 1
     : phase === "interview_laeuft" ? 1
-    : phase === "entscheidung_offen" || phase === "angenommen" || phase === "abgelehnt" ? 2
+    : phase === "auswertung_fehler" || phase === "angenommen" || phase === "abgelehnt" ? 2
     : phase === "registriert" || phase === "email_bestaetigt" ? 3
     : 4;
 
