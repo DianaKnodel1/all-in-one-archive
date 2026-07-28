@@ -352,7 +352,7 @@ function PersonDetailPage() {
           )}
           {rec === "invite" && <Badge className="bg-emerald-100 text-emerald-800 border-0 text-[10px]">✅ Empfohlen</Badge>}
           {rec === "reject" && <Badge className="bg-rose-100 text-rose-800 border-0 text-[10px]">❌ Nicht empfohlen</Badge>}
-          {rec === "unsure" && <Badge className="bg-amber-100 text-amber-800 border-0 text-[10px]">⚠️ Unsicher</Badge>}
+          {rec === "unsure" && <Badge className="bg-amber-100 text-amber-800 border-0 text-[10px]">🛠 Auswertung fehlgeschlagen</Badge>}
         </div>
         {app.interview_summary && (
           <p className="text-xs text-foreground whitespace-pre-wrap bg-muted/40 border border-border rounded p-2">
