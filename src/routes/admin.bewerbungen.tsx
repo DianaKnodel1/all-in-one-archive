@@ -208,27 +208,35 @@ function AdminBewerbungenPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Reminder-Log (letzter Eintrag pro application_id)
-  type ReminderInfo = { kind: string; status: string; sent_at: string };
-  type DirectEmailInfo = { template: string; status: string; created_at: string; error: string | null };
-  const [reminderByApp, setReminderByApp] = useState<Map<string, ReminderInfo>>(new Map());
-  const [directEmailByRecipient, setDirectEmailByRecipient] = useState<Map<string, DirectEmailInfo>>(new Map());
+  // Mail-Historie: alle protokollierten Mails je Bewerber (Versand-Log per
+  // E-Mail-Adresse, Reminder-Log per application_id). Daraus entsteht die
+  // feste 4er-Kette in der Liste und die Historie im Dialog.
+  const [mailEventsByApp, setMailEventsByApp] = useState<Map<string, MailEvent[]>>(new Map());
+  const [mailEventsByEmail, setMailEventsByEmail] = useState<Map<string, MailEvent[]>>(new Map());
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from("application_reminder_log")
-        .select("application_id, reminder_kind, status, sent_at")
+        .select("application_id, reminder_kind, status, sent_at, error")
         .order("sent_at", { ascending: false })
-        .limit(1000);
+        .limit(3000);
       if (cancelled || !data) return;
-      const m = new Map<string, ReminderInfo>();
+      const m = new Map<string, MailEvent[]>();
       for (const r of data as any[]) {
-        if (!m.has(r.application_id)) {
-          m.set(r.application_id, { kind: r.reminder_kind, status: r.status, sent_at: r.sent_at });
-        }
+        const list = m.get(r.application_id) ?? [];
+        list.push({
+          key: r.reminder_kind,
+          label: mailLabel(r.reminder_kind),
+          status: r.status ?? "unknown",
+          at: r.sent_at,
+          error: r.error ?? null,
+          source: "reminder_log",
+        });
+        m.set(r.application_id, list);
       }
-      setReminderByApp(m);
+      setMailEventsByApp(m);
     })();
     return () => { cancelled = true; };
   }, [applications]);
@@ -238,25 +246,26 @@ function AdminBewerbungenPage() {
     (async () => {
       const { data } = await supabase
         .from("email_send_log")
-        .select("tenant_id, recipient_email, template_name, status, created_at, error_message")
-        .in("template_name", ["application_received", "invitation", "registration_invitation"])
+        .select("recipient_email, template_name, status, created_at, error_message")
         .order("created_at", { ascending: false })
-        .limit(1000);
+        .limit(5000);
       if (cancelled || !data) return;
-      const m = new Map<string, DirectEmailInfo>();
+      const m = new Map<string, MailEvent[]>();
       for (const r of data as any[]) {
         const email = String(r.recipient_email ?? "").toLowerCase().trim();
-        const tenantId = String(r.tenant_id ?? "");
-        const key = `${tenantId}:${email}`;
-        if (!email || m.has(key)) continue;
-        m.set(key, {
-          template: r.template_name ?? "invitation",
+        if (!email) continue;
+        const list = m.get(email) ?? [];
+        list.push({
+          key: r.template_name ?? "unbekannt",
+          label: mailLabel(r.template_name),
           status: r.status ?? "unknown",
-          created_at: r.created_at,
+          at: r.created_at,
           error: r.error_message ?? null,
+          source: "email_send_log",
         });
+        m.set(email, list);
       }
-      setDirectEmailByRecipient(m);
+      setMailEventsByEmail(m);
     })();
     return () => { cancelled = true; };
   }, [applications]);
