@@ -438,6 +438,9 @@ export const Route = createFileRoute("/api/public/applications")({
           if (!supabaseUrl || !serviceKey) {
             return { data: null as any, error: "mail_function_env_missing", response: null as Response | null };
           }
+          // requestId wandert mit → die Function schreibt sie in metadata.request_id,
+          // damit wir hier keine zweite Zeile für dieselbe Mail anlegen.
+          body = { ...body, requestId };
           try {
             const headers: Record<string, string> = {
               "Content-Type": "application/json",
