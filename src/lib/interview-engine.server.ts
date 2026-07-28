@@ -49,16 +49,24 @@ Regeln:
 - Abschluss dann sachlich: „Vielen Dank für das offene und ausführliche Gespräch — damit habe ich alles, was ich für den ersten Schritt benötige. Wir melden uns zeitnah mit dem nächsten Schritt bei Ihnen."`;
 
 
-const SUMMARY_PROMPT = `Du bist ein erfahrener Personalleiter. Bewerte das folgende Bewerbungsgespräch und gib eine kurze, ehrliche Einschätzung ab.
+const SUMMARY_PROMPT = `Du bist ein erfahrener Personalleiter. Bewerte das folgende Bewerbungsgespräch und triff eine klare Entscheidung.
+
+WICHTIG — Entscheidungsregel:
+- Ablehnen ("reject") NUR wenn der Bewerber KEINE Zeit hat, KEIN echtes Interesse an einer Mitarbeit zeigt oder das Gespräch nicht ernst nimmt (patzige, respektlose oder offensichtlich unsinnige Antworten).
+- In ALLEN anderen Fällen: einladen ("invite"). Fehlende Erfahrung, Nervosität, kurze Antworten oder Rechtschreibfehler sind KEIN Ablehnungsgrund.
+- "unsure" ist NICHT erlaubt. Es gibt nur "invite" oder "reject".
 
 Antworte AUSSCHLIESSLICH als gültiges JSON-Objekt (keine Markdown-Codeblöcke), mit folgenden Feldern:
 {
   "summary": "string (3–6 Sätze, Deutsch, neutral, fasse die Antworten zusammen + nenne Stärken/Schwächen)",
   "score": number,
-  "recommendation": "invite" | "reject" | "unsure"
+  "recommendation": "invite" | "reject"
 }
 
-score = 0–100 Eignung. invite = empfehlen, reject = nicht empfehlen, unsure = unsicher.`;
+score = 0–100 Eignung. invite = annehmen, reject = ablehnen.`;
+
+/** Ausgang der KI-Auswertung. "error" = Antwort technisch unlesbar (keine Bewertung). */
+export type Recommendation = "invite" | "reject" | "error";
 
 export type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
@@ -155,7 +163,7 @@ export async function callGateway(
   return content;
 }
 
-export async function runSummary(messages: Msg[]): Promise<{ summary: string; score: number; recommendation: "invite" | "reject" | "unsure" }> {
+export async function runSummary(messages: Msg[]): Promise<{ summary: string; score: number; recommendation: Recommendation }> {
   const transcript = messages
     .map((m) => `${m.role === "assistant" ? "Recruiter" : "Bewerber"}: ${m.text}`)
     .join("\n");
@@ -167,8 +175,8 @@ export async function runSummary(messages: Msg[]): Promise<{ summary: string; sc
     { jsonMode: true },
   );
   // Manche Modelle liefern das JSON in ```json-Blöcken oder mit Vor-/Nachtext.
-  // Ohne Bereinigung landet die Auswertung im Fallback (score 50 / unsure) und
-  // eine eigentlich erteilte Zusage geht verloren.
+  // Ohne Bereinigung landet die Auswertung im Fehler-Fallback und eine
+  // eigentlich erteilte Zusage geht verloren.
   const cleaned = (() => {
     const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
     const body = fenced ? fenced[1] : raw;
@@ -182,18 +190,20 @@ export async function runSummary(messages: Msg[]): Promise<{ summary: string; sc
     return {
       summary: String(parsed.summary ?? ""),
       score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
-      recommendation: rec === "invite" || rec === "reject" || rec === "unsure" ? rec : "unsure",
+      // Nur eine ausdrückliche Absage lehnt ab; alles andere (auch ein
+      // unklares "unsure") gilt als Zusage.
+      recommendation: rec === "reject" ? "reject" : "invite",
     };
   } catch (e) {
-    console.error("[interview] Auswertung nicht lesbar, Fallback unsure:", (e as any)?.message, raw.slice(0, 400));
-    return { summary: raw.slice(0, 2000), score: 50, recommendation: "unsure" };
+    console.error("[interview] Auswertung nicht lesbar:", (e as any)?.message, raw.slice(0, 400));
+    return { summary: raw.slice(0, 2000), score: 50, recommendation: "error" };
   }
 }
 
-export const toAiDecision = (rec: "invite" | "reject" | "unsure") =>
+export const toAiDecision = (rec: Recommendation) =>
   rec === "invite" ? "zusage" : rec === "reject" ? "absage" : "pending";
 
-export const toApplicationStatus = (rec: "invite" | "reject" | "unsure") =>
+export const toApplicationStatus = (rec: Recommendation) =>
   rec === "invite" ? "akzeptiert" : rec === "reject" ? "abgelehnt" : "neu";
 
 // Manche Landing-Pages tragen als Firmenname nur die Domain („personalservice-gmbh.de").
@@ -443,7 +453,9 @@ export async function finalizeInterview(app: ApplicationRow, messages: Msg[], re
       interview_messages: messages,
       interview_summary: result.summary,
       interview_score: result.score,
-      interview_recommendation: result.recommendation,
+      // "error" ist kein gültiger DB-Wert — dann bleibt die Empfehlung leer
+      // und die Oberfläche zeigt "Auswertung fehlgeschlagen".
+      interview_recommendation: result.recommendation === "error" ? null : result.recommendation,
       ai_decision: toAiDecision(result.recommendation),
       ai_reason: result.summary,
       interview_completed_at: new Date().toISOString(),

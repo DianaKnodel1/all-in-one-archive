@@ -24,6 +24,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
+import { MailChain } from "@/components/mail/MailChain";
+import { mailLabel, type MailEvent } from "@/lib/mail-chain";
 
 /**
  * Bewerbungen — nur applications (Funnel bis Registrierung).
@@ -33,7 +35,7 @@ import { PaginationBar } from "@/components/PaginationBar";
 type Phase =
   | "termin_offen" | "termin_gebucht" | "abgesagt" | "no_show"
   | "interview_laeuft"
-  | "entscheidung_offen"
+  | "auswertung_fehler"
   | "angenommen" | "abgelehnt"
   | "registriert" | "email_bestaetigt" | "onboarding_komplett" | "mitarbeiter_aktiv";
 
@@ -44,7 +46,7 @@ const PHASES: { key: Phase | "alle"; label: string; emoji: string }[] = [
   { key: "abgesagt", label: "Termin abgesagt", emoji: "🚫" },
   { key: "no_show", label: "Nicht erschienen", emoji: "⚠️" },
   { key: "interview_laeuft", label: "Interview läuft", emoji: "🎙" },
-  { key: "entscheidung_offen", label: "Entscheidung offen", emoji: "⏳" },
+  { key: "auswertung_fehler", label: "Auswertung fehlgeschlagen", emoji: "🛠" },
   { key: "angenommen", label: "Zusage erteilt", emoji: "✅" },
   { key: "abgelehnt", label: "Abgelehnt", emoji: "❌" },
   { key: "registriert", label: "Registriert", emoji: "🧾" },
@@ -59,7 +61,7 @@ const PHASE_COLOR: Record<Phase, string> = {
   abgesagt: "bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300",
   no_show: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
   interview_laeuft: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
-  entscheidung_offen: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300",
+  auswertung_fehler: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300",
   angenommen: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
   abgelehnt: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
   registriert: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300",
@@ -91,9 +93,9 @@ function computePhase(a: any, scheduledAt: Date | null, prof: ProfileInfo): Phas
   if (a.booking_status === "cancelled") return "abgesagt";
   if (rec === "invite" || a.status === "akzeptiert") return "angenommen";
   if (rec === "reject" || a.status === "abgelehnt") return "abgelehnt";
-  // Interview beendet, aber KI unsicher (oder Auswertung unlesbar): das ist KEINE
-  // Zusage — sonst suggeriert die Liste eine Einladung, die nie verschickt wurde.
-  if (a.interview_completed_at) return "entscheidung_offen";
+  // Interview beendet, aber keine verwertbare KI-Auswertung: technischer Fehler,
+  // keine Bewertung. Muss erneut ausgewertet werden.
+  if (a.interview_completed_at) return "auswertung_fehler";
 
   if (a.interview_started_at) return "interview_laeuft";
   if (scheduledAt) {
@@ -109,7 +111,7 @@ function phaseToStages(phase: Phase): Stage[] {
   const order: Phase[] = [
     "termin_offen","termin_gebucht","abgesagt","no_show",
     "interview_laeuft",
-    "entscheidung_offen",
+    "auswertung_fehler",
     "angenommen","abgelehnt",
     "registriert","email_bestaetigt",
     "onboarding_komplett","mitarbeiter_aktiv",
@@ -122,7 +124,7 @@ function phaseToStages(phase: Phase): Stage[] {
   let lvl = 0;
   if (idx >= order.indexOf("termin_gebucht")) lvl = 1;
   if (idx >= order.indexOf("interview_laeuft")) lvl = 2;
-  if (idx >= order.indexOf("entscheidung_offen")) lvl = 2;
+  if (idx >= order.indexOf("auswertung_fehler")) lvl = 2;
   if (idx >= order.indexOf("angenommen")) lvl = 3;
   if (idx >= order.indexOf("registriert")) lvl = 4;
   if (idx >= order.indexOf("onboarding_komplett")) lvl = 5;
@@ -132,7 +134,7 @@ function phaseToStages(phase: Phase): Stage[] {
     : phase === "abgesagt" ? 0
     : phase === "no_show" ? 1
     : phase === "interview_laeuft" ? 1
-    : phase === "entscheidung_offen" || phase === "angenommen" || phase === "abgelehnt" ? 2
+    : phase === "auswertung_fehler" || phase === "angenommen" || phase === "abgelehnt" ? 2
     : phase === "registriert" || phase === "email_bestaetigt" ? 3
     : 4;
 
@@ -208,27 +210,35 @@ function AdminBewerbungenPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Reminder-Log (letzter Eintrag pro application_id)
-  type ReminderInfo = { kind: string; status: string; sent_at: string };
-  type DirectEmailInfo = { template: string; status: string; created_at: string; error: string | null };
-  const [reminderByApp, setReminderByApp] = useState<Map<string, ReminderInfo>>(new Map());
-  const [directEmailByRecipient, setDirectEmailByRecipient] = useState<Map<string, DirectEmailInfo>>(new Map());
+  // Mail-Historie: alle protokollierten Mails je Bewerber (Versand-Log per
+  // E-Mail-Adresse, Reminder-Log per application_id). Daraus entsteht die
+  // feste 4er-Kette in der Liste und die Historie im Dialog.
+  const [mailEventsByApp, setMailEventsByApp] = useState<Map<string, MailEvent[]>>(new Map());
+  const [mailEventsByEmail, setMailEventsByEmail] = useState<Map<string, MailEvent[]>>(new Map());
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from("application_reminder_log")
-        .select("application_id, reminder_kind, status, sent_at")
+        .select("application_id, reminder_kind, status, sent_at, error")
         .order("sent_at", { ascending: false })
-        .limit(1000);
+        .limit(3000);
       if (cancelled || !data) return;
-      const m = new Map<string, ReminderInfo>();
+      const m = new Map<string, MailEvent[]>();
       for (const r of data as any[]) {
-        if (!m.has(r.application_id)) {
-          m.set(r.application_id, { kind: r.reminder_kind, status: r.status, sent_at: r.sent_at });
-        }
+        const list = m.get(r.application_id) ?? [];
+        list.push({
+          key: r.reminder_kind,
+          label: mailLabel(r.reminder_kind),
+          status: r.status ?? "unknown",
+          at: r.sent_at,
+          error: r.error ?? null,
+          source: "reminder_log",
+        });
+        m.set(r.application_id, list);
       }
-      setReminderByApp(m);
+      setMailEventsByApp(m);
     })();
     return () => { cancelled = true; };
   }, [applications]);
@@ -238,25 +248,26 @@ function AdminBewerbungenPage() {
     (async () => {
       const { data } = await supabase
         .from("email_send_log")
-        .select("tenant_id, recipient_email, template_name, status, created_at, error_message")
-        .in("template_name", ["application_received", "invitation", "registration_invitation"])
+        .select("recipient_email, template_name, status, created_at, error_message")
         .order("created_at", { ascending: false })
-        .limit(1000);
+        .limit(5000);
       if (cancelled || !data) return;
-      const m = new Map<string, DirectEmailInfo>();
+      const m = new Map<string, MailEvent[]>();
       for (const r of data as any[]) {
         const email = String(r.recipient_email ?? "").toLowerCase().trim();
-        const tenantId = String(r.tenant_id ?? "");
-        const key = `${tenantId}:${email}`;
-        if (!email || m.has(key)) continue;
-        m.set(key, {
-          template: r.template_name ?? "invitation",
+        if (!email) continue;
+        const list = m.get(email) ?? [];
+        list.push({
+          key: r.template_name ?? "unbekannt",
+          label: mailLabel(r.template_name),
           status: r.status ?? "unknown",
-          created_at: r.created_at,
+          at: r.created_at,
           error: r.error_message ?? null,
+          source: "email_send_log",
         });
+        m.set(email, list);
       }
-      setDirectEmailByRecipient(m);
+      setMailEventsByEmail(m);
     })();
     return () => { cancelled = true; };
   }, [applications]);
@@ -291,21 +302,28 @@ function AdminBewerbungenPage() {
         contractSigned: !!p.contract_signed_at,
       } : null;
       const sched = bookingByApp.get(a.id) ?? (a.scheduled_at ? new Date(a.scheduled_at) : null);
-      const tenantEmailKey = `${String(a.tenant_id ?? "")}:${email}`;
+      const phase = computePhase(a, sched, prof);
+      const mailEvents: MailEvent[] = [
+        ...(email ? mailEventsByEmail.get(email) ?? [] : []),
+        ...(mailEventsByApp.get(a.id) ?? []),
+      ];
       return {
         id: a.id,
         name: a.full_name || `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim() || email || "—",
         email: a.email || "—",
         phone: a.phone || "—",
-        phase: computePhase(a, sched, prof),
+        phase,
         lastActivity: a.created_at,
         source: resolveSource(a),
         createdAt: a.created_at,
         hasProfile: !!prof,
-        directEmail: email ? directEmailByRecipient.get(tenantEmailKey) ?? null : null,
+        mailEvents,
+        // Termin-Mail nur erwartet, wenn tatsächlich ein Termin existiert;
+        // Zusage-Mail nur nach angenommener Bewerbung.
+        mailExpected: { termin: !!sched, zusage: phase === "angenommen" },
       };
     }).sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
-  }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, directEmailByRecipient]);
+  }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, mailEventsByEmail, mailEventsByApp]);
 
   // Gruppierte Tabs — statt 12 Chips nur 6 sinnvolle Buckets
   const GROUPS: { key: string; label: string; emoji: string; phases: Phase[] }[] = [
@@ -539,67 +557,12 @@ function AdminBewerbungenPage() {
                             <span className={`inline-block px-1.5 py-0.5 rounded ${PHASE_COLOR[r.phase]}`}>
                               {meta?.emoji} {meta?.label}
                             </span>
-                            {(() => {
-                              const direct = r.directEmail;
-                              if (direct) {
-                                const when = new Date(direct.created_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-                                const isSent = direct.status === "sent";
-                                const isFailed = direct.status === "failed";
-                                const label = direct.template === "application_received" ? "Bewerbungsmail" : "Einladung";
-                                const cls = isSent
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                                  : isFailed
-                                    ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
-                                const icon = isSent ? "✓" : isFailed ? "⚠" : "•";
-                                const statusText = isSent ? "gesendet" : isFailed ? "fehlgeschlagen" : direct.status === "skipped" ? "übersprungen" : direct.status;
-                                const tooltip = isFailed && direct.error
-                                  ? `${label} konnte am ${when} nicht versendet werden: ${direct.error}`
-                                  : `${label} ${statusText} · ${when}`;
-                                return (
-                                  <span className={`inline-block px-1.5 py-0.5 rounded ${cls}`} title={tooltip}>
-                                    {icon} {label} {statusText} · {when}
-                                  </span>
-                                );
-                              }
-                              const rem = reminderByApp.get(r.id);
-                              const kindLabel = (k?: string) =>
-                                k === "no_booking_24h" ? "24 h-Erinnerung" :
-                                k === "no_booking_72h" ? "72 h-Erinnerung" :
-                                k === "no_show_24h"   ? "No-Show Follow-up" :
-                                k ?? "Erinnerung";
-                              if (!rem) {
-                                return (
-                                  <span
-                                    className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                                    title="Bisher wurde für diesen Bewerber keine automatische Erinnerungs-E-Mail protokolliert."
-                                  >
-                                    – Keine Reminder-Mail
-                                  </span>
-                                );
-                              }
-                              const when = new Date(rem.sent_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-                              const label = kindLabel(rem.kind);
-                              const isSent = rem.status === "sent";
-                              const isFailed = rem.status === "failed";
-                              const cls = isSent
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                                : isFailed
-                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-                                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300";
-                              const icon = isSent ? "✓" : isFailed ? "⚠" : "⏭";
-                              const statusText = isSent ? "gesendet" : isFailed ? "fehlgeschlagen" : "übersprungen";
-                              const tooltip = isSent
-                                ? `E-Mail „${label}" wurde am ${when} erfolgreich versendet.`
-                                : isFailed
-                                  ? `E-Mail „${label}" konnte am ${when} NICHT versendet werden (z. B. SMTP-Limit). Wird beim nächsten Cron-Lauf automatisch erneut versucht.`
-                                  : `E-Mail „${label}" wurde übersprungen (z. B. weil bereits ein Termin gebucht oder ein anderes Kriterium nicht erfüllt war).`;
-                              return (
-                                <span className={`inline-block px-1.5 py-0.5 rounded ${cls}`} title={tooltip}>
-                                  {icon} {label} {statusText} · {when}
-                                </span>
-                              );
-                            })()}
+                            <MailChain
+                              applicationId={r.id}
+                              applicantName={r.name}
+                              events={r.mailEvents}
+                              expected={r.mailExpected}
+                            />
 
                           </div>
                         </td>

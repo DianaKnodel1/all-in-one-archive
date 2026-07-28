@@ -301,7 +301,9 @@ async function callGateway(messages: Array<{ role: string; content: string }>, o
 }
 
 
-async function runSummary(messages: Msg[]): Promise<{ summary: string; score: number; recommendation: "invite" | "reject" | "unsure" }> {
+type Rec = "invite" | "reject" | "error";
+
+async function runSummary(messages: Msg[]): Promise<{ summary: string; score: number; recommendation: Rec }> {
   const transcript = messages
     .map((m) => `${m.role === "assistant" ? "Recruiter" : "Bewerber"}: ${m.text}`)
     .join("\n");
@@ -312,27 +314,36 @@ async function runSummary(messages: Msg[]): Promise<{ summary: string; score: nu
     ],
     { jsonMode: true },
   );
+  // Manche Modelle antworten in ```json-Blöcken oder mit Vor-/Nachtext.
+  const cleaned = (() => {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const body = fenced ? fenced[1] : raw;
+    const start = body.indexOf("{");
+    const end = body.lastIndexOf("}");
+    return start >= 0 && end > start ? body.slice(start, end + 1) : body.trim();
+  })();
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(cleaned);
     const rec = parsed.recommendation;
     return {
       summary: String(parsed.summary ?? ""),
       score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
-      // WICHTIG: kein Auto-"invite" bei fehlender/kaputter KI-Antwort.
-      // Nur ein explizites "invite" von der KI triggert die Zusage-Mail
-      // ("Willkommen im Team"). Alles andere = "unsure" (kein Mailversand).
-      recommendation: rec === "invite" ? "invite" : rec === "reject" ? "reject" : "unsure",
+      // Es gibt nur zwei gültige Ausgänge. Ein unklares/unbekanntes Ergebnis
+      // ("unsure") wird bewusst als Zusage gewertet — abgelehnt wird nur bei
+      // einer ausdrücklichen Absage der KI.
+      recommendation: rec === "reject" ? "reject" : "invite",
     };
   } catch {
-    // Parse-Fehler darf NIEMALS als Zusage interpretiert werden.
-    return { summary: raw.slice(0, 2000), score: 50, recommendation: "unsure" };
+    // Technischer Fehler (Antwort nicht lesbar) — das ist KEINE Bewertung
+    // und darf weder Zusage noch Absage auslösen.
+    return { summary: raw.slice(0, 2000), score: 50, recommendation: "error" };
   }
 }
 
-const toAiDecision = (rec: "invite" | "reject" | "unsure") =>
+const toAiDecision = (rec: Rec) =>
   rec === "invite" ? "zusage" : rec === "reject" ? "absage" : "pending";
 
-const toApplicationStatus = (rec: "invite" | "reject" | "unsure") =>
+const toApplicationStatus = (rec: Rec) =>
   rec === "invite" ? "akzeptiert" : rec === "reject" ? "abgelehnt" : "neu";
 
 export const Route = createFileRoute("/api/public/interview-chat")({
@@ -482,7 +493,9 @@ export const Route = createFileRoute("/api/public/interview-chat")({
               interview_status: "done",
               interview_summary: result.summary,
               interview_score: result.score,
-              interview_recommendation: result.recommendation,
+              // "error" ist kein gültiger Wert in der DB — dann bleibt die
+              // Empfehlung leer und die Oberfläche zeigt "Auswertung fehlgeschlagen".
+              interview_recommendation: result.recommendation === "error" ? null : result.recommendation,
               ai_decision: toAiDecision(result.recommendation),
               ai_reason: result.summary,
               interview_completed_at: new Date().toISOString(),
@@ -542,7 +555,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
           updates.interview_status = "done";
           updates.interview_summary = result.summary;
           updates.interview_score = result.score;
-          updates.interview_recommendation = result.recommendation;
+          updates.interview_recommendation = result.recommendation === "error" ? null : result.recommendation;
           updates.ai_decision = toAiDecision(result.recommendation);
           updates.ai_reason = result.summary;
           updates.interview_completed_at = new Date().toISOString();

@@ -1,62 +1,52 @@
-## Befund
+## Problem
 
-Das Mail-Center liest ungefiltert aus `email_send_log` (`src/routes/admin.email-center.tsx`) — es zeigt also alles an, was protokolliert wird. Die "Bewerbung eingegangen"-Mail fehlt, weil in bestimmten Fällen **gar kein Log-Eintrag geschrieben wird**:
+**1. Mail-Status ist nicht ablesbar.** Die Liste "Bewerbungen" zeigt pro Bewerber nur **eine einzige** Zeile – nämlich die zuletzt protokollierte Mail. Mal ist das die Bewerbungsmail, mal eine Erinnerung, mal ein technischer Name wie `booking_confirmation`. Man sieht also nie, ob die *anderen* Mails rausgingen. Deshalb wirkt das System kaputt, obwohl es meistens funktioniert.
 
-1. `supabase/functions/send-invitation-email/index.ts` protokolliert erst kurz vor dem SMTP-Versand. Alle früheren Abbrüche kehren ohne Log zurück:
-   - `routing_skip: …` (409)
-   - Tenant nicht gefunden (404) / Tenant deaktiviert (503)
-   - unvollständige SMTP-Konfiguration (400)
-   - manuell pausierter Mandant (503)
-   - unerwarteter Fehler im äußeren `catch`
-2. `src/routes/api/public/applications.ts` schreibt nur bei **Fehlern** in `email_send_log` (`writeMailFailureLog`); „sent" und „skipped" landen ausschließlich in der Server-Konsole. Bei einem Abbruch nach Punkt 1 entsteht dadurch nirgends eine Zeile.
+**2. "Entscheidung offen" darf es nicht geben.** Die KI darf heute `unsure` zurückgeben; dann wird weder Zusage noch Absage ausgelöst und der Bewerber bleibt hängen.
 
-Damit ist eine tatsächlich nicht versendete oder blockierte Bewerbungsbestätigung im Mail-Center unsichtbar — genau das soll sich ändern.
+## Lösung
 
-## Ziel
+### A. Fester Mail-Status pro Bewerber
 
-Jede ausgehende (oder bewusst unterdrückte) E-Mail erzeugt genau eine Zeile in `email_send_log` — mit Status `sent`, `failed` oder `skipped` und einem maschinenlesbaren Grund.
+Statt einer wechselnden Zeile bekommt **jeder** Bewerber immer dieselbe Kette mit vier Punkten:
 
-## Umsetzung
+```text
+Bewerbung ✓   Termin ✓   Erinnerung –   Zusage ⚠
+```
 
-### 1. Versand-Function lückenlos protokollieren
-`supabase/functions/send-invitation-email/index.ts`:
-- Log-Helfer nach oben ziehen und für jeden frühen Abbruch aufrufen (Routing-Skip, Tenant fehlt/inaktiv, SMTP unvollständig, manuelle Pause, äußerer Fehler).
-- Status-Konvention: bewusste Unterdrückung → `skipped`, technischer/Konfigurationsfehler → `failed`.
-- `metadata.skip_reason` bzw. `error_message` immer setzen, damit der Grund im Center sichtbar ist.
-- Fällt der Tenant weg, Eintrag mit `tenant_id = null` schreiben statt still zu verwerfen.
+- **grün ✓** = Mail nachweislich rausgegangen
+- **rot ⚠** = Versand fehlgeschlagen oder blockiert (Tooltip nennt den Grund)
+- **grau –** = in diesem Fall gar nicht vorgesehen (z. B. keine Erinnerung nötig, weil Termin gebucht)
+- **gelb ⏱** = angestoßen, aber noch kein Ergebnis protokolliert
 
-### 2. Gleiche Behandlung in den übrigen Versand-Functions
-Durchgehen und fehlende Abbruchpfade nachziehen (gleiches Muster):
-`send-password-reset`, `send-signup-confirmation`, `resend-signup-confirmation`, `send-chat-reminder`, `process-invite-resend-queue`, `email-resend`.
+Damit ist auf einen Blick über alle Zeilen hinweg vergleichbar, wo etwas fehlt – kein Rätselraten mehr.
 
-### 3. Bewerbungsroute: Erfolg und Skip ebenfalls loggen
-`src/routes/api/public/applications.ts`:
-- `writeMailFailureLog` zu einem allgemeinen `writeMailLog(template, status, reason, metadata)` erweitern.
-- `logMailResult` schreibt künftig auch bei `sent` und `skipped` eine Zeile — bei `sent` als Ergänzung (siehe Dedup unten).
-- Ist die Function selbst schon nicht erreichbar oder liefert 409/503, entsteht damit garantiert ein Eintrag.
+### B. Klick öffnet die vollständige Mail-Historie
 
-### 4. Doppelzeilen vermeiden
-Die Function schreibt bei erfolgreichem Versand bereits eine Zeile. Damit im Verlauf nicht zwei Zeilen pro Mail stehen:
-- Die Route setzt beim Aufruf eine `request_id` und übergibt sie an die Function; die Function schreibt sie in `metadata.request_id`.
-- Die Route protokolliert `sent` nur, wenn zu dieser `request_id` noch kein Eintrag existiert (kurzer Lookup vor dem Insert).
+Klick auf die Kette (oder auf den Bewerber) öffnet ein Fenster mit **allen** Mails dieses Bewerbers: Zeitpunkt, Klarname der Vorlage (keine technischen Namen), Status, Fehlergrund, plus Button "Erneut senden". Datenquelle sind die bereits vorhandenen Tabellen `email_send_log` und `application_reminder_log`, zusammengeführt und nach Zeit sortiert.
 
-### 5. Zusage-/Einladungsmail aus dem Interview
-`src/lib/interview-engine.server.ts` prüfen: der zentrale Einladungsversand muss denselben Log-Pfad nutzen (auch bei „nicht gesendet, weil …").
+### C. Klarnamen statt Technik
 
-### 6. Prüfskript
-`scripts/mail-audit.sh` um einen Abschnitt „Versandwege ohne Protokoll" erweitern: vergleicht Bewerbungen mit `invite_mail_status`/Eingangsbestätigung gegen vorhandene `email_send_log`-Zeilen und listet Lücken der letzten 7 Tage auf.
+Eine zentrale Übersetzungstabelle ersetzt `booking_confirmation`, `interview_invite_30min` usw. überall durch deutsche Bezeichnungen. Wird in Liste, Historie und Mail-Center gleichermaßen benutzt.
 
-## Technische Hinweise
+### D. Bewerber-Status: keine offene Entscheidung mehr
 
-- Keine Schema-Änderung nötig: `email_send_log` hat bereits `status`, `error_message`, `metadata`, `rendered_subject`, `rendered_html`.
-- Der bestehende `guardSend`-Pfad (`_shared/send-guard.ts`) protokolliert Blockaden bereits korrekt und bleibt unverändert.
-- Nach dem Deploy sind neue Sends vollständig sichtbar; rückwirkend lassen sich fehlende Zeilen nicht rekonstruieren.
+- Die KI-Auswertung liefert künftig nur noch **Zusage** oder **Absage**. Der Prompt wird auf eine bewusst niedrige Ablehnungsschwelle gestellt: Absage nur bei klarer Ablehnung der Mitarbeit, patzigen/respektlosen Antworten oder komplett unbrauchbaren Angaben. In allen anderen Fällen Zusage.
+- Ein zurückgegebenes `unsure` wird serverseitig zur **Zusage** aufgelöst (mit Vermerk im Protokoll, damit es nachvollziehbar bleibt).
+- Wenn die Auswertung technisch unlesbar ist (kein gültiges JSON), gilt es **nicht** als Zusage – dann wird ein klar erkennbarer Status "Auswertung fehlgeschlagen · erneut auswerten" mit Wiederholungs-Button angezeigt. Das ist ein technischer Fehler, keine Bewertung.
+- Die Phase "Entscheidung offen" fällt damit aus der normalen Liste weg.
+
+## Technische Umsetzung
+
+- Neue Server-Function `getApplicationMailStatus` (Batch für die Liste) liest `email_send_log` + `application_reminder_log`, mappt sie auf die vier festen Kettenpunkte und liefert je Punkt Status + Zeit + Grund.
+- Neue Komponente `MailChain` (Liste) und `MailHistoryDialog` (Detail) unter `src/components/mail/`.
+- `src/routes/admin.bewerbungen.tsx`: bisherige Einzel-Badge-Logik (Zeilen ~542–602) durch `MailChain` ersetzen; Phase `entscheidung_offen` in `computePhase` durch die neuen Regeln ersetzen.
+- `src/lib/interview-engine.server.ts`: Entscheidungs-Prompt schärfen, `unsure` → `invite` auflösen, Parse-Fehler als eigener Zustand `auswertung_fehlgeschlagen` statt `unsure`.
+- Template-Klarnamen in `src/lib/email-stats.ts` erweitern und als gemeinsame Quelle nutzen.
+- Kein Schema-Wechsel nötig, wenn `interview_recommendation` weiterhin nur `invite`/`reject` speichert; der Fehlerfall wird über `ai_decision = 'error'` abgebildet.
 
 ## Deploy danach
 
 ```bash
-# Portal
 cd /opt/apps/portal && git reset --hard HEAD && git pull && bash scripts/deploy.sh
-# Backend
-cd /opt/apps/portal-migrations && git pull && bash scripts/deploy-backend-local.sh
 ```
