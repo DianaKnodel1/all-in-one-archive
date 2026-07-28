@@ -14,6 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { loadTenantForSend } from "../_shared/sender-resolver.ts";
 import { guardSend } from "../_shared/send-guard.ts";
+import { logMailAbort } from "../_shared/log-abort.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,7 +59,14 @@ serve(async (req) => {
       .select("email, reason")
       .ilike("email", to)
       .maybeSingle();
+    const abort = (status: "failed" | "skipped", reason: string, tid: string | null) =>
+      logMailAbort(admin, {
+        source: "send-chat-reminder", templateName: "chat_reminder",
+        recipient: to, tenantId: tid, status, reason, metadata: { user_id: userId },
+      });
+
     if (suppressed) {
+      await abort("skipped", `recipient_suppressed: ${suppressed.reason}`, profile.tenant_id);
       return json({
         error: `Diese Adresse ist gesperrt (Bounce: ${suppressed.reason}). Bitte direkt anrufen.`,
         suppressed: true,
@@ -79,6 +87,7 @@ serve(async (req) => {
       .maybeSingle();
     if (recent) {
       const hoursAgo = Math.round((Date.now() - new Date(recent.created_at).getTime()) / 3600000);
+      await abort("skipped", `rate_limited_24h (letzter Versand vor ${hoursAgo}h)`, profile.tenant_id);
       return json({
         error: `Bereits vor ${hoursAgo}h ein Reminder gesendet. Bitte warte 24h zwischen Erinnerungen.`,
         skipped: true,
@@ -102,11 +111,16 @@ serve(async (req) => {
 
     const resolved = await loadTenantForSend(admin, profile.tenant_id, "fasttrack_chat_reminder");
     const tenant = resolved.tenant;
-    if (!tenant) return json({ error: `Routing fehlgeschlagen: ${resolved.reason || "tenant_not_found"}`, routing_reason: resolved.reason }, 409);
+    if (!tenant) {
+      await abort("failed", `routing_failed: ${resolved.reason || "tenant_not_found"}`, profile.tenant_id);
+      return json({ error: `Routing fehlgeschlagen: ${resolved.reason || "tenant_not_found"}`, routing_reason: resolved.reason }, 409);
+    }
     if (!tenant.smtp_host || !tenant.smtp_port || !tenant.smtp_username || !tenant.smtp_password) {
+      await abort("failed", "smtp_not_configured", tenant.id);
       return json({ error: "Tenant hat keine vollständige SMTP-Konfiguration" }, 400);
     }
     if (tenant.emails_paused) {
+      await abort("skipped", `tenant_emails_paused${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}`, tenant.id);
       return json({ error: `E-Mail-Versand pausiert${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}`, paused: true }, 503);
     }
 
