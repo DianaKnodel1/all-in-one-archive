@@ -94,6 +94,8 @@ interface Payload {
   applicationId?: string;
   /** Admin-Test aus /admin/tenants: umgeht Empfänger-Sperre und Kontingent. */
   testMode?: boolean;
+  /** Korrelations-ID des Aufrufers — landet in metadata.request_id (Dedup im Mail-Center). */
+  requestId?: string;
 }
 
 // Mapping template → EmailKind für den zentralen Resolver.
@@ -129,6 +131,35 @@ serve(async (req) => {
     );
     const supabase = supabaseAdmin;
 
+    const logTemplate = templateNameOverride || "invitation";
+    // Jeder Abbruch MUSS im Mail-Center sichtbar sein → zentraler Abbruch-Logger.
+    const logAbort = async (
+      status: "failed" | "skipped",
+      reason: string,
+      tenantIdForLog: string | null,
+      extra?: Record<string, unknown>,
+    ) => {
+      try {
+        await supabaseAdmin.from("email_send_log").insert({
+          message_id: `send-invitation-email:${body.requestId ?? crypto.randomUUID()}:${logTemplate}:${Date.now()}`,
+          tenant_id: tenantIdForLog,
+          template_name: logTemplate,
+          recipient_email: to,
+          status,
+          error_message: reason.slice(0, 1000),
+          metadata: {
+            source: "send-invitation-email",
+            request_id: body.requestId ?? null,
+            application_id: body.applicationId ?? null,
+            skip_reason: status === "skipped" ? reason : null,
+            ...extra,
+          },
+        });
+      } catch (e) {
+        console.warn("[send-invitation-email] abort_log_failed:", (e as any)?.message ?? e);
+      }
+    };
+
     // Zentrales SMTP-Routing: wenn applicationId + bekannter templateName vorliegen,
     // ermittelt der Resolver den korrekten Tenant (Broker vs. Fast-Track) — unabhängig
     // vom übergebenen tenantId. Damit sendet z.B. "welcome/registration" IMMER über
@@ -152,6 +183,7 @@ serve(async (req) => {
           application_id: body.applicationId, template: templateNameOverride,
           kind: routingKind, reason: resolved.reason,
         });
+        await logAbort("skipped", `routing_skip: ${resolved.reason}`, tenantId ?? null, { routing_kind: routingKind });
         return json({ error: `routing_skip: ${resolved.reason}`, skipped: true, routing_reason: resolved.reason }, 409);
       }
     }
@@ -163,16 +195,22 @@ serve(async (req) => {
       .eq("id", effectiveTenantId)
       .maybeSingle();
 
-    if (tErr || !tenant) return json({ error: "Tenant nicht gefunden" }, 404);
+    if (tErr || !tenant) {
+      await logAbort("failed", `tenant_not_found: ${effectiveTenantId}${tErr ? ` (${tErr.message})` : ""}`, null);
+      return json({ error: "Tenant nicht gefunden" }, 404);
+    }
     if (tenant.is_active === false) {
+      await logAbort("skipped", "tenant_inactive", tenant.id, { tenant_name: tenant.name });
       return json({ error: "Tenant ist deaktiviert — kein E-Mail-Versand.", inactive: true }, 503);
     }
     if (!tenant.smtp_host || !tenant.smtp_port || !tenant.smtp_username || !tenant.smtp_password) {
+      await logAbort("failed", "smtp_not_configured", tenant.id, { tenant_name: tenant.name });
       return json({ error: "Tenant hat keine vollständige SMTP-Konfiguration" }, 400);
     }
     if (tenant.emails_paused) {
       // Nur noch manuell gesetzte Tenant-Pausen respektieren (kein Auto-Pause mehr).
       if (tenant.emails_paused_by && tenant.emails_paused_by !== "auto:smtp_verify") {
+        await logAbort("skipped", `tenant_emails_paused${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}`, tenant.id, { tenant_name: tenant.name, paused_by: tenant.emails_paused_by });
         return json({
           error: `E-Mail-Versand für diesen Mandanten ist manuell pausiert${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}.`,
           paused: true,
@@ -375,6 +413,8 @@ serve(async (req) => {
       tenant_id: tenant.id,
       tenant_name: tenant.name,
       template_name: templateNameOverride || "invitation",
+      request_id: body.requestId ?? null,
+      application_id: body.applicationId ?? null,
       ...logoMetadata,
     };
 
@@ -431,6 +471,21 @@ serve(async (req) => {
     }
   } catch (err: any) {
     console.error(err);
+    try {
+      const admin = createClient(
+        (Deno.env.get("SUPABASE_URL") ?? Deno.env.get("API_EXTERNAL_URL"))!,
+        (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SERVICE_ROLE_KEY"))!,
+        { auth: { autoRefreshToken: false, persistSession: false } },
+      );
+      await admin.from("email_send_log").insert({
+        message_id: `send-invitation-email:unhandled:${Date.now()}`,
+        template_name: "invitation",
+        recipient_email: "(unbekannt)",
+        status: "failed",
+        error_message: String(err?.message ?? err).slice(0, 1000),
+        metadata: { source: "send-invitation-email", unhandled: true },
+      });
+    } catch { /* non-critical */ }
     return json({ error: err?.message ?? "Unknown error" }, 500);
   }
 });
