@@ -141,6 +141,15 @@ log "7b/8  Termin-Reminder (letzte 7 Tage)"
 sql "SELECT status, count(*) AS anzahl, max(sent_at) AS zuletzt
        FROM appointment_reminder_log WHERE sent_at > now() - interval '7 days' GROUP BY status;"
 
+log "7d/8  Erinnerungen letzte 24h: Ergebnis inkl. Blockade-Grund"
+sql "SELECT template_name, status,
+            coalesce(metadata->>'skip_reason','-') AS grund,
+            count(*) AS anzahl, max(created_at) AS zuletzt
+       FROM email_send_log
+      WHERE created_at > now() - interval '24 hours'
+      GROUP BY template_name, status, grund
+      ORDER BY zuletzt DESC LIMIT 40;"
+
 log "7c/8  Offene Invite-Resend-Queue"
 sql "SELECT status, count(*), min(created_at) AS aeltester
        FROM invite_resend_queue GROUP BY status ORDER BY status;"

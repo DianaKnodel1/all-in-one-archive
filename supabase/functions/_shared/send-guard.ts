@@ -18,7 +18,11 @@ import {
 /** Status-Werte, die als echter Versand gegen die Kontingente zählen. */
 const COUNTING_STATUSES = ["sent", "pending", "bounced", "complained"];
 
-export type SendKind = "transactional" | "reminder";
+// "appointment" = terminbezogene Erinnerung (z.B. 30 Min vor dem Interview).
+// Sie gehört zum gebuchten Termin, den der Empfänger genau zu dieser Uhrzeit
+// erwartet — deshalb KEIN 06–22-Uhr-Sendefenster, aber weiterhin die
+// Stunden-/Tageskontingente.
+export type SendKind = "transactional" | "reminder" | "appointment";
 
 export interface AllowanceResult {
   allowed: boolean;

@@ -299,10 +299,11 @@ serve(async (req) => {
 
       if (dryRun) { sent++; results.push({ application_id: a.id, status: "would_send", to: a.email, magic_link: magicLink }); continue; }
 
-      // Reminder: Sendefenster 06–22 Uhr + Kontingent (150/h, 2.400/Tag).
+      // Terminbezogen: kein 06–22-Uhr-Fenster (Termine sind bis 23:59 buchbar),
+      // aber weiterhin Kontingent (150/h, 2.400/Tag).
       const allowance = await guardSend({
         admin, tenantId: tenant.id, templateName: REMINDER_KIND, recipient: a.email,
-        kind: "reminder", senderEmail: tenant.sender_email ?? tenant.smtp_username,
+        kind: "appointment", senderEmail: tenant.sender_email ?? tenant.smtp_username,
         metadata: { application_id: a.id, source: "send-appointment-reminders" },
       });
       if (!allowance.allowed) { skipped++; results.push({ application_id: a.id, status: "skipped", reason: allowance.reason }); continue; }
