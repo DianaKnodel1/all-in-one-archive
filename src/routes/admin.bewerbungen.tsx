@@ -24,6 +24,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
+import { MailChain } from "@/components/mail/MailChain";
+import { mailLabel, type MailEvent } from "@/lib/mail-chain";
 
 /**
  * Bewerbungen — nur applications (Funnel bis Registrierung).
