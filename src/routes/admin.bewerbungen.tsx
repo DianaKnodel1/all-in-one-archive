@@ -557,67 +557,12 @@ function AdminBewerbungenPage() {
                             <span className={`inline-block px-1.5 py-0.5 rounded ${PHASE_COLOR[r.phase]}`}>
                               {meta?.emoji} {meta?.label}
                             </span>
-                            {(() => {
-                              const direct = r.directEmail;
-                              if (direct) {
-                                const when = new Date(direct.created_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-                                const isSent = direct.status === "sent";
-                                const isFailed = direct.status === "failed";
-                                const label = direct.template === "application_received" ? "Bewerbungsmail" : "Einladung";
-                                const cls = isSent
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                                  : isFailed
-                                    ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
-                                const icon = isSent ? "✓" : isFailed ? "⚠" : "•";
-                                const statusText = isSent ? "gesendet" : isFailed ? "fehlgeschlagen" : direct.status === "skipped" ? "übersprungen" : direct.status;
-                                const tooltip = isFailed && direct.error
-                                  ? `${label} konnte am ${when} nicht versendet werden: ${direct.error}`
-                                  : `${label} ${statusText} · ${when}`;
-                                return (
-                                  <span className={`inline-block px-1.5 py-0.5 rounded ${cls}`} title={tooltip}>
-                                    {icon} {label} {statusText} · {when}
-                                  </span>
-                                );
-                              }
-                              const rem = reminderByApp.get(r.id);
-                              const kindLabel = (k?: string) =>
-                                k === "no_booking_24h" ? "24 h-Erinnerung" :
-                                k === "no_booking_72h" ? "72 h-Erinnerung" :
-                                k === "no_show_24h"   ? "No-Show Follow-up" :
-                                k ?? "Erinnerung";
-                              if (!rem) {
-                                return (
-                                  <span
-                                    className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                                    title="Bisher wurde für diesen Bewerber keine automatische Erinnerungs-E-Mail protokolliert."
-                                  >
-                                    – Keine Reminder-Mail
-                                  </span>
-                                );
-                              }
-                              const when = new Date(rem.sent_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-                              const label = kindLabel(rem.kind);
-                              const isSent = rem.status === "sent";
-                              const isFailed = rem.status === "failed";
-                              const cls = isSent
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                                : isFailed
-                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-                                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300";
-                              const icon = isSent ? "✓" : isFailed ? "⚠" : "⏭";
-                              const statusText = isSent ? "gesendet" : isFailed ? "fehlgeschlagen" : "übersprungen";
-                              const tooltip = isSent
-                                ? `E-Mail „${label}" wurde am ${when} erfolgreich versendet.`
-                                : isFailed
-                                  ? `E-Mail „${label}" konnte am ${when} NICHT versendet werden (z. B. SMTP-Limit). Wird beim nächsten Cron-Lauf automatisch erneut versucht.`
-                                  : `E-Mail „${label}" wurde übersprungen (z. B. weil bereits ein Termin gebucht oder ein anderes Kriterium nicht erfüllt war).`;
-                              return (
-                                <span className={`inline-block px-1.5 py-0.5 rounded ${cls}`} title={tooltip}>
-                                  {icon} {label} {statusText} · {when}
-                                </span>
-                              );
-                            })()}
+                            <MailChain
+                              applicationId={r.id}
+                              applicantName={r.name}
+                              events={r.mailEvents}
+                              expected={r.mailExpected}
+                            />
 
                           </div>
                         </td>
