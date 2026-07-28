@@ -11,6 +11,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { guardSend } from "../_shared/send-guard.ts";
+import { logMailAbort } from "../_shared/log-abort.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -85,11 +86,15 @@ serve(async (req) => {
       options: { redirectTo },
     });
     if (gErr || !linkData?.properties) {
+      await abort("failed", `link_generation_failed: ${gErr?.message ?? "unbekannt"}`, tenant.id);
       return json({ error: gErr?.message ?? "Confirmation-Link konnte nicht generiert werden" }, 400);
     }
     // Token-Hash statt action_link (Gmail-Prefetch-Schutz, siehe send-signup-confirmation)
     const tokenHash = (linkData.properties as any)?.hashed_token;
-    if (!tokenHash) return json({ error: "hashed_token fehlt" }, 500);
+    if (!tokenHash) {
+      await abort("failed", "hashed_token_missing", tenant.id);
+      return json({ error: "hashed_token fehlt" }, 500);
+    }
     const actionLink = `${redirectTo}?token_hash=${encodeURIComponent(tokenHash)}&type=signup`;
 
     const senderName = tenant.sender_name ?? tenant.name;
@@ -114,6 +119,7 @@ serve(async (req) => {
 
     const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
     if (!verifyRes.ok) {
+      await abort("failed", `smtp_verify_failed: ${(verifyRes as any).error ?? "unbekannt"}`, tenant.id);
       return json({ success: true }, 200); // generic OK, kein Enumeration-Hint
     }
 
