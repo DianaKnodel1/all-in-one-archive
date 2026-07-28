@@ -438,6 +438,9 @@ export const Route = createFileRoute("/api/public/applications")({
           if (!supabaseUrl || !serviceKey) {
             return { data: null as any, error: "mail_function_env_missing", response: null as Response | null };
           }
+          // requestId wandert mit → die Function schreibt sie in metadata.request_id,
+          // damit wir hier keine zweite Zeile für dieselbe Mail anlegen.
+          body = { ...body, requestId };
           try {
             const headers: Record<string, string> = {
               "Content-Type": "application/json",
@@ -491,19 +494,25 @@ export const Route = createFileRoute("/api/public/applications")({
           }
           return { tenant: mailTenant, reason: tenantMailBlockReason(mailTenant) };
         };
-        const writeMailFailureLog = async (template: "invitation" | "application_received", reason: string, metadata?: Record<string, unknown>) => {
-          if (!resolvedTenantId) return;
+        // Jede Mail-Entscheidung dieser Route wird protokolliert — sent, failed und skipped.
+        const writeMailLog = async (
+          template: "invitation" | "application_received",
+          status: "sent" | "failed" | "skipped",
+          reason?: string,
+          metadata?: Record<string, unknown>,
+        ) => {
           const { error: logErr } = await supabaseAdmin.from("email_send_log").insert({
             message_id: `applications:${requestId}:${template}:${Date.now()}`,
-            tenant_id: resolvedTenantId,
+            tenant_id: resolvedTenantId ?? null,
             template_name: template,
             recipient_email: d.email,
-            status: "failed",
-            error_message: reason.slice(0, 1000),
+            status,
+            error_message: reason ? reason.slice(0, 1000) : null,
             metadata: {
               source: "applications_route",
               request_id: requestId,
               application_id: appId,
+              skip_reason: status === "skipped" ? (reason ?? null) : null,
               full_name: d.full_name,
               first_name: d.first_name ?? null,
               last_name: d.last_name ?? null,
@@ -512,7 +521,20 @@ export const Route = createFileRoute("/api/public/applications")({
               ...metadata,
             },
           } as any);
-          if (logErr) console.warn("[applications] mail_failure_log_failed", { requestId, template, reason: logErr.message });
+          if (logErr) console.warn("[applications] mail_log_failed", { requestId, template, status, reason: logErr.message });
+        };
+        // Hat die Versand-Function für diesen Request bereits geloggt?
+        const functionAlreadyLogged = async (template: string) => {
+          try {
+            const { data } = await supabaseAdmin
+              .from("email_send_log")
+              .select("id")
+              .eq("template_name", template)
+              .eq("recipient_email", d.email)
+              .contains("metadata", { request_id: requestId } as any)
+              .limit(1);
+            return !!data?.length;
+          } catch { return false; }
         };
         const logMailAttempt = (template: "invitation" | "application_received", extra?: Record<string, unknown>) => {
           console.log("[applications] mail_attempt " + JSON.stringify({
@@ -531,11 +553,19 @@ export const Route = createFileRoute("/api/public/applications")({
             recipient: d.email, template, status, reason: reason ?? null, ...extra,
           };
           const line = JSON.stringify(payload);
-          if (status === "sent") console.log("[applications] mail_sent " + line);
-          else if (status === "skipped") console.log("[applications] mail_skipped " + line);
-          else {
+          if (status === "sent") {
+            console.log("[applications] mail_sent " + line);
+            if (!(await functionAlreadyLogged(template))) {
+              await writeMailLog(template, "sent", undefined, extra);
+            }
+          } else if (status === "skipped") {
+            console.log("[applications] mail_skipped " + line);
+            await writeMailLog(template, "skipped", reason || "skipped", extra);
+          } else {
             console.warn("[applications] mail_failed " + line);
-            await writeMailFailureLog(template, reason || "unknown_mail_error", extra);
+            if (!(await functionAlreadyLogged(template))) {
+              await writeMailLog(template, "failed", reason || "unknown_mail_error", extra);
+            }
           }
         };
 

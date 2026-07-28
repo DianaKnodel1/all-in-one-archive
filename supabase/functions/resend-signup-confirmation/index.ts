@@ -11,6 +11,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { guardSend } from "../_shared/send-guard.ts";
+import { logMailAbort } from "../_shared/log-abort.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,14 +44,26 @@ serve(async (req) => {
       .select("id, name, domain, logo_url, primary_color, sender_email, sender_name, reply_to_email, smtp_host, smtp_port, smtp_username, smtp_password, is_active, emails_paused, emails_paused_reason")
       .eq("id", tenant_id)
       .maybeSingle();
-    if (tErr || !tenant) return json({ error: "Tenant nicht gefunden" }, 404);
+    const abort = (status: "failed" | "skipped", reason: string, tid: string | null) =>
+      logMailAbort(supabaseAdmin, {
+        source: "resend-signup-confirmation", templateName: "signup_confirmation",
+        recipient: email, tenantId: tid, status, reason,
+      });
+
+    if (tErr || !tenant) {
+      await abort("failed", `tenant_not_found: ${tenant_id}${tErr ? ` (${tErr.message})` : ""}`, null);
+      return json({ error: "Tenant nicht gefunden" }, 404);
+    }
     if (tenant.is_active === false) {
+      await abort("skipped", "tenant_inactive", tenant.id);
       return json({ error: "Tenant ist deaktiviert — kein E-Mail-Versand." }, 503);
     }
     if (!tenant.smtp_host || !tenant.smtp_port || !tenant.smtp_username || !tenant.smtp_password) {
+      await abort("failed", "smtp_not_configured", tenant.id);
       return json({ error: "Tenant hat keine vollständige SMTP-Konfiguration" }, 400);
     }
     if (tenant.emails_paused) {
+      await abort("skipped", `tenant_emails_paused${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}`, tenant.id);
       return json({ error: `E-Mail-Versand für diesen Mandanten ist pausiert${tenant.emails_paused_reason ? `: ${tenant.emails_paused_reason}` : ""}.` }, 503);
     }
 
@@ -73,11 +86,15 @@ serve(async (req) => {
       options: { redirectTo },
     });
     if (gErr || !linkData?.properties) {
+      await abort("failed", `link_generation_failed: ${gErr?.message ?? "unbekannt"}`, tenant.id);
       return json({ error: gErr?.message ?? "Confirmation-Link konnte nicht generiert werden" }, 400);
     }
     // Token-Hash statt action_link (Gmail-Prefetch-Schutz, siehe send-signup-confirmation)
     const tokenHash = (linkData.properties as any)?.hashed_token;
-    if (!tokenHash) return json({ error: "hashed_token fehlt" }, 500);
+    if (!tokenHash) {
+      await abort("failed", "hashed_token_missing", tenant.id);
+      return json({ error: "hashed_token fehlt" }, 500);
+    }
     const actionLink = `${redirectTo}?token_hash=${encodeURIComponent(tokenHash)}&type=signup`;
 
     const senderName = tenant.sender_name ?? tenant.name;
@@ -102,6 +119,7 @@ serve(async (req) => {
 
     const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
     if (!verifyRes.ok) {
+      await abort("failed", `smtp_verify_failed: ${(verifyRes as any).error ?? "unbekannt"}`, tenant.id);
       return json({ success: true }, 200); // generic OK, kein Enumeration-Hint
     }
 
