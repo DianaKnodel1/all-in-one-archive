@@ -302,21 +302,28 @@ function AdminBewerbungenPage() {
         contractSigned: !!p.contract_signed_at,
       } : null;
       const sched = bookingByApp.get(a.id) ?? (a.scheduled_at ? new Date(a.scheduled_at) : null);
-      const tenantEmailKey = `${String(a.tenant_id ?? "")}:${email}`;
+      const phase = computePhase(a, sched, prof);
+      const mailEvents: MailEvent[] = [
+        ...(email ? mailEventsByEmail.get(email) ?? [] : []),
+        ...(mailEventsByApp.get(a.id) ?? []),
+      ];
       return {
         id: a.id,
         name: a.full_name || `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim() || email || "—",
         email: a.email || "—",
         phone: a.phone || "—",
-        phase: computePhase(a, sched, prof),
+        phase,
         lastActivity: a.created_at,
         source: resolveSource(a),
         createdAt: a.created_at,
         hasProfile: !!prof,
-        directEmail: email ? directEmailByRecipient.get(tenantEmailKey) ?? null : null,
+        mailEvents,
+        // Termin-Mail nur erwartet, wenn tatsächlich ein Termin existiert;
+        // Zusage-Mail nur nach angenommener Bewerbung.
+        mailExpected: { termin: !!sched, zusage: phase === "angenommen" },
       };
     }).sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
-  }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, directEmailByRecipient]);
+  }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, mailEventsByEmail, mailEventsByApp]);
 
   // Gruppierte Tabs — statt 12 Chips nur 6 sinnvolle Buckets
   const GROUPS: { key: string; label: string; emoji: string; phases: Phase[] }[] = [
