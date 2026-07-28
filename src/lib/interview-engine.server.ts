@@ -163,7 +163,7 @@ export async function callGateway(
   return content;
 }
 
-export async function runSummary(messages: Msg[]): Promise<{ summary: string; score: number; recommendation: "invite" | "reject" | "unsure" }> {
+export async function runSummary(messages: Msg[]): Promise<{ summary: string; score: number; recommendation: Recommendation }> {
   const transcript = messages
     .map((m) => `${m.role === "assistant" ? "Recruiter" : "Bewerber"}: ${m.text}`)
     .join("\n");
@@ -175,8 +175,8 @@ export async function runSummary(messages: Msg[]): Promise<{ summary: string; sc
     { jsonMode: true },
   );
   // Manche Modelle liefern das JSON in ```json-Blöcken oder mit Vor-/Nachtext.
-  // Ohne Bereinigung landet die Auswertung im Fallback (score 50 / unsure) und
-  // eine eigentlich erteilte Zusage geht verloren.
+  // Ohne Bereinigung landet die Auswertung im Fehler-Fallback und eine
+  // eigentlich erteilte Zusage geht verloren.
   const cleaned = (() => {
     const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
     const body = fenced ? fenced[1] : raw;
@@ -190,18 +190,20 @@ export async function runSummary(messages: Msg[]): Promise<{ summary: string; sc
     return {
       summary: String(parsed.summary ?? ""),
       score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
-      recommendation: rec === "invite" || rec === "reject" || rec === "unsure" ? rec : "unsure",
+      // Nur eine ausdrückliche Absage lehnt ab; alles andere (auch ein
+      // unklares "unsure") gilt als Zusage.
+      recommendation: rec === "reject" ? "reject" : "invite",
     };
   } catch (e) {
-    console.error("[interview] Auswertung nicht lesbar, Fallback unsure:", (e as any)?.message, raw.slice(0, 400));
-    return { summary: raw.slice(0, 2000), score: 50, recommendation: "unsure" };
+    console.error("[interview] Auswertung nicht lesbar:", (e as any)?.message, raw.slice(0, 400));
+    return { summary: raw.slice(0, 2000), score: 50, recommendation: "error" };
   }
 }
 
-export const toAiDecision = (rec: "invite" | "reject" | "unsure") =>
+export const toAiDecision = (rec: Recommendation) =>
   rec === "invite" ? "zusage" : rec === "reject" ? "absage" : "pending";
 
-export const toApplicationStatus = (rec: "invite" | "reject" | "unsure") =>
+export const toApplicationStatus = (rec: Recommendation) =>
   rec === "invite" ? "akzeptiert" : rec === "reject" ? "abgelehnt" : "neu";
 
 // Manche Landing-Pages tragen als Firmenname nur die Domain („personalservice-gmbh.de").
