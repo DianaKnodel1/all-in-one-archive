@@ -49,16 +49,24 @@ Regeln:
 - Abschluss dann sachlich: „Vielen Dank für das offene und ausführliche Gespräch — damit habe ich alles, was ich für den ersten Schritt benötige. Wir melden uns zeitnah mit dem nächsten Schritt bei Ihnen."`;
 
 
-const SUMMARY_PROMPT = `Du bist ein erfahrener Personalleiter. Bewerte das folgende Bewerbungsgespräch und gib eine kurze, ehrliche Einschätzung ab.
+const SUMMARY_PROMPT = `Du bist ein erfahrener Personalleiter. Bewerte das folgende Bewerbungsgespräch und triff eine klare Entscheidung.
+
+WICHTIG — Entscheidungsregel:
+- Ablehnen ("reject") NUR wenn der Bewerber KEINE Zeit hat, KEIN echtes Interesse an einer Mitarbeit zeigt oder das Gespräch nicht ernst nimmt (patzige, respektlose oder offensichtlich unsinnige Antworten).
+- In ALLEN anderen Fällen: einladen ("invite"). Fehlende Erfahrung, Nervosität, kurze Antworten oder Rechtschreibfehler sind KEIN Ablehnungsgrund.
+- "unsure" ist NICHT erlaubt. Es gibt nur "invite" oder "reject".
 
 Antworte AUSSCHLIESSLICH als gültiges JSON-Objekt (keine Markdown-Codeblöcke), mit folgenden Feldern:
 {
   "summary": "string (3–6 Sätze, Deutsch, neutral, fasse die Antworten zusammen + nenne Stärken/Schwächen)",
   "score": number,
-  "recommendation": "invite" | "reject" | "unsure"
+  "recommendation": "invite" | "reject"
 }
 
-score = 0–100 Eignung. invite = empfehlen, reject = nicht empfehlen, unsure = unsicher.`;
+score = 0–100 Eignung. invite = annehmen, reject = ablehnen.`;
+
+/** Ausgang der KI-Auswertung. "error" = Antwort technisch unlesbar (keine Bewertung). */
+export type Recommendation = "invite" | "reject" | "error";
 
 export type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
