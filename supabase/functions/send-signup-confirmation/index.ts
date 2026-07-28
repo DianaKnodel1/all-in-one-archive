@@ -20,6 +20,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { guardSend } from "../_shared/send-guard.ts";
+import { logMailAbort } from "../_shared/log-abort.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -123,6 +124,7 @@ serve(async (req) => {
         const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
         const existing = list?.users.find((u) => (u.email ?? "").toLowerCase() === email.toLowerCase());
         if (existing?.email_confirmed_at) {
+          await abort("skipped", "already_confirmed", tenant.id);
           return json({ error: "Diese E-Mail-Adresse ist bereits registriert und bestätigt. Bitte melde dich an." }, 409);
         }
         const retry = await supabaseAdmin.auth.admin.generateLink({
@@ -131,10 +133,12 @@ serve(async (req) => {
           options: { data: { full_name: full_name ?? "", tenant_id }, redirectTo },
         });
         if (retry.error || !retry.data?.properties?.action_link || !retry.data?.user) {
+          await abort("failed", `link_generation_failed: ${retry.error?.message ?? "unbekannt"}`, tenant.id);
           return json({ error: retry.error?.message ?? "Confirmation-Link konnte nicht erzeugt werden" }, 400);
         }
         linkData = retry.data;
       } else {
+        await abort("failed", `link_generation_failed: ${lErr?.message ?? "unbekannt"}`, tenant.id);
         return json({ error: lErr?.message ?? "Confirmation-Link konnte nicht generiert werden" }, 400);
       }
     }
