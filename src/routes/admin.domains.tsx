@@ -390,9 +390,10 @@ function AdminDomainsPage() {
   );
 }
 
-function StatusDot({ status }: { status: "ok" | "down" | "slow" | "unknown" }) {
+function StatusDot({ status }: { status: DomainStatus }) {
   if (status === "ok") return <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />;
   if (status === "down") return <XCircle className="h-4 w-4 text-destructive shrink-0" />;
+  if (status === "no_landing") return <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />;
   if (status === "slow") return <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />;
   return <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />;
 }
