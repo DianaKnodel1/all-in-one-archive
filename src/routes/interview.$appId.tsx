@@ -147,6 +147,10 @@ function InterviewPage() {
         setMessages(history);
         if (data.ended) setEnded(true);
         if (data.application_status) setAppStatus(data.application_status);
+        {
+          const im = (data as any)?.invite_mail;
+          if (im?.registration_link) setRegistrationLink(im.registration_link);
+        }
         setStartedAt(data.interview_started_at ? new Date(data.interview_started_at).getTime() : Date.now());
         setInitializing(false);
       } catch (e: any) {
@@ -173,6 +177,10 @@ function InterviewPage() {
         setMessages(data.history ?? []);
         if (data.ended) setEnded(true);
         if (data.application_status) setAppStatus(data.application_status);
+        {
+          const im = (data as any)?.invite_mail;
+          if (im?.registration_link) setRegistrationLink(im.registration_link);
+        }
         setStartedAt(data.interview_started_at ? new Date(data.interview_started_at).getTime() : Date.now());
       } catch { /* still waiting */ }
     };
@@ -268,7 +276,9 @@ function InterviewPage() {
     (portal || "").replace(/\/+$/, "") ||
     (typeof window !== "undefined" ? window.location.origin : "");
   // Ohne Token (z. B. Mailversand-Fehler) zeigt die Karte den Hinweis auf die E-Mail.
-  const registerFallbackHref: string | null = null;
+  // Ohne Token (Mailfehler / kein Token gefunden) trotzdem zur Portal-Registrierung
+  // führen — der Bewerber landet so in jedem Fall auf der richtigen Seite.
+  const registerFallbackHref: string | null = portalBase ? `${portalBase}/register` : "/register";
 
 
 
