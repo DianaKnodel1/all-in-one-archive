@@ -1070,6 +1070,25 @@ function DomainSwitchWizard({ tenant, onDone }: { tenant: Tenant; onDone: () => 
   );
 }
 
+interface SmtpHealthRow {
+  tenant_id: string;
+  last_verify_ok: boolean | null;
+  last_verify_at: string | null;
+  last_fail_error: string | null;
+  consecutive_fails: number | null;
+}
+
+type SmtpState = "ok" | "fail" | "unconfigured" | "unknown";
+
+function smtpStateOf(t: Tenant, h?: SmtpHealthRow): SmtpState {
+  const configured = Boolean(
+    (t as any).smtp_host && (t as any).smtp_port && (t as any).smtp_username && (t as any).smtp_password && t.sender_email,
+  );
+  if (!configured) return "unconfigured";
+  if (!h || h.last_verify_ok === null || h.last_verify_ok === undefined) return "unknown";
+  return h.last_verify_ok ? "ok" : "fail";
+}
+
 function AdminTenantsPage() {
 
   const { tenants, loading, reload } = useAllTenants();
