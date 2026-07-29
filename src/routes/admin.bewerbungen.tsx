@@ -321,6 +321,20 @@ function AdminBewerbungenPage() {
         // Termin-Mail nur erwartet, wenn tatsächlich ein Termin existiert;
         // Zusage-Mail nur nach angenommener Bewerbung.
         mailExpected: { termin: !!sched, zusage: phase === "angenommen" },
+        // Was das System als Nächstes verschickt — macht graue Punkte erklärbar.
+        nextStep: computeNextStep({
+          createdAt: a.created_at ?? null,
+          scheduledAt: sched,
+          bookingStatus: a.booking_status ?? null,
+          interviewCompletedAt: a.interview_completed_at ?? null,
+          recommendation: (a.interview_recommendation as string | null) ?? null,
+          inviteSentAt:
+            mailEvents.find((e) =>
+              ["welcome_invitation", "registration_invitation", "invitation", "reminder_invite"].includes(e.key),
+            )?.at ?? null,
+          registered: !!prof,
+          cancelledAt: a.stage_changed_at ?? null,
+        }),
       };
     }).sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
   }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, mailEventsByEmail, mailEventsByApp]);
