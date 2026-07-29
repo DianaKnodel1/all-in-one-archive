@@ -339,6 +339,68 @@ export async function sendRegistrationInviteAfterAiAccept(
   request: Request,
   opts?: { force?: boolean },
 ) {
+  return await sendInviteInternal(app, request, opts);
+}
+
+/**
+ * Portal-Basis-URL für eine Bewerbung auflösen:
+ * Fast-Track-Zielseite → Tenant-Domain → Request-Origin.
+ */
+export async function resolvePortalBase(app: ApplicationRow, request: Request): Promise<string> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  let portalDomain: string | null = null;
+  const targetLandingId = (app as any).target_landing_id ?? null;
+  if (targetLandingId) {
+    const { data: lp } = await supabaseAdmin
+      .from("landing_pages")
+      .select("domain")
+      .eq("id", targetLandingId)
+      .maybeSingle();
+    portalDomain = (lp as any)?.domain ?? null;
+  }
+  if (!portalDomain && app.tenant_id) {
+    const { data: tenant } = await supabaseAdmin
+      .from("tenants")
+      .select("domain, primary_domain")
+      .eq("id", app.tenant_id)
+      .maybeSingle();
+    portalDomain = (tenant as any)?.primary_domain || (tenant as any)?.domain || null;
+  }
+  const fallbackOrigin = new URL(request.url).origin.replace(/\/+$/, "");
+  return portalDomain ? `https://portal.${portalDomain}` : fallbackOrigin;
+}
+
+/** Registrierungs-Link aus einem vorhandenen Token bauen (identisch zur Mail). */
+export function buildRegistrationLink(base: string, token: string, applicationId: string): string {
+  return `${base.replace(/\/+$/, "")}/register?token=${encodeURIComponent(token)}&ref=${encodeURIComponent(applicationId)}`;
+}
+
+/**
+ * Bereits erzeugten Registrierungs-Link einer Bewerbung nachschlagen —
+ * damit der Zusage-Screen den Button auch nach einem Reload zeigen kann.
+ */
+export async function getExistingRegistrationLink(
+  app: ApplicationRow,
+  request: Request,
+): Promise<string | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await supabaseAdmin
+    .from("invitation_tokens")
+    .select("token, created_at")
+    .eq("application_id", app.id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const token = (data as any[] | null)?.[0]?.token;
+  if (!token) return null;
+  const base = await resolvePortalBase(app, request);
+  return buildRegistrationLink(base, String(token), app.id);
+}
+
+async function sendInviteInternal(
+  app: ApplicationRow,
+  request: Request,
+  opts?: { force?: boolean },
+) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   if (!app.email || !app.tenant_id) return { sent: false, skipped: true, reason: "missing_email_or_tenant" };
 
