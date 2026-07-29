@@ -26,7 +26,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
 import { MailChain } from "@/components/mail/MailChain";
 import { computeNextStep } from "@/lib/mail-next-step";
-import { mailLabel, type MailEvent } from "@/lib/mail-chain";
+import { mailLabel, mergeMailEvents, type MailEvent } from "@/lib/mail-chain";
 
 /**
  * Bewerbungen — nur applications (Funnel bis Registrierung).
@@ -216,6 +216,7 @@ function AdminBewerbungenPage() {
   // feste 4er-Kette in der Liste und die Historie im Dialog.
   const [mailEventsByApp, setMailEventsByApp] = useState<Map<string, MailEvent[]>>(new Map());
   const [mailEventsByEmail, setMailEventsByEmail] = useState<Map<string, MailEvent[]>>(new Map());
+  const [mailReload, setMailReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,14 +243,14 @@ function AdminBewerbungenPage() {
       setMailEventsByApp(m);
     })();
     return () => { cancelled = true; };
-  }, [applications]);
+  }, [applications, mailReload]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from("email_send_log")
-        .select("recipient_email, template_name, status, created_at, error_message")
+        .select("id, recipient_email, template_name, status, created_at, error_message")
         .order("created_at", { ascending: false })
         .limit(5000);
       if (cancelled || !data) return;
@@ -265,13 +266,14 @@ function AdminBewerbungenPage() {
           at: r.created_at,
           error: r.error_message ?? null,
           source: "email_send_log",
+          logId: r.id ?? null,
         });
         m.set(email, list);
       }
       setMailEventsByEmail(m);
     })();
     return () => { cancelled = true; };
-  }, [applications]);
+  }, [applications, mailReload]);
 
 
   const nameOf = (id: string | null | undefined): string | null => {
@@ -304,10 +306,10 @@ function AdminBewerbungenPage() {
       } : null;
       const sched = bookingByApp.get(a.id) ?? (a.scheduled_at ? new Date(a.scheduled_at) : null);
       const phase = computePhase(a, sched, prof);
-      const mailEvents: MailEvent[] = [
+      const mailEvents: MailEvent[] = mergeMailEvents([
         ...(email ? mailEventsByEmail.get(email) ?? [] : []),
         ...(mailEventsByApp.get(a.id) ?? []),
-      ];
+      ]);
       return {
         id: a.id,
         name: a.full_name || `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim() || email || "—",
