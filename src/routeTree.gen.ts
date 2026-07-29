@@ -53,6 +53,7 @@ import { Route as AdminDomainsRouteImport } from './routes/admin.domains'
 import { Route as AdminContractsRouteImport } from './routes/admin.contracts'
 import { Route as AdminChatRouteImport } from './routes/admin.chat'
 import { Route as AdminCalendlyRouteImport } from './routes/admin.calendly'
+import { Route as AdminBewerbungstermineRouteImport } from './routes/admin.bewerbungstermine'
 import { Route as AdminBewerbungenRouteImport } from './routes/admin.bewerbungen'
 import { Route as AdminAppointmentsRouteImport } from './routes/admin.appointments'
 import { Route as AdminAiSettingsRouteImport } from './routes/admin.ai-settings'
@@ -312,6 +313,11 @@ const AdminCalendlyRoute = AdminCalendlyRouteImport.update({
   path: '/calendly',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminBewerbungstermineRoute = AdminBewerbungstermineRouteImport.update({
+  id: '/bewerbungstermine',
+  path: '/bewerbungstermine',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminBewerbungenRoute = AdminBewerbungenRouteImport.update({
   id: '/bewerbungen',
   path: '/bewerbungen',
@@ -547,6 +553,7 @@ export interface FileRoutesByFullPath {
   '/admin/ai-settings': typeof AdminAiSettingsRoute
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/bewerbungen': typeof AdminBewerbungenRoute
+  '/admin/bewerbungstermine': typeof AdminBewerbungstermineRoute
   '/admin/calendly': typeof AdminCalendlyRoute
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
@@ -630,6 +637,7 @@ export interface FileRoutesByTo {
   '/admin/ai-settings': typeof AdminAiSettingsRoute
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/bewerbungen': typeof AdminBewerbungenRoute
+  '/admin/bewerbungstermine': typeof AdminBewerbungstermineRoute
   '/admin/calendly': typeof AdminCalendlyRoute
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
@@ -716,6 +724,7 @@ export interface FileRoutesById {
   '/admin/ai-settings': typeof AdminAiSettingsRoute
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/bewerbungen': typeof AdminBewerbungenRoute
+  '/admin/bewerbungstermine': typeof AdminBewerbungstermineRoute
   '/admin/calendly': typeof AdminCalendlyRoute
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
@@ -802,6 +811,7 @@ export interface FileRouteTypes {
     | '/admin/ai-settings'
     | '/admin/appointments'
     | '/admin/bewerbungen'
+    | '/admin/bewerbungstermine'
     | '/admin/calendly'
     | '/admin/chat'
     | '/admin/contracts'
@@ -885,6 +895,7 @@ export interface FileRouteTypes {
     | '/admin/ai-settings'
     | '/admin/appointments'
     | '/admin/bewerbungen'
+    | '/admin/bewerbungstermine'
     | '/admin/calendly'
     | '/admin/chat'
     | '/admin/contracts'
@@ -970,6 +981,7 @@ export interface FileRouteTypes {
     | '/admin/ai-settings'
     | '/admin/appointments'
     | '/admin/bewerbungen'
+    | '/admin/bewerbungstermine'
     | '/admin/calendly'
     | '/admin/chat'
     | '/admin/contracts'
@@ -1373,6 +1385,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCalendlyRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/bewerbungstermine': {
+      id: '/admin/bewerbungstermine'
+      path: '/bewerbungstermine'
+      fullPath: '/admin/bewerbungstermine'
+      preLoaderRoute: typeof AdminBewerbungstermineRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/bewerbungen': {
       id: '/admin/bewerbungen'
       path: '/bewerbungen'
@@ -1714,6 +1733,7 @@ interface AdminRouteChildren {
   AdminAiSettingsRoute: typeof AdminAiSettingsRoute
   AdminAppointmentsRoute: typeof AdminAppointmentsRoute
   AdminBewerbungenRoute: typeof AdminBewerbungenRoute
+  AdminBewerbungstermineRoute: typeof AdminBewerbungstermineRoute
   AdminCalendlyRoute: typeof AdminCalendlyRoute
   AdminChatRoute: typeof AdminChatRoute
   AdminContractsRoute: typeof AdminContractsRoute
@@ -1752,6 +1772,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAiSettingsRoute: AdminAiSettingsRoute,
   AdminAppointmentsRoute: AdminAppointmentsRoute,
   AdminBewerbungenRoute: AdminBewerbungenRoute,
+  AdminBewerbungstermineRoute: AdminBewerbungstermineRoute,
   AdminCalendlyRoute: AdminCalendlyRoute,
   AdminChatRoute: AdminChatRoute,
   AdminContractsRoute: AdminContractsRoute,
@@ -1825,13 +1846,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

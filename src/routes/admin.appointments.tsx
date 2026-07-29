@@ -209,8 +209,10 @@ function AdminAppointmentsPage() {
     <div className="p-5 space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-lg font-heading font-bold text-foreground">Termine</h1>
-          <p className="text-xs text-muted-foreground">{allBookings.length} Buchungen</p>
+          <h1 className="text-lg font-heading font-bold text-foreground">Mitarbeiter-Termine</h1>
+          <p className="text-xs text-muted-foreground">
+            {allBookings.length} Auftrags-/Mitarbeiter-Buchungen · Bewerbungstermine findest du unter „Bewerbungstermine"
+          </p>
         </div>
         <div className="flex gap-2">
           <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -223,8 +225,6 @@ function AdminAppointmentsPage() {
           <Button size="sm" onClick={() => setShowCreate(true)}><Plus className="h-3.5 w-3.5 mr-1" /> Termin erstellen</Button>
         </div>
       </div>
-
-      <ApplicantInterviewAppointments />
 
       {enrichedBookings.length === 0 ? (
         <EmptyState icon={CalendarDays} title="Keine Buchungen" description={filterStatus !== "alle" ? "Kein Eintrag für diesen Filter." : "Noch keine Terminbuchungen vorhanden."} />
