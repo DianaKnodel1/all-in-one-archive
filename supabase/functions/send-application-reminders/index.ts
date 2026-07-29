@@ -328,6 +328,10 @@ serve(async (req) => {
     const dryRun = body?.dry_run === true;
     const onlyApplicationId: string | null = typeof body?.application_id === "string" ? body.application_id : null;
     const onlyEmail: string | null = typeof body?.only_email === "string" ? body.only_email.toLowerCase() : null;
+    // Manueller Sofort-Versand aus dem Admin ("Jetzt senden"): genau eine
+    // Bewerbung, genau eine Reminder-Art, ohne Zeitfenster-Prüfung.
+    const forceKind: string | null =
+      typeof body?.force_kind === "string" && onlyApplicationId ? body.force_kind : null;
 
     // Tenants vorladen
     const { data: tList, error: tErr } = await admin
@@ -573,6 +577,13 @@ serve(async (req) => {
     let sent = 0, skipped = 0, failed = 0;
     const results: any[] = [];
 
+    // Sofort-Versand überschreibt die Kandidatenliste komplett.
+    if (forceKind) {
+      const app = (apps as any[]).find((a) => a.id === onlyApplicationId);
+      todo.length = 0;
+      if (app) todo.push({ app, kind: forceKind as ReminderKind, inviteToken: tokensByAppId.get(app.id)?.token });
+    }
+
     // ─── Rate-Limits (SMTP-Reputationsschutz) ───
     // Neuer SMTP-Vertrag: 150 Mails/h pro Tenant/Sender, Sendefenster 6–22 Uhr.
     // 12h-Cap = 12 × 150 = 1800. Cron läuft alle 5 Min → RUN-Cap 10 (max. 120/h).
@@ -774,7 +785,7 @@ serve(async (req) => {
       // Auch wenn oben etwas schiefging (Log-Zeile fehlt, Query gekappt):
       // dieselbe Mail geht pro Bewerber nur EINMAL raus.
       try {
-        const { count: alreadySent } = await admin
+        const { count: alreadySent } = forceKind ? { count: 0 } : await admin
           .from("application_reminder_log")
           .select("application_id", { count: "exact", head: true })
           .eq("application_id", app.id)
@@ -785,7 +796,7 @@ serve(async (req) => {
           continue;
         }
         const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
-        const { count: recentSend } = await admin
+        const { count: recentSend } = forceKind ? { count: 0 } : await admin
           .from("email_send_log")
           .select("id", { count: "exact", head: true })
           .eq("recipient_email", app.email)

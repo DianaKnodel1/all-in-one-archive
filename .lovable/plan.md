@@ -1,24 +1,38 @@
-## Ergebnis der Prüfung
+## Was verbessert wird
 
-Typprüfung läuft sauber durch (0 Fehler). Die drei Fixes sind im Code so umgesetzt, wie besprochen — nachgelesen, nicht angenommen:
+Zwei Dinge in der E-Mail-Historie eines Bewerbers.
 
-- `recordInviteAttempt` (interview-engine.server.ts, Z. 405–444): liest vor einem „übersprungen" den aktuellen Status und stuft ein bereits erfolgreiches „gesendet" nicht mehr herab. Fehlschläge dürfen weiterhin überschreiben — richtig so.
-- `resendRegistrationInvite` (application-stage.functions.ts, Z. 160–211): prüft ohne `confirmDuplicate` die letzten 20 Stunden im E-Mail-Protokoll und gibt `{ sent:false, reason:"recent_invite", lastSentAt }` zurück, statt zu senden.
-- `MailChain.tsx` (Z. 69–86, 134–153): fängt `recent_invite` ab und zeigt den Bestätigungsdialog mit Datum; erst „Trotzdem senden" löst mit `confirmDuplicate: true` aus.
-- Herkunft (`ai_accept_invite` / `admin_stage_change` / `manual_resend`) wird bis in die Protokoll-Metadaten durchgereicht.
-- `mail-next-step.ts` unterscheidet die drei Fälle (nie ausgelöst / übersprungen / fehlgeschlagen) und bietet jeweils `send_invite` an.
+### 1. Technische Wörter durch Klartext ersetzen
 
-## Go — mit einer Bedingung
+Heute steht in der Historie z. B. `duplicate_application` in Rot – das sieht nach Fehler aus, ist aber keiner. Der Fall aus Screenshot 2: Nathalie Favara hat das Bewerbungsformular **zweimal** abgeschickt. Beim ersten Mal ging „Bewerbung eingegangen" raus (✓ gesendet), beim zweiten Mal hat das System erkannt „gleiche Person, Mail ist schon draußen" und keine zweite geschickt. Genau richtig – nur schlecht erklärt.
 
-Die Spalten `invite_mail_status/_error/_at` sind Voraussetzung; von hier aus ist nicht prüfbar, ob die Migration auf dem produktiven Backend angewendet ist. Ohne sie schlagen die Status-Updates still fehl und die Zeile bleibt auf „nie ausgelöst".
+Künftig steht dort:
+- `duplicate_application` → „Doppelte Bewerbung – Mail war bereits verschickt"
+- `tenant_paused` → „Mandant pausiert – Versand gestoppt"
+- `smtp_incomplete` → „Keine SMTP-Zugangsdaten hinterlegt"
+- `no_domain` → „Keine Domain für den Link hinterlegt"
+- `recipient_suppressed` → „Empfänger gesperrt (Bounce/Abmeldung)"
+- `duplicate_recipient` → „Gleiche Mail ging vor Kurzem schon raus"
+- usw. für alle vorkommenden Gründe
 
-Reihenfolge:
-1. Backend-Server: `bash scripts/migrate.sh`
-2. Kontrolle: `bash scripts/diagnose-invite-mail.sh --local <E-Mail>` — es darf kein „Migration fehlt" mehr erscheinen
-3. Portal-Server deployen
+Zusätzlich wird eine „übersprungen"-Zeile, die nur ein Duplikat ist, dezent grau statt rot dargestellt – kein Alarm-Look für einen Normalfall.
 
-## Ein Punkt zum Feinschliff (kein Blocker)
+### 2. Beim „Nächster Schritt" ein Knopf „Jetzt senden"
 
-Jede erneute Stufenänderung auf „Zusage" schreibt eine weitere `skipped`-Zeile ins E-Mail-Protokoll. Das ist gewollt für die Nachvollziehbarkeit, kann bei häufigem Umsetzen aber das Mail Center und den Dubletten-Hinweis optisch aufblähen. Optionale Verbesserung für später: eine `skipped`-Zeile pro Bewerbung und Grund nur einmal je 20 Stunden schreiben (gleiche Frist wie der Dublettenschutz).
+Neben der Zeile „Nächster Schritt: Erinnerung · Interview in 30 Minuten am 30.07., 09:30 Uhr" kommt ein Knopf **„Jetzt senden"**. Damit geht die Erinnerung sofort raus, statt auf den automatischen Zeitpunkt zu warten – z. B. wenn du einen Bewerber vorab anstupsen willst.
 
-Sag Bescheid, wenn ich diesen Feinschliff noch vor dem Deploy einbauen soll — sonst: Go.
+Sicherheitsnetz: vor dem Senden erscheint eine Rückfrage („Wirklich jetzt senden? Automatisch würde sie um 09:00 rausgehen."). Wird sie manuell verschickt, greift die bestehende Doppelversand-Sperre, d. h. die automatische Erinnerung geht danach **nicht** zusätzlich raus.
+
+Wenn gerade kein Schritt ansteht (z. B. Termin schon vorbei), gibt es keinen Knopf.
+
+### Was nicht gemacht wird
+- Kein Verschieben/Abschalten einzelner Schritte pro Bewerber – das würde einen neuen Planungs-Datensatz brauchen und die Automatik unübersichtlich machen.
+- Keine Massenaktion über hunderte Bewerber gleichzeitig – Risiko von Massen-Fehlversand und SMTP-Sperren zu hoch. Falls du das brauchst, bauen wir es separat mit Vorschau + Limit.
+
+## Technische Details
+
+- `src/lib/mail-chain.ts`: zentrale Übersetzungstabelle `reasonLabel(reason)` (technischer Code → deutscher Text), Rückgabe zusätzlich zum Rohwert, damit Tooltips beides zeigen können.
+- `src/components/mail/MailChain.tsx`: Rohgrund durch das Label ersetzen; Duplikat-/Erwartet-Gründe neutral (muted) statt destructive stylen; „Jetzt senden"-Button an der Nächster-Schritt-Zeile inkl. Bestätigungsdialog (analog zum vorhandenen Resend-Dialog).
+- `src/lib/mail-next-step.ts`: neben Text/Zeitpunkt auch die auslösbare Kennung (`kind`, z. B. `interview_invite_30min`) zurückgeben, damit der Button weiß, was er auslösen soll.
+- Auslösen serverseitig über die bestehende Resend-/Invoke-Route mit `application_id` + `kind`; dabei `application_reminder_log` als „sent" schreiben, sodass der Cron denselben Reminder nicht erneut verschickt.
+- Nur Frontend + eine bestehende Serverroute – keine DB-Migration, kein Edge-Function-Deploy nötig (Portal-Deploy reicht).

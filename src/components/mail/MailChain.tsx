@@ -8,9 +8,10 @@ import { useServerFn } from "@tanstack/react-start";
 import { resendRegistrationInvite } from "@/lib/application-stage.functions";
 import {
   buildMailChain, formatWhen, mailLabel, STEP_STATE_STYLE,
-  statusStyle, type MailEvent,
+  statusStyle, reasonLabel, isHarmlessReason, type MailEvent,
 } from "@/lib/mail-chain";
 import { resendEmailLog } from "@/lib/email-resend";
+import { triggerReminderNow, type ReminderKind } from "@/lib/reminder-trigger";
 import type { NextStep } from "@/lib/mail-next-step";
 
 type Props = {
@@ -34,6 +35,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState<string | null>(null);
   const [confirmDup, setConfirmDup] = useState<string | null>(null);
+  const [confirmNow, setConfirmNow] = useState(false);
   const steps = buildMailChain(events, expected);
   const resend = useServerFn(resendRegistrationInvite);
 
@@ -85,6 +87,24 @@ export function MailChain({ applicationId, applicantName, events, expected, next
     }
   };
 
+  // Geplante Erinnerung sofort auslösen, statt auf den Cron zu warten.
+  const doSendNow = async () => {
+    if (!nextStep.kind) return;
+    setBusy(true);
+    try {
+      const res = await triggerReminderNow(applicationId, nextStep.kind as ReminderKind);
+      if (res.ok) {
+        setConfirmNow(false);
+        toast.success("Erinnerung wurde jetzt versendet");
+        onRefresh?.();
+      } else {
+        toast.error(res.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <div className="flex flex-col items-start gap-0.5">
@@ -129,8 +149,38 @@ export function MailChain({ applicationId, applicantName, events, expected, next
             {busy ? "Sende…" : "Jetzt senden"}
           </Button>
         )}
+        {nextStep.action === "send_reminder" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-5 px-1.5 text-[10px]"
+            disabled={busy}
+            onClick={() => setConfirmNow(true)}
+          >
+            Jetzt senden
+          </Button>
+        )}
       </span>
       </div>
+      {confirmNow && (
+        <Dialog open onOpenChange={(o) => !o && setConfirmNow(false)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Erinnerung sofort senden?</DialogTitle>
+              <DialogDescription>
+                „{nextStep.text}“ ist automatisch geplant. Wenn Sie jetzt senden, geht die Mail
+                sofort an {applicantName} raus — der geplante Versand entfällt dann.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button size="sm" variant="ghost" onClick={() => setConfirmNow(false)}>Abbrechen</Button>
+              <Button size="sm" disabled={busy} onClick={doSendNow}>
+                {busy ? "Sende…" : "Jetzt senden"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
       {confirmDup !== null && (
         <Dialog open onOpenChange={(o) => !o && setConfirmDup(null)}>
           <DialogContent className="max-w-md">
@@ -186,12 +236,20 @@ export function MailChain({ applicationId, applicantName, events, expected, next
           <div className="max-h-[55vh] overflow-y-auto divide-y">
             {history.map((e, i) => {
               const st = statusStyle(e.status);
+              const harmless = isHarmlessReason(e.error);
+              const errorText = e.error ? reasonLabel(e.error) : "";
               return (
                 <div key={`${e.at}-${i}`} className="py-2.5 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-medium">{mailLabel(e.key)}</div>
                     <div className="text-xs text-muted-foreground">{formatWhen(e.at)}</div>
-                    {e.error && <div className="text-xs text-rose-600 mt-0.5 break-words">{e.error}</div>}
+                    {errorText && (
+                      <div
+                        className={`text-xs mt-0.5 break-words ${harmless ? "text-muted-foreground" : "text-rose-600"}`}
+                      >
+                        {errorText}
+                      </div>
+                    )}
                     {!e.error && e.status === "stuck" && (
                       <div className="text-xs text-orange-600 mt-0.5">
                         Schritt wurde ausgelöst, aber kein Versand protokolliert — der Cron holt ihn beim
@@ -200,7 +258,13 @@ export function MailChain({ applicationId, applicantName, events, expected, next
                     )}
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${st.cls}`}>
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs ${
+                        harmless
+                          ? "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          : st.cls
+                      }`}
+                    >
                       {st.icon} {st.text}
                     </span>
                     {e.logId && (
