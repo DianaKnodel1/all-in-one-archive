@@ -334,11 +334,13 @@ serve(async (req) => {
 
       if (dryRun) { sent++; results.push({ id: appt.id, status: "would_send", to: app.email }); continue; }
 
-      // Letzte Sicherung gegen Doppelversand für genau diesen Termin.
+      // Letzte Sicherung gegen Doppelversand für genau DIESEN Termin.
+      // Bewusst NICHT auf Bewerbungsebene sperren: nach einer Umbuchung muss
+      // die Bestätigung für den neuen Termin rausgehen dürfen.
       const dup = await isDuplicateSend(admin, {
-        applicationId: app.id, kind: REMINDER_KIND,
         recipient: app.email, templateName: REMINDER_KIND,
         metadataKey: "appointment_id", metadataValue: appt.id,
+        windowHours: 0,
       });
       if (dup.duplicate) { skipped++; results.push({ id: appt.id, status: "skipped", reason: dup.reason }); continue; }
 
