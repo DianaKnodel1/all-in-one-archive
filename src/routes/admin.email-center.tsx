@@ -59,6 +59,9 @@ function AdminEmailCenterPage() {
   /** Exakte Gesamtzahl aus der DB — unabhängig vom 5.000-Zeilen-Fenster der Liste. */
   const [exactTotal, setExactTotal] = useState<number | null>(null);
   const [tenantNames, setTenantNames] = useState<Record<string, string>>({});
+  const [smtpTrouble, setSmtpTrouble] = useState<
+    { id: string; name: string; reason: string }[]
+  >([]);
   const [visible, setVisible] = useState(100);
   const [resending, setResending] = useState(false);
   const { toast } = useToast();
@@ -81,11 +84,31 @@ function AdminEmailCenterPage() {
         .select("id", { count: "exact", head: true })
         .gte("created_at", since)
         .not("status", "in", `(${HIDDEN_STATUS.join(",")})`),
-      supabase.from("tenants").select("id,name"),
+      supabase.from("tenants").select("id,name,emails_paused,emails_paused_by,emails_paused_reason,smtp_host,smtp_username,smtp_password,sender_email"),
     ]);
     setRows(((data as Row[] | null) ?? []).filter(r => !HIDDEN_STATUS.includes(r.status)));
     setExactTotal(count ?? null);
     setTenantNames(Object.fromEntries(((tenants as { id: string; name: string }[] | null) ?? []).map(t => [t.id, t.name])));
+
+    // SMTP-/Pausen-Probleme sammeln: das sind die Fälle, in denen Mails
+    // still liegen bleiben, ohne dass es jemandem auffällt.
+    const { data: health } = await supabase
+      .from("tenant_smtp_health" as any)
+      .select("tenant_id,last_verify_ok,last_fail_error");
+    const healthMap = new Map<string, any>(((health as any[]) ?? []).map(h => [String(h.tenant_id), h]));
+    const trouble: { id: string; name: string; reason: string }[] = [];
+    for (const t of ((tenants as any[]) ?? [])) {
+      const configured = Boolean(t.smtp_host && t.smtp_username && t.smtp_password && t.sender_email);
+      const h = healthMap.get(String(t.id));
+      if (t.emails_paused) {
+        trouble.push({ id: t.id, name: t.name, reason: t.emails_paused_reason || "Mail-Versand pausiert" });
+      } else if (!configured) {
+        trouble.push({ id: t.id, name: t.name, reason: "Keine SMTP-Zugangsdaten hinterlegt" });
+      } else if (h?.last_verify_ok === false) {
+        trouble.push({ id: t.id, name: t.name, reason: h.last_fail_error || "Letzter SMTP-Check fehlgeschlagen" });
+      }
+    }
+    setSmtpTrouble(trouble);
     setVisible(100);
     setLoading(false);
   };
