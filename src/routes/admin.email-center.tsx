@@ -89,6 +89,25 @@ function AdminEmailCenterPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
 
+  /**
+   * Doppelversand-Wächter: gleiche Vorlage + gleicher Empfänger mehrfach
+   * innerhalb von 24 h erfolgreich versendet. Das darf nicht vorkommen und
+   * deutet auf einen hängenden Reminder-Lauf hin.
+   */
+  const duplicates = useMemo(() => {
+    const since = Date.now() - 24 * 3600_000;
+    const groups = new Map<string, { template: string; recipient: string; count: number; last: string }>();
+    for (const r of rows) {
+      if (r.status !== "sent") continue;
+      if (new Date(r.created_at).getTime() < since) continue;
+      const key = `${r.template_name ?? "?"}|${(r.recipient_email ?? "").toLowerCase()}`;
+      const g = groups.get(key);
+      if (g) { g.count++; if (r.created_at > g.last) g.last = r.created_at; }
+      else groups.set(key, { template: r.template_name ?? "?", recipient: r.recipient_email ?? "", count: 1, last: r.created_at });
+    }
+    return [...groups.values()].filter(g => g.count > 1).sort((a, b) => b.count - a.count);
+  }, [rows]);
+
   /** Tagesverlauf: echte Sendungen pro Tag (für die Balken). */
   const daily = useMemo(() => {
     const days = range === "24h" ? 1 : range === "7d" ? 7 : 30;
