@@ -61,7 +61,7 @@ export function AdminEmailLogsPage() {
         supabase
           .from("email_send_log")
           .select("*")
-          .neq("status", "superseded")
+          .not("status", "in", `(${HIDDEN_EMAIL_STATUS.join(",")})`)
           .gte("created_at", since)
           .order("created_at", { ascending: false }),
       );
