@@ -22,6 +22,7 @@ export const EMAIL_STATUS_COLORS: Record<string, string> = {
   complained: "bg-status-pending/20 text-status-pending border border-status-pending/30 font-medium",
   suppressed: "bg-status-pending/20 text-status-pending border border-status-pending/30 font-medium",
   skipped: "bg-muted text-muted-foreground border border-border font-medium",
+  duplicate: "bg-muted text-muted-foreground border border-border font-medium",
 };
 
 export const EMAIL_STATUS_LABELS: Record<string, string> = {
@@ -32,6 +33,7 @@ export const EMAIL_STATUS_LABELS: Record<string, string> = {
   complained: "Beschwerde",
   suppressed: "Unterdrückt",
   skipped: "Übersprungen",
+  duplicate: "Doppelversand bereinigt",
 };
 
 export const EMAIL_TYPE_LABELS: Record<string, string> = {
@@ -98,10 +100,18 @@ const STATUS_PRIORITY: Record<string, number> = {
   dlq: 3,
   failed: 2,
   superseded: 1,
+  duplicate: 1,
   pending: 0,
 };
 
-const FINAL_STATUSES = new Set(["sent", "failed", "dlq", "bounced", "complained", "suppressed", "skipped"]);
+const FINAL_STATUSES = new Set(["sent", "failed", "dlq", "bounced", "complained", "suppressed", "skipped", "duplicate"]);
+
+/**
+ * Technische Zeilen, die nirgends in Listen oder Statistiken auftauchen:
+ * "superseded" = durch einen Retry abgelöst,
+ * "duplicate"  = vom Aufräum-Skript bereinigter Doppelversand.
+ */
+export const HIDDEN_EMAIL_STATUS = ["superseded", "duplicate"];
 
 /**
  * Logischer Schlüssel eines Versands: Tenant + Template + Empfänger + Tag.
@@ -145,7 +155,7 @@ function winsOver(candidate: EmailLog, current: EmailLog): boolean {
  * alte permanente Fehler verschwinden nach Ack aus dem Banner.
  */
 export function computeEmailStats(logs: EmailLog[]): EmailStats {
-  const finalLogs = dedupeEmailLogs(logs).filter(l => l.status !== "superseded");
+  const finalLogs = dedupeEmailLogs(logs).filter(l => !HIDDEN_EMAIL_STATUS.includes(l.status));
   const total = finalLogs.length;
   const sent = finalLogs.filter(l => l.status === "sent").length;
   const failed = finalLogs.filter(l => ["failed", "dlq"].includes(l.status)).length;

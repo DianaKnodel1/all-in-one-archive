@@ -25,6 +25,7 @@ import {
   EMAIL_STATUS_COLORS,
   EMAIL_STATUS_LABELS,
   EMAIL_TYPE_LABELS,
+  HIDDEN_EMAIL_STATUS,
   computeEmailStats,
   dedupeEmailLogs,
 } from "@/lib/email-stats";
@@ -61,7 +62,7 @@ export function AdminEmailLogsPage() {
         supabase
           .from("email_send_log")
           .select("*")
-          .neq("status", "superseded")
+          .not("status", "in", `(${HIDDEN_EMAIL_STATUS.join(",")})`)
           .gte("created_at", since)
           .order("created_at", { ascending: false }),
       );

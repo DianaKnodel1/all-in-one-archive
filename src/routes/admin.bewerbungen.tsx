@@ -251,6 +251,9 @@ function AdminBewerbungenPage() {
       const { data } = await supabase
         .from("email_send_log")
         .select("id, recipient_email, template_name, status, created_at, error_message")
+        // Technische Zeilen (abgelöste Retries, bereinigte Doppelversände)
+        // würden sonst echte Mails aus dem 5.000er-Fenster verdrängen.
+        .not("status", "in", "(superseded,duplicate)")
         .order("created_at", { ascending: false })
         .limit(5000);
       if (cancelled || !data) return;

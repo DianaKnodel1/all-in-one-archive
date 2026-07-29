@@ -42,11 +42,12 @@ export function MailChain({ applicationId, applicantName, events, expected, next
     (acc, e) => {
       if (e.status === "sent") acc.sent++;
       else if (e.status === "stuck") acc.stuck++;
+      else if (e.status === "duplicate") acc.duplicate++;
       else if (["failed", "dlq", "bounced", "complained"].includes(e.status)) acc.failed++;
       else acc.other++;
       return acc;
     },
-    { sent: 0, failed: 0, stuck: 0, other: 0 },
+    { sent: 0, failed: 0, stuck: 0, duplicate: 0, other: 0 },
   );
 
   const resendOne = async (logId: string) => {
@@ -126,6 +127,9 @@ export function MailChain({ applicationId, applicantName, events, expected, next
             <span className="text-emerald-700 dark:text-emerald-300">✓ {summary.sent} gesendet</span>
             <span className="text-rose-700 dark:text-rose-300">⚠ {summary.failed} fehlgeschlagen</span>
             <span className="text-orange-700 dark:text-orange-300">⏸ {summary.stuck} hängen geblieben</span>
+            {summary.duplicate > 0 && (
+              <span className="text-muted-foreground">⧉ {summary.duplicate} bereinigt</span>
+            )}
             {summary.other > 0 && (
               <span className="text-muted-foreground">⏱ {summary.other} ohne Ergebnis</span>
             )}
