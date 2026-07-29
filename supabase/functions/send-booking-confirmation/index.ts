@@ -334,6 +334,14 @@ serve(async (req) => {
 
       if (dryRun) { sent++; results.push({ id: appt.id, status: "would_send", to: app.email }); continue; }
 
+      // Letzte Sicherung gegen Doppelversand für genau diesen Termin.
+      const dup = await isDuplicateSend(admin, {
+        applicationId: app.id, kind: REMINDER_KIND,
+        recipient: app.email, templateName: REMINDER_KIND,
+        metadataKey: "appointment_id", metadataValue: appt.id,
+      });
+      if (dup.duplicate) { skipped++; results.push({ id: appt.id, status: "skipped", reason: dup.reason }); continue; }
+
       // Kontingent-Schutz (150/h, 2.400/Tag). Blockade wird als "skipped" geloggt.
       const allowance = await guardSend({
         admin, tenantId: tenant.id, templateName: REMINDER_KIND, recipient: app.email,

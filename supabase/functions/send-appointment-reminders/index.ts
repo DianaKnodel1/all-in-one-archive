@@ -314,6 +314,13 @@ serve(async (req) => {
 
       if (dryRun) { sent++; results.push({ application_id: a.id, status: "would_send", to: a.email, magic_link: magicLink }); continue; }
 
+      // Letzte Sicherung gegen Doppelversand (unabhängig von der Vorauswahl).
+      const dup = await isDuplicateSend(admin, {
+        applicationId: a.id, kind: REMINDER_KIND,
+        recipient: a.email, templateName: REMINDER_KIND,
+      });
+      if (dup.duplicate) { skipped++; results.push({ application_id: a.id, status: "skipped", reason: dup.reason }); continue; }
+
       // Terminbezogen: kein 06–22-Uhr-Fenster (Termine sind bis 23:59 buchbar),
       // aber weiterhin Kontingent (150/h, 2.400/Tag).
       const allowance = await guardSend({
