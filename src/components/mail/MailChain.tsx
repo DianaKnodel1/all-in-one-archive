@@ -80,10 +80,11 @@ export function MailChain({ applicationId, applicantName, events, expected, next
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      <div className="flex flex-col items-start gap-0.5">
       <DialogTrigger asChild>
         <button
           type="button"
-          className="flex flex-col items-start gap-0.5 text-left"
+          className="text-left"
           aria-label={`Mail-Historie von ${applicantName} öffnen`}
         >
           <span className="flex flex-wrap items-center gap-1">
@@ -101,14 +102,28 @@ export function MailChain({ applicationId, applicantName, events, expected, next
               );
             })}
           </span>
-          <span
-            className={`text-[10px] ${nextStep.done ? "text-muted-foreground" : "text-sky-700 dark:text-sky-300"}`}
-            title={nextStep.detail}
-          >
-            ➜ Nächster Schritt: {nextStep.text}
-          </span>
         </button>
       </DialogTrigger>
+      <span className="flex items-center gap-1.5">
+        <span
+          className={`text-[10px] ${nextStep.done ? "text-muted-foreground" : "text-sky-700 dark:text-sky-300"}`}
+          title={nextStep.detail}
+        >
+          ➜ Nächster Schritt: {nextStep.text}
+        </span>
+        {nextStep.action === "send_invite" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-5 px-1.5 text-[10px]"
+            disabled={busy}
+            onClick={doResend}
+          >
+            {busy ? "Sende…" : "Jetzt senden"}
+          </Button>
+        )}
+      </span>
+      </div>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>E-Mail-Historie · {applicantName}</DialogTitle>
