@@ -273,9 +273,18 @@ MIG_DIR="$PROJECT_DIR/supabase/manual-migrations"
 STATE_FILE="$PROJECT_DIR/.deploy-migrations-applied"
 touch "$STATE_FILE"
 
-# TARGET_DB_URL aus .env holen falls nicht per Env übergeben
+# TARGET_DB_URL aus der Server-Konfiguration holen, falls nicht per Env übergeben.
+# Wichtig: zuerst $ENV_FILE (in der Regel .env.server) — die .env wird beim
+# git pull überschrieben und enthält die DB-URL meist gar nicht. Vorher wurde
+# nur .env gelesen, deshalb blieb der Migrations-Schritt still stehen.
+if [ -z "$TARGET_DB_URL" ]; then
+  TARGET_DB_URL="$(env_file_value TARGET_DB_URL || true)"
+fi
 if [ -z "$TARGET_DB_URL" ] && [ -f "$PROJECT_DIR/.env" ]; then
-  TARGET_DB_URL="$(grep -E '^TARGET_DB_URL=' "$PROJECT_DIR/.env" | cut -d= -f2- || true)"
+  TARGET_DB_URL="$(ENV_FILE="$PROJECT_DIR/.env" env_file_value TARGET_DB_URL || true)"
+fi
+if [ -z "$TARGET_DB_URL" ]; then
+  warn "TARGET_DB_URL fehlt (weder Umgebung noch $ENV_FILE) — SQL-Migrations werden NICHT eingespielt"
 fi
 
 # State-File einmalig vorpopulieren: bei leerem State gelten alle
