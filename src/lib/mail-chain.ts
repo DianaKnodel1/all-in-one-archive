@@ -13,6 +13,8 @@ export type MailEvent = {
   at: string;
   error: string | null;
   source: "email_send_log" | "reminder_log";
+  /** ID im email_send_log — nur dann ist ein Einzel-Resend möglich. */
+  logId?: string | null;
 };
 
 export type MailStep = {
@@ -108,4 +110,49 @@ export function formatWhen(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString("de-DE", {
     day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
   });
+}
+
+/** Präfixe der Flow-Varianten entfernen, damit gleiche Schritte gepaart werden. */
+export function normalizeMailKey(key: string | null | undefined): string {
+  const k = String(key ?? "").toLowerCase();
+  return k.replace(/^(vermittlung|fasttrack|broker)_/, "");
+}
+
+const PAIR_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Dieselbe Mail wird zweimal protokolliert: einmal im Versand-Log
+ * (email_send_log) und einmal im Reminder-Log (application_reminder_log).
+ * Hier werden beide zu EINEM Eintrag zusammengeführt — der Versand-Log
+ * gewinnt, weil er Status, Fehlertext und die ID für den Resend kennt.
+ * Reminder-Einträge ohne passenden Versand bleiben stehen: genau die
+ * bedeuten „ausgelöst, aber nie versendet".
+ */
+export function mergeMailEvents(events: MailEvent[]): MailEvent[] {
+  const sends = events.filter((e) => e.source === "email_send_log");
+  const reminders = events.filter((e) => e.source !== "email_send_log");
+  const used = new Set<number>();
+
+  const orphanReminders = reminders.filter((r) => {
+    const rk = normalizeMailKey(r.key);
+    const rt = new Date(r.at || 0).getTime();
+    const idx = sends.findIndex(
+      (s, i) =>
+        !used.has(i) &&
+        normalizeMailKey(s.key) === rk &&
+        Math.abs(new Date(s.at || 0).getTime() - rt) <= PAIR_WINDOW_MS,
+    );
+    if (idx >= 0) {
+      used.add(idx);
+      return false;
+    }
+    return true;
+  });
+
+  // Reminder ohne Versand => "hängen geblieben"
+  const stuck = orphanReminders.map((r) =>
+    r.status === "sent" ? { ...r, status: "stuck" } : r,
+  );
+
+  return [...sends, ...stuck].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
 }
