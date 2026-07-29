@@ -14,7 +14,7 @@ import { renderEmail } from "../_shared/email-wrapper.ts";
 import { resolveSender } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo, type LogoResolution } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
-import { failedAttempts, isDuplicateSend } from "../_shared/dedupe.ts";
+import { isDuplicateSend } from "../_shared/dedupe.ts";
 import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
 
 
