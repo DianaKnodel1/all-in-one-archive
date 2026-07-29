@@ -1295,25 +1295,15 @@ function AdminTenantsPage() {
                     {t.is_active ? "Aktiv" : "Inaktiv"}
                   </Badge>
                   {(t as any).emails_paused && (
-                    <>
-                      <Badge
-                        variant="destructive"
-                        className="text-[10px]"
-                        title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}
-                      >
-                        ⏸ Mails pausiert · {pauseTrigger(t)}
-                      </Badge>
-                      {smtpOkIds.has(t.id) && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                          title="Letzter SMTP-Test war erfolgreich — der Versand kann freigegeben werden."
-                        >
-                          SMTP OK — jetzt freigeben
-                        </Badge>
-                      )}
-                    </>
+                    <Badge
+                      variant="destructive"
+                      className="text-[10px]"
+                      title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}
+                    >
+                      ⏸ Mails pausiert · {pauseTrigger(t)}
+                    </Badge>
                   )}
+                  <SmtpBadge state={smtpStateOf(t, smtpHealth[t.id])} health={smtpHealth[t.id]} />
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
@@ -1328,6 +1318,16 @@ function AdminTenantsPage() {
                     <span className="truncate max-w-[120px]">{t.team_leader_name}</span>
                   </div>
                   <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      disabled={testingId === t.id}
+                      onClick={() => runSmtpTest(t)}
+                      title="SMTP-Verbindung jetzt prüfen. Bei Erfolg wird eine automatische Pause aufgehoben."
+                    >
+                      {testingId === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "SMTP testen"}
+                    </Button>
                     {(t as any).emails_paused ? (
                       <Button variant="default" size="sm" onClick={() => resumeEmails(t)} className="text-xs" title={(t as any).emails_paused_reason ?? ""}>
                         Versand fortsetzen
