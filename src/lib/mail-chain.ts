@@ -112,6 +112,25 @@ export function formatWhen(iso: string | null | undefined): string {
   });
 }
 
+/** Anzeige-Stil für einen einzelnen Log-Eintrag (inkl. „hängen geblieben"). */
+export function statusStyle(status: string): { icon: string; cls: string; text: string } {
+  if (status === "stuck") {
+    return {
+      icon: "⏸",
+      cls: "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300",
+      text: "hängen geblieben",
+    };
+  }
+  return STEP_STATE_STYLE[normalize(status)];
+}
+
+function _unusedFormatWhen(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("de-DE", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+}
+
 /** Präfixe der Flow-Varianten entfernen, damit gleiche Schritte gepaart werden. */
 export function normalizeMailKey(key: string | null | undefined): string {
   const k = String(key ?? "").toLowerCase();
