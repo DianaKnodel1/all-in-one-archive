@@ -577,6 +577,13 @@ serve(async (req) => {
     let sent = 0, skipped = 0, failed = 0;
     const results: any[] = [];
 
+    // Sofort-Versand überschreibt die Kandidatenliste komplett.
+    if (forceKind) {
+      const app = (apps as any[]).find((a) => a.id === onlyApplicationId);
+      todo.length = 0;
+      if (app) todo.push({ app, kind: forceKind as ReminderKind, inviteToken: tokensByAppId.get(app.id)?.token });
+    }
+
     // ─── Rate-Limits (SMTP-Reputationsschutz) ───
     // Neuer SMTP-Vertrag: 150 Mails/h pro Tenant/Sender, Sendefenster 6–22 Uhr.
     // 12h-Cap = 12 × 150 = 1800. Cron läuft alle 5 Min → RUN-Cap 10 (max. 120/h).
