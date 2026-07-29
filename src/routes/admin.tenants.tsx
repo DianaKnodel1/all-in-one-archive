@@ -31,6 +31,7 @@ import { SignatureGenerator } from "@/components/SignatureGenerator";
 
 
 function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void }) {
+  // (siehe SmtpHealthRow unten für den Health-Status je Tenant)
   const [name, setName] = useState(tenant?.name ?? "");
   const [domain, setDomain] = useState(tenant?.domain ?? "");
   const [domainAliases, setDomainAliases] = useState<string>(
