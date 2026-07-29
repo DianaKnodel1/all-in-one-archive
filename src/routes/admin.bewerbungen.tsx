@@ -46,7 +46,7 @@ const PHASES: { key: Phase | "alle"; label: string; emoji: string }[] = [
   { key: "abgesagt", label: "Termin abgesagt", emoji: "🚫" },
   { key: "no_show", label: "Nicht erschienen", emoji: "⚠️" },
   { key: "interview_laeuft", label: "Interview läuft", emoji: "🎙" },
-  { key: "auswertung_fehler", label: "Auswertung fehlgeschlagen", emoji: "🛠" },
+  { key: "auswertung_fehler", label: "Auswertung läuft", emoji: "⏳" },
   { key: "angenommen", label: "Zusage erteilt", emoji: "✅" },
   { key: "abgelehnt", label: "Abgelehnt", emoji: "❌" },
   { key: "registriert", label: "Registriert", emoji: "🧾" },
