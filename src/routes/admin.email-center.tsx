@@ -279,6 +279,7 @@ function AdminEmailCenterPage() {
 
       {/* Tagesverlauf */}
       <Card>
+
         <CardContent className="p-4">
           <div className="text-sm font-semibold">Versand-Volumen pro Tag</div>
           <div className="text-[11px] text-muted-foreground mt-0.5">
