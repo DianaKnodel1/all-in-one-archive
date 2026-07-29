@@ -1,26 +1,40 @@
-## Ausgangslage (geprüft)
+## Was der Screenshot zeigt
 
-Der Zusage-Screen mit Button „Jetzt registrieren" existiert bereits (`src/components/interview/ZusageCard.tsx`) und wird in `src/routes/interview.$appId.tsx` angezeigt, sobald die KI zusagt. Der persönliche Registrierungslink (`/register?token=…&ref=…`) kommt aus `sendRegistrationInviteAfterAiAccept` und wird über das Feld `invite_mail.registration_link` an das Portal zurückgegeben.
+Bei Ty Yoshua Agner steht die Kette auf `Bewerbung ✓ · Termin ✓ · Erinnerung ✓ · Zusage ⏱`, dazu die Zeile „Nächster Schritt: Zusage-Mail steht aus".
 
-**Lücke:** Dieser Link wird nur bei den Aktionen `message` und `end` mitgeliefert. Lädt der Bewerber die Seite neu oder kommt später zurück (Aktion `init`), bleibt `registrationLink` leer — die Karte zeigt dann nur den Hinweis „Sie erhalten in wenigen Minuten eine E-Mail" **ohne Button**. Genau das wirkt so, als gäbe es den Button nicht.
+Diese Kombination bedeutet exakt: **Die Bewerbung ist auf „Zusage erteilt", aber zu dieser Bewerbung existiert im E-Mail-Protokoll überhaupt kein Eintrag für die Registrierungs-Einladung** — weder „gesendet", noch „fehlgeschlagen", noch „übersprungen". Erst wenn ein Eintrag vorhanden ist, springt die Anzeige auf ✓/⚠/⏭ und der nächste Schritt wird auf die 24h/72h-Registrierungs-Erinnerungen umgestellt.
 
-## Was gebaut wird
+## Warum kein Eintrag existiert (im Code gefundene Lücke)
 
-1. **Link auch beim Laden/Neuladen liefern**
-   In `src/routes/api/public/interview-chat.ts` (Aktion `init`, und generell bei bereits abgeschlossenem Interview mit Status `akzeptiert`): den bestehenden `invitation_tokens`-Eintrag der Bewerbung nachschlagen und daraus denselben Registrierungslink bauen wie beim Versand. Rückgabe als `invite_mail.registration_link`, damit die Karte den Button rendert.
+Beim Setzen der Zusage über die Admin-Oberfläche prüft das System zuerst, ob für die Bewerbung bereits ein Einladungs-Token existiert. Ist das der Fall, bricht es mit dem internen Grund `already_invited` ab — **ohne Mailversand und ohne jeden Protokolleintrag**. Genau dieser Pfad erzeugt die Anzeige aus dem Screenshot. Alle anderen Abbruchgründe (kein abgeschlossenes Interview, SMTP-Fehler, Token-Fehler) werden dagegen protokolliert.
 
-2. **Linkaufbau vereinheitlichen**
-   Die Portal-Domain-Auflösung (Fast-Track-Landing → Tenant-Domain → Fallback-Origin) aus `src/lib/interview-engine.server.ts` in eine kleine, wiederverwendbare Funktion herausziehen (z. B. `buildRegistrationLink(app, request)`), damit Versand-Mail und Portal-Anzeige garantiert identische Links nutzen.
+Zweite, kleinere Lücke: Bei erfolgreichem Versand schreibt nur die Mail-Funktion selbst ins Protokoll (Vorlagenname `invitation`); im Portal-Pfad wird nichts zusätzlich vermerkt. Fällt dieser Log-Schreibvorgang aus (z. B. Mandant pausiert, SMTP-Timeout im Zwischenschritt), bleibt die Kette ebenfalls auf ⏱ stehen, obwohl der Versand angestoßen wurde.
 
-3. **Portal-Seite absichern**
-   In `src/routes/interview.$appId.tsx` den Link auch aus der `init`-Antwort übernehmen (aktuell nur bei `message`/`end`). Ist trotz Zusage kein Token vorhanden, wird ein Button auf die Portal-Registrierung ohne Token gezeigt statt gar kein Button — der Bewerber landet in jedem Fall auf der Registrierung.
+Ob bei diesem konkreten Bewerber Fall 1 oder Fall 2 vorliegt, lässt sich nur auf der Live-Datenbank feststellen — deshalb ist die Prüfung Schritt 1.
 
-4. **Button-Text/Ziel prüfen**
-   Beschriftung „Jetzt registrieren", Ziel = Registrierungsseite des Mitarbeiterportals (`https://portal.<domain>/register?token=…`). Bleibt wie gehabt, nur jetzt immer sichtbar.
+## Vorgehen
+
+**1. Verifizieren (Live-Backend, keine Codeänderung)**
+`scripts/diagnose-invite-mail.sh` mit der E-Mail des Bewerbers ausführen. Ausgabe zeigt: Empfehlung, Interview-Status, vorhandene Einladungs-Tokens, `invite_mail_status` und alle Protokollzeilen. Damit ist die Ursache belegt.
+
+**2. Lückenlos protokollieren**
+In `src/lib/application-stage.functions.ts`: den `already_invited`-Abbruch nicht mehr still lassen, sondern über dieselbe Protokollfunktion wie die anderen Abbrüche schreiben (Status „übersprungen", Grund „Einladung wurde bereits erzeugt, Token vom TT.MM. HH:MM").
+In `src/lib/interview-engine.server.ts`: die Protokollfunktion so öffnen, dass sie auch von außen mit einem Grund aufrufbar ist, und beim erfolgreichen Versand zusätzlich einen Erfolgsvermerk an der Bewerbung sicherstellen.
+
+**3. Anzeige präziser machen**
+In `src/lib/mail-next-step.ts` den Text „Zusage-Mail steht aus" nach Ursache aufteilen:
+
+- kein Versandversuch protokolliert → „Zusage-Mail wurde nie ausgelöst — jetzt manuell senden"
+- Versuch übersprungen (bereits eingeladen) → „Einladung bereits erzeugt — Registrierung offen"
+- Versuch fehlgeschlagen → „Zusage-Mail fehlgeschlagen:    
+Grundlage dafür sind die an der Bewerbung gespeicherten Felder `invite_mail_status` / `invite_mail_at` / `invite_mail_error`, die in `src/routes/admin.bewerbungen.tsx` zusätzlich an die Berechnung übergeben werden. Ausserdem `bewerbung_magic_link` in die Trefferliste der Zusage-Mails aufnehmen (steht heute nur in der Ketten-Logik, nicht in der Nächster-Schritt-Logik — daher können beide Bausteine auseinanderlaufen).
+
+**4. Handlungsknopf direkt an der Zeile**
+Ist der nächste Schritt „Zusage-Mail wurde nie ausgelöst", direkt in der Nächster-Schritt-Zeile den bereits vorhandenen Erneut-senden-Aufruf anbieten (`resendRegistrationInvite`, erzeugt frischen Token und umgeht den Interview-Schutz bewusst).
 
 ## Technische Details
 
-- Betroffene Dateien: `src/routes/api/public/interview-chat.ts`, `src/lib/interview-engine.server.ts`, `src/routes/interview.$appId.tsx`, ggf. `src/components/interview/ZusageCard.tsx` (Fallback-Zweig ohne Token).
-- Kein Datenbank-Migrationsbedarf: `invitation_tokens` existiert bereits inkl. `application_id`.
-- Keine Änderung am Mailversand — die „Willkommen im Team"-Mail bleibt unverändert.
-- Danach: Portal-Server deployen (`bash scripts/deploy.sh`).
+- Betroffene Dateien: `src/lib/application-stage.functions.ts`, `src/lib/interview-engine.server.ts`, `src/lib/mail-next-step.ts`, `src/routes/admin.bewerbungen.tsx`, `src/components/mail/MailChain.tsx`.
+- Keine Migration nötig; die Spalten `invite_mail_status/_error/_at` existieren bereits (Migration `20260803000000_application_invite_mail_status.sql`).
+- Neue Protokollzeilen laufen unter dem Vorlagennamen `registration_invitation`, der bereits Teil des Zusage-Kettenschritts ist — dadurch wird ⏱ automatisch zu ⏭/⚠ mit Klartextgrund.
+- Danach: Portal-Server deployen (Backend-Funktionen bleiben unverändert).
