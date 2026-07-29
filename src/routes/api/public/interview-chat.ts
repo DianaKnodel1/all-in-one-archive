@@ -301,50 +301,70 @@ async function callGateway(messages: Array<{ role: string; content: string }>, o
 }
 
 
-type Rec = "invite" | "reject" | "error";
+type Rec = "invite" | "reject";
+
+/** Holt das JSON-Objekt aus einer Modellantwort (Codeblöcke/Vortext tolerant). */
+function extractJson(raw: string): string {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fenced ? fenced[1] : raw;
+  const start = body.indexOf("{");
+  const end = body.lastIndexOf("}");
+  return start >= 0 && end > start ? body.slice(start, end + 1) : body.trim();
+}
+
+/** Notauswertung — nach einem geführten Gespräch MUSS eine Entscheidung fallen. */
+function fallbackDecision(messages: Msg[]): { summary: string; score: number; recommendation: Rec } {
+  const answers = messages.filter((m) => m.role !== "assistant").map((m) => m.text.trim()).filter(Boolean);
+  const text = answers.join(" ").toLowerCase();
+  const substantial = answers.filter((a) => a.length >= 8).length;
+  const refuses = /(kein interesse|keine lust|nicht interessiert|will nicht|möchte nicht|abbrechen|absage|doch nicht|keine zeit)/.test(text);
+  const rec: Rec = refuses || substantial < 2 ? "reject" : "invite";
+  return {
+    summary:
+      `Automatische Entscheidung ohne KI-Auswertung (Modellantwort war technisch unlesbar). ` +
+      `Grundlage: ${answers.length} Antworten des Bewerbers, davon ${substantial} inhaltlich. ` +
+      (rec === "reject"
+        ? "Es wurde kein ernsthaftes Interesse erkennbar — Absage."
+        : "Der Bewerber hat mitgewirkt und Interesse gezeigt — Zusage."),
+    score: rec === "invite" ? 60 : 20,
+    recommendation: rec,
+  };
+}
 
 async function runSummary(messages: Msg[]): Promise<{ summary: string; score: number; recommendation: Rec }> {
   const transcript = messages
     .map((m) => `${m.role === "assistant" ? "Recruiter" : "Bewerber"}: ${m.text}`)
     .join("\n");
-  const raw = await callGateway(
-    [
-      { role: "system", content: SUMMARY_PROMPT },
-      { role: "user", content: `Transcript:\n\n${transcript}` },
-    ],
-    { jsonMode: true },
-  );
-  // Manche Modelle antworten in ```json-Blöcken oder mit Vor-/Nachtext.
-  const cleaned = (() => {
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const body = fenced ? fenced[1] : raw;
-    const start = body.indexOf("{");
-    const end = body.lastIndexOf("}");
-    return start >= 0 && end > start ? body.slice(start, end + 1) : body.trim();
-  })();
-  try {
-    const parsed = JSON.parse(cleaned);
-    const rec = parsed.recommendation;
-    return {
-      summary: String(parsed.summary ?? ""),
-      score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
-      // Es gibt nur zwei gültige Ausgänge. Ein unklares/unbekanntes Ergebnis
-      // ("unsure") wird bewusst als Zusage gewertet — abgelehnt wird nur bei
-      // einer ausdrücklichen Absage der KI.
-      recommendation: rec === "reject" ? "reject" : "invite",
-    };
-  } catch {
-    // Technischer Fehler (Antwort nicht lesbar) — das ist KEINE Bewertung
-    // und darf weder Zusage noch Absage auslösen.
-    return { summary: raw.slice(0, 2000), score: 50, recommendation: "error" };
+  let lastRaw = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const strict =
+        attempt === 1
+          ? SUMMARY_PROMPT
+          : `${SUMMARY_PROMPT}\n\nDEIN LETZTER VERSUCH WAR UNGÜLTIG. Antworte NUR mit dem reinen JSON-Objekt — kein Text davor oder danach, keine Markdown-Codeblöcke.`;
+      lastRaw = await callGateway(
+        [
+          { role: "system", content: strict },
+          { role: "user", content: `Transcript:\n\n${transcript}` },
+        ],
+        { jsonMode: true },
+      );
+      const parsed = JSON.parse(extractJson(lastRaw));
+      return {
+        summary: String(parsed.summary ?? "").trim() || lastRaw.slice(0, 2000),
+        score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
+        recommendation: parsed.recommendation === "reject" ? "reject" : "invite",
+      };
+    } catch (e) {
+      console.error(`[interview-chat] Auswertung Versuch ${attempt} fehlgeschlagen:`, (e as any)?.message);
+    }
   }
+  return fallbackDecision(messages);
 }
 
-const toAiDecision = (rec: Rec) =>
-  rec === "invite" ? "zusage" : rec === "reject" ? "absage" : "pending";
+const toAiDecision = (rec: Rec) => (rec === "reject" ? "absage" : "zusage");
 
-const toApplicationStatus = (rec: Rec) =>
-  rec === "invite" ? "akzeptiert" : rec === "reject" ? "abgelehnt" : "neu";
+const toApplicationStatus = (rec: Rec) => (rec === "reject" ? "abgelehnt" : "akzeptiert");
 
 export const Route = createFileRoute("/api/public/interview-chat")({
   server: {
@@ -493,9 +513,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
               interview_status: "done",
               interview_summary: result.summary,
               interview_score: result.score,
-              // "error" ist kein gültiger Wert in der DB — dann bleibt die
-              // Empfehlung leer und die Oberfläche zeigt "Auswertung fehlgeschlagen".
-              interview_recommendation: result.recommendation === "error" ? null : result.recommendation,
+              interview_recommendation: result.recommendation,
               ai_decision: toAiDecision(result.recommendation),
               ai_reason: result.summary,
               interview_completed_at: new Date().toISOString(),
@@ -555,7 +573,7 @@ export const Route = createFileRoute("/api/public/interview-chat")({
           updates.interview_status = "done";
           updates.interview_summary = result.summary;
           updates.interview_score = result.score;
-          updates.interview_recommendation = result.recommendation === "error" ? null : result.recommendation;
+          updates.interview_recommendation = result.recommendation;
           updates.ai_decision = toAiDecision(result.recommendation);
           updates.ai_reason = result.summary;
           updates.interview_completed_at = new Date().toISOString();

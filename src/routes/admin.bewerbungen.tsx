@@ -25,6 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
 import { MailChain } from "@/components/mail/MailChain";
+import { computeNextStep } from "@/lib/mail-next-step";
 import { mailLabel, type MailEvent } from "@/lib/mail-chain";
 
 /**
@@ -46,7 +47,7 @@ const PHASES: { key: Phase | "alle"; label: string; emoji: string }[] = [
   { key: "abgesagt", label: "Termin abgesagt", emoji: "🚫" },
   { key: "no_show", label: "Nicht erschienen", emoji: "⚠️" },
   { key: "interview_laeuft", label: "Interview läuft", emoji: "🎙" },
-  { key: "auswertung_fehler", label: "Auswertung fehlgeschlagen", emoji: "🛠" },
+  { key: "auswertung_fehler", label: "Auswertung läuft", emoji: "⏳" },
   { key: "angenommen", label: "Zusage erteilt", emoji: "✅" },
   { key: "abgelehnt", label: "Abgelehnt", emoji: "❌" },
   { key: "registriert", label: "Registriert", emoji: "🧾" },
@@ -321,6 +322,20 @@ function AdminBewerbungenPage() {
         // Termin-Mail nur erwartet, wenn tatsächlich ein Termin existiert;
         // Zusage-Mail nur nach angenommener Bewerbung.
         mailExpected: { termin: !!sched, zusage: phase === "angenommen" },
+        // Was das System als Nächstes verschickt — macht graue Punkte erklärbar.
+        nextStep: computeNextStep({
+          createdAt: a.created_at ?? null,
+          scheduledAt: sched,
+          bookingStatus: a.booking_status ?? null,
+          interviewCompletedAt: a.interview_completed_at ?? null,
+          recommendation: (a.interview_recommendation as string | null) ?? null,
+          inviteSentAt:
+            mailEvents.find((e) =>
+              ["welcome_invitation", "registration_invitation", "invitation", "reminder_invite"].includes(e.key),
+            )?.at ?? null,
+          registered: !!prof,
+          cancelledAt: a.stage_changed_at ?? null,
+        }),
       };
     }).sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
   }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, mailEventsByEmail, mailEventsByApp]);
@@ -562,6 +577,7 @@ function AdminBewerbungenPage() {
                               applicantName={r.name}
                               events={r.mailEvents}
                               expected={r.mailExpected}
+                              nextStep={r.nextStep}
                             />
 
                           </div>
