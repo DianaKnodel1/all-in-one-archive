@@ -1,51 +1,26 @@
-## Ausgangslage
+## Ausgangslage (geprüft)
 
-Heute pausiert ein Domain-Ping-Job den kompletten Mailversand eines Tenants, sobald alle Domains kurz nicht antworten – und hebt das nie wieder auf. Das ist die falsche Kopplung: **Mails gehen über SMTP raus, nicht über die Webseite.** Eine kurz nicht erreichbare Landing Page ist kein Grund, Bewerbungs- und Reminder-Mails zu stoppen. Deshalb wird die Logik umgebaut.
+Der Zusage-Screen mit Button „Jetzt registrieren" existiert bereits (`src/components/interview/ZusageCard.tsx`) und wird in `src/routes/interview.$appId.tsx` angezeigt, sobald die KI zusagt. Der persönliche Registrierungslink (`/register?token=…&ref=…`) kommt aus `sendRegistrationInviteAfterAiAccept` und wird über das Feld `invite_mail.registration_link` an das Portal zurückgegeben.
 
-## Neue Regel (Kern)
+**Lücke:** Dieser Link wird nur bei den Aktionen `message` und `end` mitgeliefert. Lädt der Bewerber die Seite neu oder kommt später zurück (Aktion `init`), bleibt `registrationLink` leer — die Karte zeigt dann nur den Hinweis „Sie erhalten in wenigen Minuten eine E-Mail" **ohne Button**. Genau das wirkt so, als gäbe es den Button nicht.
 
-| Situation | Bisher | Neu |
-|---|---|---|
-| Alle Domains offline | Versand gestoppt, für immer | **Kein Stopp.** Nur Warnung im Admin + Activity-Log |
-| SMTP-Login schlägt 3× in Folge fehl | Versand gestoppt, für immer | Versand gestoppt (bleibt sinnvoll) |
-| SMTP funktioniert wieder | nichts | **Pause wird automatisch aufgehoben** |
-| Admin pausiert von Hand | Versand gestoppt | Bleibt gestoppt, kein Auto-Resume |
+## Was gebaut wird
 
-Links in Mails zeigen ohnehin auf die aktive Versand-Domain – fällt die aus, greift weiterhin der bestehende Domain-Wechsel („Aktiv setzen").
+1. **Link auch beim Laden/Neuladen liefern**
+   In `src/routes/api/public/interview-chat.ts` (Aktion `init`, und generell bei bereits abgeschlossenem Interview mit Status `akzeptiert`): den bestehenden `invitation_tokens`-Eintrag der Bewerbung nachschlagen und daraus denselben Registrierungslink bauen wie beim Versand. Rückgabe als `invite_mail.registration_link`, damit die Karte den Button rendert.
 
-## Umsetzung
+2. **Linkaufbau vereinheitlichen**
+   Die Portal-Domain-Auflösung (Fast-Track-Landing → Tenant-Domain → Fallback-Origin) aus `src/lib/interview-engine.server.ts` in eine kleine, wiederverwendbare Funktion herausziehen (z. B. `buildRegistrationLink(app, request)`), damit Versand-Mail und Portal-Anzeige garantiert identische Links nutzen.
 
-**1. Domain-Job entkoppeln** (`src/routes/api/public/domain-health-cron.ts`)
-- Auto-Pause-Block entfernen. Stattdessen Activity-Log-Eintrag „Alle Domains offline – Links in Mails könnten ins Leere zeigen" und ein Warn-Flag pro Tenant.
-- Antwort-Auswertung verfeinern: HTTP 404 mit „Keine Landing konfiguriert" gilt nicht mehr als „ok", sondern als eigener Status **„erreichbar, keine Landing"** (gelb) in der Domain-Übersicht.
+3. **Portal-Seite absichern**
+   In `src/routes/interview.$appId.tsx` den Link auch aus der `init`-Antwort übernehmen (aktuell nur bei `message`/`end`). Ist trotz Zusage kein Token vorhanden, wird ein Button auf die Portal-Registrierung ohne Token gezeigt statt gar kein Button — der Bewerber landet in jedem Fall auf der Registrierung.
 
-**2. Alt-Pausen aufräumen**
-- Migration: alle Tenants mit `emails_paused_by = 'auto:domain_down'` werden entpausiert (betrifft GTM, MM, CAC, DGG) und der Vorgang im Activity-Log vermerkt.
-
-**3. SMTP-Status als einzige Wahrheit** (`tenant_smtp_health`)
-- Neuer Health-Cron alle 30 Min: prüft je aktivem Tenant den SMTP-Login (nur Verbindung + AUTH, kein Mailversand) und schreibt `last_verify_ok`, `last_fail_error`, `consecutive_fails`.
-- Erfolgreicher Verify hebt eine `auto:*`-Pause automatisch auf und setzt den Fehlerzähler zurück.
-- Tenants ohne SMTP-Daten werden als „nicht konfiguriert" markiert, nicht als Fehler.
-
-**4. Admin-Anzeige neu** (`src/routes/admin.tenants.tsx`)
-Statt einem grünen Badge vier klare Zustände pro Tenant:
-- 🟢 **SMTP OK** – letzter Check erfolgreich, mit Zeitstempel
-- 🔴 **SMTP-Fehler** – mit letzter Fehlermeldung im Tooltip (z. B. „535 authentication failed")
-- ⚪ **SMTP nicht hinterlegt** – Zugangsdaten fehlen
-- ⏸ **Pausiert** – mit Grund (manuell / SMTP-Fehler) und Freigabe-Button
-
-Dazu ein **„SMTP jetzt testen"**-Button direkt in der Zeile, der sofort prüft und bei Erfolg die Pause aufhebt.
-
-**5. Stille Ausfälle sichtbar machen**
-- Blockierte Mails (Pause, SMTP tot, kein Empfänger) werden bereits geloggt – im Mail Center kommt ein Warnbanner „X Mails wurden wegen SMTP-Problemen nicht versendet" mit Sprung zur betroffenen Domain.
-- Optional gleich mit umgesetzt: Button „Blockierte Mails nachsenden" pro Tenant, sobald SMTP wieder grün ist.
+4. **Button-Text/Ziel prüfen**
+   Beschriftung „Jetzt registrieren", Ziel = Registrierungsseite des Mitarbeiterportals (`https://portal.<domain>/register?token=…`). Bleibt wie gehabt, nur jetzt immer sichtbar.
 
 ## Technische Details
 
-- Kein Schema-Umbau nötig; `tenant_smtp_health` und `tenants.emails_paused*` bleiben. Eine Migration nur für das Entpausieren der Alt-Fälle.
-- Der SMTP-Check nutzt die bestehende `smtp-test`-Edge-Function (kann bereits pausierte Tenants testen und entpausieren) – sie bekommt einen Batch-Modus für den Cron.
-- Cron per pg_cron auf den bestehenden `/api/public/*`-Weg, analog zum Domain-Health-Job.
-
-## Danach offen (nicht Teil dieses Plans)
-
-LH Marketing braucht ein korrektes SMTP-Passwort; MuS Marketing, W3 Personal und ODB haben noch gar keine SMTP-Daten. Nach dem Umbau siehst du das direkt an den Badges statt über Umwege.
+- Betroffene Dateien: `src/routes/api/public/interview-chat.ts`, `src/lib/interview-engine.server.ts`, `src/routes/interview.$appId.tsx`, ggf. `src/components/interview/ZusageCard.tsx` (Fallback-Zweig ohne Token).
+- Kein Datenbank-Migrationsbedarf: `invitation_tokens` existiert bereits inkl. `application_id`.
+- Keine Änderung am Mailversand — die „Willkommen im Team"-Mail bleibt unverändert.
+- Danach: Portal-Server deployen (`bash scripts/deploy.sh`).
