@@ -25,6 +25,7 @@ import {
   EMAIL_STATUS_COLORS,
   EMAIL_STATUS_LABELS,
   EMAIL_TYPE_LABELS,
+  HIDDEN_EMAIL_STATUS,
   computeEmailStats,
   dedupeEmailLogs,
 } from "@/lib/email-stats";
