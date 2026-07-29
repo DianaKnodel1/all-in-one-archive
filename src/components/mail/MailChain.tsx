@@ -69,7 +69,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
     setBusy(true);
     try {
       const res: any = await resend({ data: { applicationId } });
-      if (res?.sent) toast.success("Einladung erneut versendet");
+      if (res?.sent) { toast.success("Einladung erneut versendet"); onRefresh?.(); }
       else toast.error(res?.reason ? `Nicht versendet: ${res.reason}` : "Versand nicht möglich");
     } catch (e: any) {
       toast.error(e?.message ?? "Versand fehlgeschlagen");
