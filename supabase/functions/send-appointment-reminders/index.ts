@@ -18,6 +18,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { renderEmail } from "../_shared/email-wrapper.ts";
 import { guardSend } from "../_shared/send-guard.ts";
+import { isDuplicateSend } from "../_shared/dedupe.ts";
 import { formatAppointmentDate, formatAppointmentTime } from "../_shared/format-datetime.ts";
 
 
@@ -248,9 +249,23 @@ serve(async (req) => {
 
     // Idempotenz: nur solche, die noch nicht als 'sent' geloggt sind
     const appIds = apps.map((a: any) => a.id);
-    const { data: logged } = await admin.from("application_reminder_log")
-      .select("application_id,status").eq("reminder_kind", REMINDER_KIND).in("application_id", appIds);
-    const sentSet = new Set((logged ?? []).filter((r: any) => r.status === "sent").map((r: any) => r.application_id));
+    // Seitenweise laden — sonst kappt PostgREST bei 1.000 Zeilen und der
+    // Reminder geht bei jedem Lauf erneut raus.
+    const sentSet = new Set<string>();
+    {
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data: page, error: pageErr } = await admin.from("application_reminder_log")
+          .select("application_id")
+          .eq("reminder_kind", REMINDER_KIND)
+          .eq("status", "sent")
+          .in("application_id", appIds)
+          .range(from, from + PAGE - 1);
+        if (pageErr) break;
+        for (const r of page ?? []) sentSet.add(r.application_id);
+        if (!page || page.length < PAGE) break;
+      }
+    }
     const todo = apps.filter((a: any) => !sentSet.has(a.id));
 
     // Landing-Pages (für Domain → Magic-Link)
