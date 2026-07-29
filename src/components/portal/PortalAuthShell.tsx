@@ -57,23 +57,6 @@ export default function PortalAuthShell({
     </div>
   );
 
-  const legalRow = (
-    <div
-      className={`mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 font-sans text-xs ${
-        onImage ? "text-primary-foreground/90 [text-shadow:0_1px_3px_rgb(0_0_0/0.55)]" : "text-muted-foreground"
-      }`}
-    >
-      <a href="/impressum" className="hover:underline">
-        Impressum
-      </a>
-      <span className={`h-1 w-1 rounded-full ${onImage ? "bg-primary-foreground/60" : "bg-border"}`} />
-      <a href="/datenschutz" className="hover:underline">
-        Datenschutz
-      </a>
-    </div>
-  );
-
-
   const formBlock = (
     <div className={`w-full ${maxW} relative`}>
       <div className={t.card}>
@@ -87,7 +70,6 @@ export default function PortalAuthShell({
       </div>
 
       {footer}
-      {legalRow}
     </div>
   );
 
