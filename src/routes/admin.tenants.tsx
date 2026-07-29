@@ -1080,6 +1080,49 @@ interface SmtpHealthRow {
 
 type SmtpState = "ok" | "fail" | "unconfigured" | "unknown";
 
+function SmtpBadge({ state, health }: { state: SmtpState; health?: SmtpHealthRow }) {
+  const when = health?.last_verify_at
+    ? new Date(health.last_verify_at).toLocaleString("de-DE")
+    : null;
+
+  if (state === "ok") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] border-emerald-500 text-emerald-600 dark:text-emerald-400"
+        title={when ? `Letzter erfolgreicher SMTP-Check: ${when}` : "SMTP-Check erfolgreich"}
+      >
+        SMTP OK{when ? ` · ${when}` : ""}
+      </Badge>
+    );
+  }
+  if (state === "fail") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] border-destructive text-destructive"
+        title={`${health?.last_fail_error ?? "SMTP-Check fehlgeschlagen"}${when ? ` (${when})` : ""}${
+          health?.consecutive_fails ? ` · ${health.consecutive_fails}x in Folge` : ""
+        }`}
+      >
+        SMTP-Fehler
+      </Badge>
+    );
+  }
+  if (state === "unconfigured") {
+    return (
+      <Badge variant="secondary" className="text-[10px]" title="Für diese Domain sind keine SMTP-Zugangsdaten hinterlegt — es können keine Mails versendet werden.">
+        SMTP nicht hinterlegt
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] text-muted-foreground" title="SMTP wurde noch nicht geprüft. Über „SMTP testen“ sofort prüfen.">
+      SMTP ungeprüft
+    </Badge>
+  );
+}
+
 function smtpStateOf(t: Tenant, h?: SmtpHealthRow): SmtpState {
   const configured = Boolean(
     (t as any).smtp_host && (t as any).smtp_port && (t as any).smtp_username && (t as any).smtp_password && t.sender_email,
