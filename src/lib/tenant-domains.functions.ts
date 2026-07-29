@@ -23,7 +23,7 @@ function normalizeDomain(d: string): string {
 // 1) Domain-Health-Check (on-demand, pingt Root + portal.<domain>)
 // ============================================================
 
-type DomainStatus = "ok" | "down" | "slow" | "unknown";
+type DomainStatus = "ok" | "down" | "slow" | "unknown" | "no_landing";
 
 interface DomainHealth {
   tenant_id: string;
@@ -49,7 +49,17 @@ async function pingDomain(host: string, timeoutMs = 5000): Promise<{ status: Dom
     const res = await fetch(url, { method: "HEAD", signal: ctrl.signal, redirect: "manual" });
     const latency = Date.now() - start;
     clearTimeout(t);
-    // Jede HTTP-Antwort (auch 4xx/5xx/301) heißt: Domain lebt
+    // Jede HTTP-Antwort (auch 4xx/5xx/301) heißt: Domain lebt.
+    // 404 heißt aber: Server antwortet, es ist nur keine Landing Page
+    // für diesen Host hinterlegt — das darf nicht als "ok" durchgehen.
+    if (res.status === 404) {
+      return {
+        status: "no_landing",
+        http_status: 404,
+        latency_ms: latency,
+        error: "Erreichbar, aber keine Landing Page für diesen Host konfiguriert.",
+      };
+    }
     return {
       status: latency > 3000 ? "slow" : "ok",
       http_status: res.status,
@@ -81,14 +91,19 @@ async function checkDomain(domain: string): Promise<{
   ]);
   const rootAlive = root.status !== "down";
   const portalAlive = portal.status !== "down";
-  const preferred = portalAlive ? { host: portalHost, ...portal } : rootAlive ? { host: rootHost, ...root } : { host: rootHost, ...root };
+  // Bevorzugt den Host, der eine echte Seite liefert; ein 404 ("keine Landing")
+  // ist schlechter als eine echte Antwort, aber besser als "down".
+  const rank = (s: DomainStatus) => (s === "ok" ? 3 : s === "slow" ? 2 : s === "no_landing" ? 1 : 0);
+  const preferred = rank(portal.status) >= rank(root.status)
+    ? { host: portalHost, ...portal }
+    : { host: rootHost, ...root };
 
   return {
     status: portalAlive || rootAlive ? preferred.status : "down",
     http_status: preferred.http_status,
     latency_ms: preferred.latency_ms,
     error: portalAlive || rootAlive
-      ? null
+      ? preferred.error
       : `Root und Portal nicht erreichbar. Root: ${root.error ?? "keine Antwort"}; Portal: ${portal.error ?? "keine Antwort"}`,
     checked_url: `https://${preferred.host}/`,
     root_status: root.status,
