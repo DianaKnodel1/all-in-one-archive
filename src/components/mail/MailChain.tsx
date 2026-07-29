@@ -10,12 +10,15 @@ import {
   buildMailChain, formatWhen, mailLabel, STEP_STATE_STYLE,
   type MailEvent,
 } from "@/lib/mail-chain";
+import type { NextStep } from "@/lib/mail-next-step";
 
 type Props = {
   applicationId: string;
   applicantName: string;
   events: MailEvent[];
   expected: { termin: boolean; zusage: boolean };
+  /** Was das System als Nächstes versenden wird — erklärt auch graue Punkte. */
+  nextStep: NextStep;
 };
 
 /**
@@ -23,7 +26,7 @@ type Props = {
  * Immer gleich aufgebaut — dadurch ist auf einen Blick vergleichbar,
  * wo eine Mail fehlt. Klick öffnet die vollständige Historie.
  */
-export function MailChain({ applicationId, applicantName, events, expected }: Props) {
+export function MailChain({ applicationId, applicantName, events, expected, nextStep }: Props) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const steps = buildMailChain(events, expected);
@@ -49,20 +52,30 @@ export function MailChain({ applicationId, applicantName, events, expected }: Pr
       <DialogTrigger asChild>
         <button
           type="button"
-          className="flex flex-wrap items-center gap-1 text-left"
+          className="flex flex-col items-start gap-0.5 text-left"
           aria-label={`Mail-Historie von ${applicantName} öffnen`}
         >
-          {steps.map((s) => {
-            const st = STEP_STATE_STYLE[s.state];
-            const title = s.event
-              ? `${mailLabel(s.event.key)} · ${st.text} · ${formatWhen(s.event.at)}${s.event.error ? ` · ${s.event.error}` : ""}`
-              : `${s.label}: ${st.text}`;
-            return (
-              <span key={s.id} className={`inline-block px-1.5 py-0.5 rounded ${st.cls}`} title={title}>
-                {st.icon} {s.label}
-              </span>
-            );
-          })}
+          <span className="flex flex-wrap items-center gap-1">
+            {steps.map((s) => {
+              const st = STEP_STATE_STYLE[s.state];
+              const title = s.event
+                ? `${mailLabel(s.event.key)} · ${st.text} · ${formatWhen(s.event.at)}${s.event.error ? ` · ${s.event.error}` : ""}`
+                : s.state === "na"
+                  ? `${s.label}: nicht vorgesehen — ${nextStep.detail}`
+                  : `${s.label}: ${st.text}`;
+              return (
+                <span key={s.id} className={`inline-block px-1.5 py-0.5 rounded ${st.cls}`} title={title}>
+                  {st.icon} {s.label}
+                </span>
+              );
+            })}
+          </span>
+          <span
+            className={`text-[10px] ${nextStep.done ? "text-muted-foreground" : "text-sky-700 dark:text-sky-300"}`}
+            title={nextStep.detail}
+          >
+            ➜ Nächster Schritt: {nextStep.text}
+          </span>
         </button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
@@ -72,6 +85,11 @@ export function MailChain({ applicationId, applicantName, events, expected }: Pr
             Alle protokollierten E-Mails zu dieser Bewerbung, neueste zuerst.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <div className="text-xs font-medium">Nächster Schritt: {nextStep.text}</div>
+          <p className="text-xs text-muted-foreground mt-0.5">{nextStep.detail}</p>
+        </div>
 
         {history.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">
