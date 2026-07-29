@@ -591,27 +591,28 @@ serve(async (req) => {
     // 1h-/12h-Zählstand aus email_send_log (zentrale Tabelle im E-Mail-Center).
     const sent12hByTenant = new Map<string, number>();
     const sent1hByTenant = new Map<string, number>();
+    // WICHTIG: serverseitig ZÄHLEN statt Zeilen laden. Beim Laden kappt
+    // PostgREST nach 1.000 Zeilen — die Kontingente wären dann zu niedrig
+    // gerechnet und die SMTP-Grenze würde zu spät gezogen.
     try {
-      const cutoff = new Date(Date.now() - 12 * 3600_000).toISOString();
-      const cutoff1hMs = Date.now() - 3600_000;
-      const tenantIds = Array.from(tenants.keys());
-      if (tenantIds.length) {
-        const { data: recent, error: recentErr } = await admin
+      const cutoff12h = new Date(Date.now() - 12 * 3600_000).toISOString();
+      const cutoff1h = new Date(Date.now() - 3600_000).toISOString();
+      const countSent = async (tenantId: string, sinceIso: string) => {
+        const { count } = await admin
           .from("email_send_log")
-          .select("tenant_id,created_at")
-          .in("tenant_id", tenantIds)
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
           .eq("status", "sent")
-          .gte("created_at", cutoff);
-        if (!recentErr) {
-          for (const r of (recent ?? []) as any[]) {
-            const c = sent12hByTenant.get(r.tenant_id) ?? 0;
-            sent12hByTenant.set(r.tenant_id, c + 1);
-            if (new Date(r.created_at).getTime() >= cutoff1hMs) {
-              const h = sent1hByTenant.get(r.tenant_id) ?? 0;
-              sent1hByTenant.set(r.tenant_id, h + 1);
-            }
-          }
-        }
+          .gte("created_at", sinceIso);
+        return count ?? 0;
+      };
+      for (const tenantId of tenants.keys()) {
+        const [c1h, c12h] = await Promise.all([
+          countSent(tenantId, cutoff1h),
+          countSent(tenantId, cutoff12h),
+        ]);
+        sent1hByTenant.set(tenantId, c1h);
+        sent12hByTenant.set(tenantId, c12h);
       }
     } catch { /* email_send_log optional */ }
 
