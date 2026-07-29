@@ -89,6 +89,25 @@ function AdminEmailCenterPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
 
+  /**
+   * Doppelversand-Wächter: gleiche Vorlage + gleicher Empfänger mehrfach
+   * innerhalb von 24 h erfolgreich versendet. Das darf nicht vorkommen und
+   * deutet auf einen hängenden Reminder-Lauf hin.
+   */
+  const duplicates = useMemo(() => {
+    const since = Date.now() - 24 * 3600_000;
+    const groups = new Map<string, { template: string; recipient: string; count: number; last: string }>();
+    for (const r of rows) {
+      if (r.status !== "sent") continue;
+      if (new Date(r.created_at).getTime() < since) continue;
+      const key = `${r.template_name ?? "?"}|${(r.recipient_email ?? "").toLowerCase()}`;
+      const g = groups.get(key);
+      if (g) { g.count++; if (r.created_at > g.last) g.last = r.created_at; }
+      else groups.set(key, { template: r.template_name ?? "?", recipient: r.recipient_email ?? "", count: 1, last: r.created_at });
+    }
+    return [...groups.values()].filter(g => g.count > 1).sort((a, b) => b.count - a.count);
+  }, [rows]);
+
   /** Tagesverlauf: echte Sendungen pro Tag (für die Balken). */
   const daily = useMemo(() => {
     const days = range === "24h" ? 1 : range === "7d" ? 7 : 30;
@@ -257,6 +276,33 @@ function AdminEmailCenterPage() {
         <Kpi label="Fehlgeschlagen" value={stats.failed} icon={XCircle} tone="rose" />
       </div>
 
+
+      {/* Doppelversand-Warnung */}
+      {duplicates.length > 0 && (
+        <Card className="border-amber-500/50 bg-amber-500/5">
+          <CardContent className="p-4">
+            <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+              Mögliche Doppelversände in den letzten 24 Stunden ({duplicates.length})
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              Dieselbe Vorlage ging mehrfach an dieselbe Adresse. Prüfen mit{" "}
+              <code>scripts/cleanup-duplicate-mails.sh</code>.
+            </div>
+            <div className="mt-3 space-y-1">
+              {duplicates.slice(0, 8).map(d => (
+                <div key={`${d.template}|${d.recipient}`} className="flex items-center gap-3 text-xs">
+                  <span className="flex-1 truncate">{d.recipient}</span>
+                  <span className="truncate text-muted-foreground max-w-[16rem]">{d.template}</span>
+                  <span className="tabular-nums font-semibold text-amber-700 dark:text-amber-400">×{d.count}</span>
+                </div>
+              ))}
+              {duplicates.length > 8 && (
+                <div className="text-[11px] text-muted-foreground">… und {duplicates.length - 8} weitere</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tagesverlauf */}
       <Card>

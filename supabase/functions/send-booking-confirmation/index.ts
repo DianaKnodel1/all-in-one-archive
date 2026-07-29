@@ -14,6 +14,7 @@ import { renderEmail } from "../_shared/email-wrapper.ts";
 import { resolveSender } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo, type LogoResolution } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
+import { failedAttempts, isDuplicateSend } from "../_shared/dedupe.ts";
 import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
 
 
@@ -192,29 +193,23 @@ serve(async (req) => {
 
     const appIds = Array.from(new Set(appts.map((a: any) => a.application_id)));
     const apptIds = appts.map((a: any) => a.id);
-    const { data: sentLogs } = await admin.from("email_send_log")
-      .select("metadata")
-      .eq("template_name", REMINDER_KIND)
-      .eq("status", "sent");
-    const doneAppts = new Set(
-      (sentLogs ?? [])
-        .map((r: any) => r?.metadata?.appointment_id)
-        .filter((id: string | null | undefined) => id && apptIds.includes(id)),
-    );
-
-    // Retry-Cap: pro Appointment max. 3 Fails in email_send_log → dann skippen.
-    const { data: failLogs } = await admin.from("email_send_log")
-      .select("metadata")
-      .eq("template_name", REMINDER_KIND)
-      .eq("status", "failed");
-    const failCount = new Map<string, number>();
-    for (const r of (failLogs ?? [])) {
-      const aid = (r as any).metadata?.appointment_id;
-      if (aid && apptIds.includes(aid)) failCount.set(aid, (failCount.get(aid) ?? 0) + 1);
+    // WICHTIG: pro Termin gezielt zählen statt "alle jemals gesendeten laden".
+    // Das frühere Laden war bei 1.000 Zeilen gekappt — ältere Termine fielen
+    // heraus und die Bestätigung ging erneut raus.
+    const doneAppts = new Set<string>();
+    const capped = new Set<string>();
+    for (const id of apptIds) {
+      const dup = await isDuplicateSend(admin, {
+        templateName: REMINDER_KIND,
+        recipient: "",
+        metadataKey: "appointment_id",
+        metadataValue: id,
+        windowHours: 0,
+      });
+      if (dup.duplicate) { doneAppts.add(id); continue; }
+      // Retry-Cap: pro Termin max. 3 Fehlversuche → dann aussetzen.
+      if (await failedAttempts(admin, REMINDER_KIND, "appointment_id", id) >= 3) capped.add(id);
     }
-    const capped = new Set(
-      Array.from(failCount.entries()).filter(([, n]) => n >= 3).map(([id]) => id),
-    );
 
     const todo = appts.filter((a: any) => !doneAppts.has(a.id) && !capped.has(a.id));
     if (todo.length === 0) return json({ success: true, version: FUNCTION_VERSION, candidates: appts.length, sent: 0, skipped_already_sent: doneAppts.size, skipped_retry_cap: capped.size });
@@ -338,6 +333,16 @@ serve(async (req) => {
       });
 
       if (dryRun) { sent++; results.push({ id: appt.id, status: "would_send", to: app.email }); continue; }
+
+      // Letzte Sicherung gegen Doppelversand für genau DIESEN Termin.
+      // Bewusst NICHT auf Bewerbungsebene sperren: nach einer Umbuchung muss
+      // die Bestätigung für den neuen Termin rausgehen dürfen.
+      const dup = await isDuplicateSend(admin, {
+        recipient: app.email, templateName: REMINDER_KIND,
+        metadataKey: "appointment_id", metadataValue: appt.id,
+        windowHours: 0,
+      });
+      if (dup.duplicate) { skipped++; results.push({ id: appt.id, status: "skipped", reason: dup.reason }); continue; }
 
       // Kontingent-Schutz (150/h, 2.400/Tag). Blockade wird als "skipped" geloggt.
       const allowance = await guardSend({

@@ -248,34 +248,34 @@ serve(async (req) => {
       const cutoff12h = now - 12 * 3600_000;
       const cutoff1h = now - 3600_000;
 
-      const bump = (m: Map<string, number>, id: string) => m.set(id, (m.get(id) ?? 0) + 1);
-      const tally = (rows: Array<{ tenant_id: string | null; ts: string | null }>) => {
-        const c1 = new Map<string, number>(), c12 = new Map<string, number>(), c24 = new Map<string, number>();
-        for (const r of rows) {
-          if (!r.tenant_id || !r.ts) continue;
-          const t = new Date(r.ts).getTime();
-          bump(c24, r.tenant_id);
-          if (t >= cutoff12h) bump(c12, r.tenant_id);
-          if (t >= cutoff1h) bump(c1, r.tenant_id);
-        }
-        return { c1, c12, c24 };
+      // WICHTIG: serverseitig ZÄHLEN statt Zeilen laden. Das frühere Laden war
+      // bei 1.000 Zeilen gekappt — bei viel Verkehr wurden die SMTP-Kontingente
+      // dadurch zu niedrig gerechnet und Grenzen zu spät gezogen.
+      const countRem = async (tenantId: string, sinceIso: string) => {
+        const { count } = await admin.from("reminder_log")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId).eq("status", "sent").gte("sent_at", sinceIso);
+        return count ?? 0;
       };
-
-      const [{ data: remRows }, { data: logRows }] = await Promise.all([
-        admin.from("reminder_log").select("tenant_id, sent_at").eq("status", "sent").gte("sent_at", cutoff24h),
-        admin.from("email_send_log").select("tenant_id, created_at").in("status", COUNTING_STATUSES).gte("created_at", cutoff24h),
-      ]);
-
-      const a = tally(((remRows ?? []) as any[]).map(r => ({ tenant_id: r.tenant_id, ts: r.sent_at })));
-      const b = tally(((logRows ?? []) as any[]).map(r => ({ tenant_id: r.tenant_id, ts: r.created_at })));
-      const merge = (target: Map<string, number>, x: Map<string, number>, y: Map<string, number>) => {
-        for (const id of new Set([...x.keys(), ...y.keys()])) {
-          target.set(id, Math.max(x.get(id) ?? 0, y.get(id) ?? 0));
-        }
+      const countLog = async (tenantId: string, sinceIso: string) => {
+        const { count } = await admin.from("email_send_log")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId).in("status", COUNTING_STATUSES).gte("created_at", sinceIso);
+        return count ?? 0;
       };
-      merge(ctx.sentCountByTenant1h, a.c1, b.c1);
-      merge(ctx.sentCountByTenant12h, a.c12, b.c12);
-      merge(ctx.sentCountByTenant24h, a.c24, b.c24);
+      const cutoff12hIso = new Date(cutoff12h).toISOString();
+      const cutoff1hIso = new Date(cutoff1h).toISOString();
+      for (const t of tenants.values()) {
+        const [r1, l1, r12, l12, r24, l24] = await Promise.all([
+          countRem(t.id, cutoff1hIso), countLog(t.id, cutoff1hIso),
+          countRem(t.id, cutoff12hIso), countLog(t.id, cutoff12hIso),
+          countRem(t.id, cutoff24h), countLog(t.id, cutoff24h),
+        ]);
+        // Beide Quellen protokollieren dieselbe Mail → MAXIMUM, nicht Summe.
+        ctx.sentCountByTenant1h.set(t.id, Math.max(r1, l1));
+        ctx.sentCountByTenant12h.set(t.id, Math.max(r12, l12));
+        ctx.sentCountByTenant24h.set(t.id, Math.max(r24, l24));
+      }
     }
 
 
