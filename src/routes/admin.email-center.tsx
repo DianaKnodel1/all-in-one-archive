@@ -303,6 +303,29 @@ function AdminEmailCenterPage() {
       </div>
 
 
+      {/* Versand-Blocker: pausiert / SMTP kaputt / keine Zugangsdaten */}
+      {smtpTrouble.length > 0 && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="p-4">
+            <div className="text-sm font-semibold text-destructive">
+              {smtpTrouble.length} Domain(s) können aktuell keine Mails versenden
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              Bewerbungs- und Reminder-Mails dieser Domains gehen nicht raus. Unter „Domains / Tenants“ prüfen,
+              SMTP-Daten korrigieren und dort „SMTP testen“ klicken — bei Erfolg wird eine automatische Pause sofort aufgehoben.
+            </div>
+            <div className="mt-3 space-y-1">
+              {smtpTrouble.map(t => (
+                <div key={t.id} className="flex items-center gap-3 text-xs">
+                  <span className="font-medium truncate max-w-[14rem]">{t.name}</span>
+                  <span className="flex-1 truncate text-muted-foreground">{t.reason}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Doppelversand-Warnung */}
       {duplicates.length > 0 && (
         <Card className="border-amber-500/50 bg-amber-500/5">
