@@ -2,7 +2,7 @@
 // Punkte, damit über alle Zeilen hinweg vergleichbar ist, wo etwas fehlt.
 import { EMAIL_TYPE_LABELS } from "./email-stats";
 
-export type MailStepState = "sent" | "failed" | "skipped" | "pending" | "na";
+export type MailStepState = "sent" | "failed" | "skipped" | "pending" | "na" | "duplicate";
 
 export type MailEvent = {
   /** Technischer Vorlagen-/Reminder-Name */
@@ -73,6 +73,7 @@ const STEP_LABELS: Record<MailStep["id"], string> = {
 
 function normalize(status: string): MailStepState {
   if (status === "sent") return "sent";
+  if (status === "duplicate") return "duplicate";
   if (["failed", "dlq", "bounced", "complained"].includes(status)) return "failed";
   if (["skipped", "suppressed"].includes(status)) return "skipped";
   return "pending";
@@ -103,6 +104,7 @@ export const STEP_STATE_STYLE: Record<MailStepState, { icon: string; cls: string
   skipped: { icon: "⏭", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300", text: "übersprungen" },
   pending: { icon: "⏱", cls: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300", text: "noch kein Ergebnis" },
   na: { icon: "–", cls: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400", text: "nicht vorgesehen" },
+  duplicate: { icon: "⧉", cls: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400", text: "Doppelversand (bereinigt)" },
 };
 
 export function formatWhen(iso: string | null | undefined): string {
