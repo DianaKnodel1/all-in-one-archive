@@ -65,8 +65,8 @@ Antworte AUSSCHLIESSLICH als gültiges JSON-Objekt (keine Markdown-Codeblöcke),
 
 score = 0–100 Eignung. invite = annehmen, reject = ablehnen.`;
 
-/** Ausgang der KI-Auswertung. "error" = Antwort technisch unlesbar (keine Bewertung). */
-export type Recommendation = "invite" | "reject" | "error";
+/** Ausgang der KI-Auswertung. Nach einem geführten Gespräch immer eindeutig. */
+export type Recommendation = "invite" | "reject";
 
 export type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
