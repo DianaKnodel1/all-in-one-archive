@@ -49,13 +49,14 @@ const navGroups: NavGroup[] = [
       { title: "Landing-Generator", url: "/admin/landing-generator", icon: Globe },
       { title: "Vermittlung", url: "/admin/vermittlung", icon: Handshake },
       { title: "Verfügbarkeit", url: "/admin/verfuegbarkeit", icon: CalendarClock },
-      { title: "Bewerbungs-Termine", url: "/admin/appointments", icon: CalendarDays },
+      { title: "Bewerbungstermine", url: "/admin/bewerbungstermine", icon: CalendarDays },
     ],
   },
   {
     label: "Aufträge",
     items: [
       { title: "Aufträge", url: "/admin/tasks", icon: ClipboardList },
+      { title: "Mitarbeiter-Termine", url: "/admin/appointments", icon: CalendarDays },
       { title: "Prüfungen", url: "/admin/reviews", icon: CheckSquare },
       { title: "Nachbesserungen", url: "/admin/revisions", icon: RotateCcw },
       { title: "Uploads", url: "/admin/uploads", icon: Upload },
