@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { reasonLabel } from "./mail-chain";
 
 /** Reminder-Arten, die sich aus dem Admin heraus sofort auslösen lassen. */
 export type ReminderKind =
@@ -39,5 +40,3 @@ export async function triggerReminderNow(
     return { ok: false, message: String(e?.message ?? e) };
   }
 }
-
-import { reasonLabel } from "./mail-chain";
