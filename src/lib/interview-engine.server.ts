@@ -396,6 +396,38 @@ export async function getExistingRegistrationLink(
   return buildRegistrationLink(base, String(token), app.id);
 }
 
+/**
+ * Ergebnis eines Einladungs-Versuchs protokollieren — an der Bewerbung UND
+ * (bei Fehlschlag/Übersprungen) im zentralen E-Mail-Protokoll. Öffentlich,
+ * damit auch Abbrüche ausserhalb dieser Datei (z. B. „bereits eingeladen")
+ * lückenlos in der Mail-Kette auftauchen.
+ */
+export async function recordInviteAttempt(
+  app: { id: string; tenant_id?: string | null; email?: string | null },
+  status: "sent" | "failed" | "skipped",
+  error: string | null,
+) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  await supabaseAdmin
+    .from("applications")
+    .update({ invite_mail_status: status, invite_mail_error: error, invite_mail_at: new Date().toISOString() } as any)
+    .eq("id", app.id)
+    .then(() => {}, (e: any) => console.warn("[interview-engine] invite status update:", e?.message ?? e));
+  if (status !== "sent") {
+    await supabaseAdmin
+      .from("email_send_log")
+      .insert({
+        tenant_id: app.tenant_id ?? null,
+        template_name: "registration_invitation",
+        recipient_email: (app.email ?? "").toLowerCase().trim(),
+        status,
+        error_message: error,
+        metadata: { application_id: app.id, source: "ai_accept_invite" },
+      } as any)
+      .then(() => {}, () => {});
+  }
+}
+
 async function sendInviteInternal(
   app: ApplicationRow,
   request: Request,
@@ -406,29 +438,8 @@ async function sendInviteInternal(
 
   // Ergebnis JEDES Versuchs festhalten: an der Bewerbung (Admin-Sicht) und —
   // bei Fehlschlag/Skip — zusätzlich im zentralen E-Mail-Protokoll.
-  const record = async (
-    status: "sent" | "failed" | "skipped",
-    error: string | null,
-  ) => {
-    await supabaseAdmin
-      .from("applications")
-      .update({ invite_mail_status: status, invite_mail_error: error, invite_mail_at: new Date().toISOString() } as any)
-      .eq("id", app.id)
-      .then(() => {}, (e: any) => console.warn("[interview-engine] invite status update:", e?.message ?? e));
-    if (status !== "sent") {
-      await supabaseAdmin
-        .from("email_send_log")
-        .insert({
-          tenant_id: app.tenant_id,
-          template_name: "registration_invitation",
-          recipient_email: (app.email ?? "").toLowerCase().trim(),
-          status,
-          error_message: error,
-          metadata: { application_id: app.id, source: "ai_accept_invite" },
-        } as any)
-        .then(() => {}, () => {});
-    }
-  };
+  const record = (status: "sent" | "failed" | "skipped", error: string | null) =>
+    recordInviteAttempt(app, status, error);
 
   // Schutz gegen verfrühte "Willkommen im Team"-Mails: ohne tatsächlich
   // geführtes Gespräch wird nicht eingeladen (außer Admin erzwingt es).

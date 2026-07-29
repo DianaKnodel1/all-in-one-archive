@@ -102,11 +102,29 @@ export const advanceApplicationStage = createServerFn({ method: "POST" })
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const { data: existing } = await supabaseAdmin
           .from("invitation_tokens")
-          .select("token")
+          .select("token, created_at")
           .eq("application_id", data.applicationId)
+          .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
         if (existing?.token) {
+          // Nicht mehr still abbrechen: der übersprungene Versuch wird
+          // protokolliert, damit die Mail-Kette nicht auf „steht aus" hängt.
+          const when = (existing as any).created_at
+            ? new Date((existing as any).created_at).toLocaleString("de-DE", {
+                day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+              })
+            : null;
+          const reasonText = `Einladung wurde bereits erzeugt${when ? ` (Token vom ${when} Uhr)` : ""}`;
+          const { data: appRow } = await supabaseAdmin
+            .from("applications")
+            .select("id, email, tenant_id")
+            .eq("id", data.applicationId)
+            .maybeSingle();
+          if (appRow) {
+            const { recordInviteAttempt } = await import("@/lib/interview-engine.server");
+            await recordInviteAttempt(appRow as any, "skipped", reasonText);
+          }
           invite_mail = { sent: false, skipped: true, reason: "already_invited" };
         } else {
           const { data: appRow, error: appErr } = await supabaseAdmin

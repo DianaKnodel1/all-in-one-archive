@@ -16,6 +16,8 @@ export type NextStep = {
   at: Date | null;
   /** true = es ist bewusst keine weitere Mail vorgesehen */
   done: boolean;
+  /** Sofort ausführbare Aktion — aktuell nur die manuelle Zusage-Mail. */
+  action?: "send_invite";
 };
 
 export type NextStepInput = {
@@ -30,6 +32,10 @@ export type NextStepInput = {
   registered: boolean;
   /** Termin wurde storniert (Zeitpunkt) */
   cancelledAt: string | null;
+  /** Ergebnis des letzten Einladungs-Versuchs (an der Bewerbung gespeichert) */
+  inviteMailStatus?: string | null;
+  inviteMailError?: string | null;
+  inviteMailAt?: string | null;
 };
 
 const fmt = (d: Date) =>
@@ -73,7 +79,26 @@ export function computeNextStep(i: NextStepInput, now: Date = new Date()): NextS
   }
 
   if (i.recommendation === "invite") {
-    return { text: "Zusage-Mail steht aus", detail: "Die Zusage ist erteilt, die Registrierungseinladung wurde aber noch nicht protokolliert. Sie kann im Dialog manuell erneut ausgelöst werden.", at: null, done: false };
+    const when = i.inviteMailAt ? ` (${fmt(new Date(i.inviteMailAt))} Uhr)` : "";
+    if (i.inviteMailStatus === "failed") {
+      return {
+        text: "Zusage-Mail fehlgeschlagen",
+        detail: `Der Versand der Registrierungseinladung ist gescheitert${when}: ${i.inviteMailError || "Grund unbekannt"}. Mit „Jetzt senden“ wird ein frischer Link erzeugt und erneut versendet.`,
+        at: null, done: false, action: "send_invite",
+      };
+    }
+    if (i.inviteMailStatus === "skipped") {
+      return {
+        text: "Zusage-Mail übersprungen",
+        detail: `Der Versand wurde bewusst übersprungen${when}: ${i.inviteMailError || "Grund unbekannt"}. Falls der Bewerber die Mail nie erhalten hat, kann sie mit „Jetzt senden“ neu ausgelöst werden.`,
+        at: null, done: false, action: "send_invite",
+      };
+    }
+    return {
+      text: "Zusage-Mail wurde nie ausgelöst",
+      detail: "Die Zusage ist erteilt, aber es existiert kein Versandversuch für die Registrierungseinladung — weder gesendet, noch fehlgeschlagen oder übersprungen. Mit „Jetzt senden“ wird ein frischer Registrierungslink erzeugt und verschickt.",
+      at: null, done: false, action: "send_invite",
+    };
   }
 
   // Termin storniert → Rebook-Erinnerungen 24h/72h

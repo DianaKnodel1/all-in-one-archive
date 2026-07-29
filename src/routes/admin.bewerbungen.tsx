@@ -336,10 +336,14 @@ function AdminBewerbungenPage() {
           recommendation: (a.interview_recommendation as string | null) ?? null,
           inviteSentAt:
             mailEvents.find((e) =>
-              ["welcome_invitation", "registration_invitation", "invitation", "reminder_invite"].includes(e.key),
+              ["welcome_invitation", "registration_invitation", "invitation", "reminder_invite", "bewerbung_magic_link"].includes(e.key)
+              && e.status === "sent",
             )?.at ?? null,
           registered: !!prof,
           cancelledAt: a.stage_changed_at ?? null,
+          inviteMailStatus: a.invite_mail_status ?? null,
+          inviteMailError: a.invite_mail_error ?? null,
+          inviteMailAt: a.invite_mail_at ?? null,
         }),
       };
     }).sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
