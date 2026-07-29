@@ -18,6 +18,8 @@ export const Route = createFileRoute("/admin/domains")({
   component: AdminDomainsPage,
 });
 
+type DomainStatus = "ok" | "down" | "slow" | "unknown" | "no_landing";
+
 interface DomainRow {
   tenant_id: string;
   tenant_name: string;
