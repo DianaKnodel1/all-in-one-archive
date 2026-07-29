@@ -1,33 +1,48 @@
 ## Was ich geprüft habe
 
-Die E-Mail-Historie im Bewerbungs-Dialog wird aus **zwei Quellen** zusammengeschüttet (`src/routes/admin.bewerbungen.tsx`):
+Ich habe alle 14 Mail-Funktionen durchgesehen (Bewerbungs-Reminder, Termin-Erinnerung, Terminbestätigung, Chat-Reminder, Onboarding-Reminder, Einladungen, Passwort-Reset, Registrierungs-Bestätigung, Resend, Warteschlange) samt der gemeinsamen Bausteine (Sendefenster, Kontingente, Absender-Auflösung, Protokollierung).
 
-- `email_send_log` — jeder tatsächliche SMTP-Versand (Vorlagenname, z. B. `vermittlung_booking_confirmation`)
-- `application_reminder_log` — der Reminder-Motor protokolliert zusätzlich, dass er den Schritt ausgelöst hat (`reminder_kind`, z. B. `booking_confirmation`)
+## Befunde
 
-Beide Listen werden ungefiltert aneinandergehängt. Deshalb erscheint **eine** Mail zweimal: einmal als „Vermittlung · Terminbestätigung“ (Versand-Log) und einmal als „Erinnerung · Kein Termin (24 h)“ / „Terminbestätigung“ (Reminder-Log). Es wurde also wirklich nur einmal gesendet — die Anzeige zählt doppelt.
+### 1. Dieselbe Doppelversand-Ursache steckt noch in zwei weiteren Jobs (bestätigt)
 
-Antwort auf deine zweite Frage: Fehlversand **wird** protokolliert (`status` = `failed`/`dlq`/`bounced`/`suppressed`/`skipped` mit Fehlertext) und in der Historie rot bzw. gelb angezeigt. Was fehlt: ein Resend **pro einzelner Mail** — aktuell gibt es im Dialog nur „Einladung erneut senden“. Ein generischer Resend existiert bereits (`email-resend`, sendet das gespeicherte HTML erneut), er ist nur im Mail Center verdrahtet, nicht in der Bewerber-Historie.
+Die 111 Mails an einen Bewerber kamen daher, dass die Prüfung „habe ich das schon geschickt?" nur die ersten 1.000 Protokollzeilen laden konnte. Genau dieses Muster steckt unverändert noch in:
 
-## Plan
+- **Terminbestätigung** (`send-booking-confirmation`): lädt zur Prüfung *alle* jemals versendeten Terminbestätigungen — ungefiltert und ohne Seitenlogik. Sobald es mehr als 1.000 davon gibt, fallen ältere Termine aus dem Ergebnis und die Bestätigung geht erneut raus. Dasselbe gilt für die Fehler-Zählung („max. 3 Versuche"), die dadurch ebenfalls unwirksam wird.
+- **Termin-Erinnerung 30 Min vorher** (`send-appointment-reminders`): gleiche Prüfung ohne Seitenlogik — kippt, sobald das Protokoll eines Zeitfensters über 1.000 Zeilen kommt.
 
-**1. Duplikate zusammenführen (Ursache der Doppelanzeige)**
-- Reminder-Log-Einträge und Versand-Log-Einträge werden gepaart, wenn sie denselben logischen Schritt betreffen und zeitlich nah beieinander liegen (Zeitfenster ± 10 Min).
-- Der Versand-Log-Eintrag gewinnt (er kennt Status, Fehlertext und Log-ID für den Resend); der Reminder-Eintrag wird verworfen.
-- Reminder-Einträge **ohne** passenden Versand bleiben sichtbar — genau die sind der wertvolle Hinweis „ausgelöst, aber nie versendet“ und bekommen den Status „hängen geblieben“.
+Das erklärt auch die doppelte „Terminbestätigung" im Screenshot von vorhin.
 
-**2. Fehler-/Hänger-Sicht im Dialog**
-- Kopfzeile im Historie-Dialog: „X gesendet · Y fehlgeschlagen · Z hängen geblieben“.
-- Jeder nicht-gesendete Eintrag zeigt den Klartext-Grund (SMTP-Fehler, Tenant pausiert, keine SMTP-Daten, Empfänger gesperrt).
+### 2. Kontingent-Zähler zählen nur bis 1.000
 
-**3. Einzel-Resend je Mail**
-- Neben jedem Eintrag mit Versand-Log-ID ein „Erneut senden“-Button, der den bestehenden `email-resend`-Weg nutzt.
-- Nach Erfolg wird die Historie neu geladen; der Eintrag wechselt auf „gesendet“ und fällt damit aus der Ausstehend/Fehler-Zählung im Mail Center.
-- Bei Einträgen ohne Versand-Log (reiner Reminder-Hänger) bleibt der bisherige Weg „Einladung erneut senden“ bzw. ein Hinweis, dass der Cron den Schritt beim nächsten Lauf nachholt.
+Der Onboarding-Reminder-Motor (`send-reminders`) ermittelt die Stunden-/Tagesmengen pro Firma, indem er die Protokollzeilen lädt und zählt — ebenfalls bei 1.000 gekappt. Bei viel Verkehr werden die SMTP-Grenzen dadurch zu niedrig gerechnet und Grenzen zu spät gezogen.
 
-## Technische Details
+### 3. Altlasten in der Datenbank
 
-- `src/lib/mail-chain.ts`: neue Funktion `mergeMailEvents(events)` — Normalisierung der Schlüssel (`vermittlung_`/`fasttrack_`-Präfixe entfernen) und Dedup über `normalisierterKey + Zeitfenster`; `MailEvent` bekommt optional `logId`.
-- `src/routes/admin.bewerbungen.tsx`: `email_send_log`-Query zusätzlich `id` selektieren, `mergeMailEvents` vor Übergabe an `MailChain` anwenden. Gleiches in `src/routes/admin.personen.$id.tsx`, falls dort dieselbe Kette gerendert wird.
-- `src/components/mail/MailChain.tsx`: Zusammenfassungszeile, Grund-Anzeige und Zeilen-Resend über `resendEmailLog` aus `src/lib/email-resend.ts`.
-- Reine Frontend-/Anzeige-Änderung: keine Migration, kein Versandverhalten geändert, keine Edge Function angefasst.
+Die bereits versendeten Duplikate (u. a. 111 Zeilen für einen Bewerber) stehen weiter in Protokoll und Mail Center und verfälschen alle Statistiken.
+
+### 4. Kein gemeinsamer Schutz
+
+Jede Funktion baut ihre Doppelsende-Prüfung selbst. Genau deshalb ist derselbe Fehler dreimal entstanden.
+
+## Was ich umsetzen will
+
+1. **Zentrale Doppelsende-Sperre** als gemeinsamer Baustein für alle Mail-Funktionen: „diese Vorlage an diese Adresse" geht nur einmal raus, plus harte Zeitsperre (dieselbe Vorlage nie zweimal innerhalb von 20 Stunden an dieselbe Adresse). Wird direkt vor dem Versand geprüft, unabhängig davon, ob vorher etwas schiefging.
+2. **Terminbestätigung und Termin-Erinnerung** auf diese Sperre umstellen und ihre Prüf-Abfragen auf den jeweiligen Vorgang eingrenzen statt „alles laden" — damit ist die 1.000-Zeilen-Falle strukturell weg.
+3. **Kontingent-Zähler** auf echte Datenbank-Zählung umstellen (statt Zeilen laden und abzählen), damit die SMTP-Grenzen wieder stimmen.
+4. **Aufräum-Skript** (`scripts/cleanup-duplicate-mails.sh`): zeigt erst alle betroffenen Empfänger und Duplikat-Zahlen an, entfernt auf Bestätigung die überzähligen Protokollzeilen (je Vorgang bleibt die erste erhalten). Nichts wird ohne Anzeige gelöscht.
+5. **Wächter im Mail Center**: ein Hinweisbanner „X Doppelversände in den letzten 24 h" mit Klick auf die Liste — falls so etwas je wieder auftritt, siehst du es sofort statt erst nach 111 Mails.
+6. **Prüf-Skript erweitern** (`scripts/mail-audit.sh`): meldet künftig auch Doppelversände und Vorgänge ohne Versandprotokoll („Hänger").
+
+## Technischer Teil
+
+- Neu: `supabase/functions/_shared/dedupe.ts` mit `alreadySent(admin, {applicationId, kind, recipient, templateName, windowHours})` — nutzt `count: "exact", head: true` statt Zeilen zu laden.
+- `send-booking-confirmation`: Dedup-/Fail-Cap-Abfragen auf `metadata->>appointment_id` der aktuellen Kandidaten eingrenzen + zentrale Sperre.
+- `send-appointment-reminders`: Reminder-Log-Abfrage seitenweise (`.range()`) + zentrale Sperre.
+- `send-reminders`: 24h/1h-Zähler auf `count: "exact", head: true` pro Tenant.
+- Kein Datenbank-Schema-Eingriff; das Aufräumen läuft über ein Skript mit Vorschau und Backup-Hinweis.
+
+## Rückfragen
+
+- Beim Aufräumen: sollen die überzähligen Zeilen **gelöscht** oder nur als „Duplikat" markiert werden (Statistiken sauber, Historie bleibt nachvollziehbar)? Ich würde Markieren empfehlen.
+- 20-Stunden-Sperrfrist für gleiche Vorlage + gleiche Adresse — passt das für alle Fälle, oder gibt es eine Mail, die bewusst öfter am Tag rausgehen darf?
