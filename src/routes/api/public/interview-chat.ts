@@ -9,7 +9,11 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sendRegistrationInviteAfterAiAccept, prettifyCompanyName } from "@/lib/interview-engine.server";
+import {
+  sendRegistrationInviteAfterAiAccept,
+  getExistingRegistrationLink,
+  prettifyCompanyName,
+} from "@/lib/interview-engine.server";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -547,9 +551,25 @@ export const Route = createFileRoute("/api/public/interview-chat")({
           aiMessages.push({ role: "user", content: text.trim() });
         }
 
-        // Bei init: nur Greeting holen, falls History leer; sonst Fehler
+        // Bei init: nur Greeting holen, falls History leer; sonst bestehenden Verlauf zurückgeben.
         if (action === "init" && history.length > 0) {
-          return json({ reply: history[history.length - 1]?.text ?? "", ended: false, history, interview_started_at: app.interview_started_at ?? null, branding: brandingOut });
+          const alreadyDone = app.interview_status === "done" || app.interview_status === "taken_over";
+          // Nach Reload den bereits erzeugten Registrierungs-Link mitliefern,
+          // damit der Zusage-Screen den Button „Jetzt registrieren" zeigt.
+          let inviteMail: any = undefined;
+          if (alreadyDone && app.status === "akzeptiert") {
+            const link = await getExistingRegistrationLink(app as any, request);
+            if (link) inviteMail = { sent: true, registration_link: link };
+          }
+          return json({
+            reply: history[history.length - 1]?.text ?? "",
+            ended: alreadyDone,
+            history,
+            application_status: alreadyDone ? app.status ?? undefined : undefined,
+            invite_mail: inviteMail,
+            interview_started_at: app.interview_started_at ?? null,
+            branding: brandingOut,
+          });
         }
 
         // AI-Antwort
