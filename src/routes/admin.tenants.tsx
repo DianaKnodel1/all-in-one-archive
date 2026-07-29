@@ -1077,33 +1077,67 @@ function AdminTenantsPage() {
   const [switchTenant, setSwitchTenant] = useState<Tenant | undefined>();
   const { toast } = useToast();
   const setDnsFn = useServerFn(setLandingDnsRecord);
-  const [smtpOkIds, setSmtpOkIds] = useState<Set<string>>(new Set());
+  const [smtpHealth, setSmtpHealth] = useState<Record<string, SmtpHealthRow>>({});
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const loadHealth = async () => {
+    const { data } = await supabase
+      .from("tenant_smtp_health" as any)
+      .select("tenant_id,last_verify_ok,last_verify_at,last_fail_error,consecutive_fails");
+    if (!data) return;
+    const map: Record<string, SmtpHealthRow> = {};
+    for (const r of data as any[]) map[String(r.tenant_id)] = r as SmtpHealthRow;
+    setSmtpHealth(map);
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from("tenant_smtp_health" as any)
-        .select("tenant_id,last_verify_ok");
+        .select("tenant_id,last_verify_ok,last_verify_at,last_fail_error,consecutive_fails");
       if (cancelled || !data) return;
-      setSmtpOkIds(
-        new Set(
-          (data as any[])
-            .filter((r) => r?.last_verify_ok === true)
-            .map((r) => String(r.tenant_id)),
-        ),
-      );
+      const map: Record<string, SmtpHealthRow> = {};
+      for (const r of data as any[]) map[String(r.tenant_id)] = r as SmtpHealthRow;
+      setSmtpHealth(map);
     })();
     return () => {
       cancelled = true;
     };
   }, [tenants]);
 
+  const runSmtpTest = async (t: Tenant) => {
+    setTestingId(t.id);
+    try {
+      const { data, error } = await supabase.functions.invoke<any>("smtp-test", { body: { tenant_id: t.id } });
+      if (error) throw error;
+      if (data?.success === false) {
+        toast({
+          title: "SMTP-Test fehlgeschlagen",
+          description: data?.error ?? "Unbekannter Fehler",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: data?.auto_resumed ? "SMTP OK — Versand wieder freigegeben" : "SMTP OK",
+          description: data?.message ?? "Verbindung und Login erfolgreich.",
+        });
+      }
+    } catch (e: any) {
+      toast({ title: "SMTP-Test fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setTestingId(null);
+      await loadHealth();
+      reload();
+    }
+  };
+
   const pauseTrigger = (t: Tenant) => {
     const by = (t as any).emails_paused_by as string | null;
     if (!by) return "unbekannt";
     if (by.startsWith("manual:")) return "manuell";
-    if (by === "auto:domain_down") return "automatisch (Domains offline)";
+    if (by === "auto:smtp_fail") return "automatisch (SMTP-Fehler)";
+    if (by === "auto:domain_down") return "veraltet (Domain-Ausfall)";
     if (by.startsWith("auto:")) return `automatisch (${by.slice(5)})`;
     return "manuell";
   };
