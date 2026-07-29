@@ -465,31 +465,11 @@ async function sendInviteInternal(
     return { sent: false, error: tokenErr?.message ?? "token_failed" };
   }
 
-  // Portal-Domain zuerst aus Fast-Track-Zielseite (target_landing_id) auflösen —
-  // Vermittlungs-Tenants haben oft keine eigene portal.-Subdomain.
-  let portalDomain: string | null = null;
-  const targetLandingId = (app as any).target_landing_id ?? null;
-  if (targetLandingId) {
-    const { data: lp } = await supabaseAdmin
-      .from("landing_pages")
-      .select("domain")
-      .eq("id", targetLandingId)
-      .maybeSingle();
-    portalDomain = (lp as any)?.domain ?? null;
-  }
-  if (!portalDomain) {
-    const { data: tenant } = await supabaseAdmin
-      .from("tenants")
-      .select("domain, primary_domain")
-      .eq("id", app.tenant_id)
-      .maybeSingle();
-    portalDomain = (tenant as any)?.primary_domain || (tenant as any)?.domain || null;
-  }
-  const fallbackOrigin = new URL(request.url).origin.replace(/\/+$/, "");
-  const base = portalDomain ? `https://portal.${portalDomain}` : fallbackOrigin;
-  // ?ref=<application_id> hängt die Vermittlungs-Bewerbung an den Registrierungs-Link,
-  // damit später eindeutig zurück-verknüpft werden kann (linked_application_id / Funnel).
-  const registrationLink = `${base}/register?token=${encodeURIComponent(tokenRow.token)}&ref=${encodeURIComponent(app.id)}`;
+  // Portal-Domain (Fast-Track-Zielseite → Tenant → Origin) zentral auflösen,
+  // damit Mail-Link und Portal-Button garantiert identisch sind.
+  // ?ref=<application_id> hängt die Vermittlungs-Bewerbung an den Link.
+  const base = await resolvePortalBase(app, request);
+  const registrationLink = buildRegistrationLink(base, tokenRow.token, app.id);
   const name = app.full_name || email;
   const firstName = app.first_name || String(name).trim().split(/\s+/)[0] || "";
   const lastName = app.last_name || String(name).trim().split(/\s+/).slice(1).join(" ");
