@@ -328,6 +328,10 @@ serve(async (req) => {
     const dryRun = body?.dry_run === true;
     const onlyApplicationId: string | null = typeof body?.application_id === "string" ? body.application_id : null;
     const onlyEmail: string | null = typeof body?.only_email === "string" ? body.only_email.toLowerCase() : null;
+    // Manueller Sofort-Versand aus dem Admin ("Jetzt senden"): genau eine
+    // Bewerbung, genau eine Reminder-Art, ohne Zeitfenster-Prüfung.
+    const forceKind: string | null =
+      typeof body?.force_kind === "string" && onlyApplicationId ? body.force_kind : null;
 
     // Tenants vorladen
     const { data: tList, error: tErr } = await admin
