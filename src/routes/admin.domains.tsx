@@ -24,13 +24,13 @@ interface DomainRow {
   domain: string;
   is_primary: boolean;
   is_root: boolean;
-  status: "ok" | "down" | "slow" | "unknown";
+  status: DomainStatus;
   http_status: number | null;
   latency_ms: number | null;
   error: string | null;
   checked_url?: string;
-  root_status?: "ok" | "down" | "slow" | "unknown";
-  portal_status?: "ok" | "down" | "slow" | "unknown";
+  root_status?: DomainStatus;
+  portal_status?: DomainStatus;
 }
 
 function AdminDomainsPage() {
