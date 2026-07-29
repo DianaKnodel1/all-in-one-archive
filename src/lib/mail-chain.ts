@@ -45,6 +45,50 @@ export const REMINDER_LABELS: Record<string, string> = {
   reminder_invite: "Erinnerung · Registrierungseinladung",
 };
 
+/**
+ * Technische Skip-/Fehlergründe in verständliches Deutsch übersetzen.
+ * In der Oberfläche darf nie ein Code wie `duplicate_application` stehen.
+ */
+const REASON_LABELS: Record<string, string> = {
+  duplicate_application: "Doppelte Bewerbung – die Mail war bereits verschickt",
+  already_sent: "Bereits versendet – kein zweiter Versand nötig",
+  duplicate_within_20h: "Gleiche Mail ging in den letzten 20 Stunden schon raus",
+  duplicate_recipient_template: "Gleiche Mail ging an diesen Empfänger bereits raus",
+  tenant_paused: "Mailversand für diesen Mandanten ist pausiert",
+  tenant_rate_limited_retry_later: "Sendelimit erreicht – wird automatisch nachgeholt",
+  tenant_run_cap: "Sendelimit für diesen Lauf erreicht – wird nachgeholt",
+  tenant_1h_cap: "Stundenlimit erreicht – wird automatisch nachgeholt",
+  tenant_12h_cap: "Tageslimit erreicht – wird automatisch nachgeholt",
+  smtp_incomplete: "Keine SMTP-Zugangsdaten hinterlegt",
+  no_email_or_tenant: "Keine E-Mail-Adresse oder kein Mandant hinterlegt",
+  no_magic_token: "Kein persönlicher Link vorhanden",
+  no_invite_token: "Keine Registrierungseinladung vorhanden",
+  tenant_missing: "Mandant nicht gefunden",
+  no_domain: "Keine Domain hinterlegt",
+  no_tenant_domain: "Keine Domain für den Mandanten hinterlegt",
+  no_calendly_link: "Kein Terminbuchungs-Link hinterlegt",
+  recent_invite: "Einladung wurde vor Kurzem schon versendet",
+  outside_send_window: "Außerhalb der Versandzeit (06–22 Uhr) – wird nachgeholt",
+  recipient_suppressed: "Empfänger gesperrt (frühere Zustellfehler)",
+  routing_failed: "Absender konnte nicht ermittelt werden",
+};
+
+/** Gründe, die kein Problem sind – die werden dezent (grau) dargestellt. */
+const HARMLESS_REASONS = new Set([
+  "duplicate_application", "already_sent", "duplicate_within_20h",
+  "duplicate_recipient_template", "recent_invite",
+]);
+
+export function reasonLabel(reason: string | null | undefined): string {
+  if (!reason) return "";
+  const key = String(reason).trim();
+  return REASON_LABELS[key] ?? REASON_LABELS[key.replace(/^routing_/, "routing_")] ?? key.replace(/_/g, " ");
+}
+
+export function isHarmlessReason(reason: string | null | undefined): boolean {
+  return !!reason && HARMLESS_REASONS.has(String(reason).trim());
+}
+
 const STEP_KEYS: Record<MailStep["id"], string[]> = {
   bewerbung: ["application_received"],
   termin: ["booking_confirmation"],
