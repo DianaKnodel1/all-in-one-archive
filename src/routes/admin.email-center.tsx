@@ -277,9 +277,35 @@ function AdminEmailCenterPage() {
       </div>
 
 
+      {/* Doppelversand-Warnung */}
+      {duplicates.length > 0 && (
+        <Card className="border-amber-500/50 bg-amber-500/5">
+          <CardContent className="p-4">
+            <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+              Mögliche Doppelversände in den letzten 24 Stunden ({duplicates.length})
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              Dieselbe Vorlage ging mehrfach an dieselbe Adresse. Prüfen mit{" "}
+              <code>scripts/cleanup-duplicate-mails.sh</code>.
+            </div>
+            <div className="mt-3 space-y-1">
+              {duplicates.slice(0, 8).map(d => (
+                <div key={`${d.template}|${d.recipient}`} className="flex items-center gap-3 text-xs">
+                  <span className="flex-1 truncate">{d.recipient}</span>
+                  <span className="truncate text-muted-foreground max-w-[16rem]">{d.template}</span>
+                  <span className="tabular-nums font-semibold text-amber-700 dark:text-amber-400">×{d.count}</span>
+                </div>
+              ))}
+              {duplicates.length > 8 && (
+                <div className="text-[11px] text-muted-foreground">… und {duplicates.length - 8} weitere</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tagesverlauf */}
       <Card>
-
         <CardContent className="p-4">
           <div className="text-sm font-semibold">Versand-Volumen pro Tag</div>
           <div className="text-[11px] text-muted-foreground mt-0.5">
