@@ -406,13 +406,28 @@ export async function recordInviteAttempt(
   app: { id: string; tenant_id?: string | null; email?: string | null },
   status: "sent" | "failed" | "skipped",
   error: string | null,
+  source: "ai_accept_invite" | "admin_stage_change" | "manual_resend" = "ai_accept_invite",
 ) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  await supabaseAdmin
-    .from("applications")
-    .update({ invite_mail_status: status, invite_mail_error: error, invite_mail_at: new Date().toISOString() } as any)
-    .eq("id", app.id)
-    .then(() => {}, (e: any) => console.warn("[interview-engine] invite status update:", e?.message ?? e));
+  // Einen bereits erfolgreichen Versand NIE zu "übersprungen" herabstufen —
+  // sonst behaupten Diagnose und Oberfläche später fälschlich, es sei nichts
+  // rausgegangen. Fehlschläge dürfen den Status weiterhin überschreiben.
+  let allowed = true;
+  if (status === "skipped") {
+    const { data: cur } = await supabaseAdmin
+      .from("applications")
+      .select("invite_mail_status")
+      .eq("id", app.id)
+      .maybeSingle();
+    if ((cur as any)?.invite_mail_status === "sent") allowed = false;
+  }
+  if (allowed) {
+    await supabaseAdmin
+      .from("applications")
+      .update({ invite_mail_status: status, invite_mail_error: error, invite_mail_at: new Date().toISOString() } as any)
+      .eq("id", app.id)
+      .then(() => {}, (e: any) => console.warn("[interview-engine] invite status update:", e?.message ?? e));
+  }
   if (status !== "sent") {
     await supabaseAdmin
       .from("email_send_log")
@@ -422,7 +437,7 @@ export async function recordInviteAttempt(
         recipient_email: (app.email ?? "").toLowerCase().trim(),
         status,
         error_message: error,
-        metadata: { application_id: app.id, source: "ai_accept_invite" },
+        metadata: { application_id: app.id, source },
       } as any)
       .then(() => {}, () => {});
   }
@@ -431,7 +446,7 @@ export async function recordInviteAttempt(
 async function sendInviteInternal(
   app: ApplicationRow,
   request: Request,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; source?: "ai_accept_invite" | "admin_stage_change" | "manual_resend" },
 ) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   if (!app.email || !app.tenant_id) return { sent: false, skipped: true, reason: "missing_email_or_tenant" };
@@ -439,7 +454,7 @@ async function sendInviteInternal(
   // Ergebnis JEDES Versuchs festhalten: an der Bewerbung (Admin-Sicht) und —
   // bei Fehlschlag/Skip — zusätzlich im zentralen E-Mail-Protokoll.
   const record = (status: "sent" | "failed" | "skipped", error: string | null) =>
-    recordInviteAttempt(app, status, error);
+    recordInviteAttempt(app, status, error, opts?.source ?? "ai_accept_invite");
 
   // Schutz gegen verfrühte "Willkommen im Team"-Mails: ohne tatsächlich
   // geführtes Gespräch wird nicht eingeladen (außer Admin erzwingt es).
