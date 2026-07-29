@@ -1,41 +1,30 @@
-## Stand nach deinem Log
+Deploy-Log ist sauber: Build ok, Release aktiviert (`20260729-054051`), `portal.service` läuft. Nur die üblichen Rollup-Hinweise zu `"use client"` in Fremdpaketen — unkritisch.
 
-Backend ist sauber durch:
-- Edge Functions neu deployed (Dedupe-Guards aktiv), keine offenen Migrations.
-- Bereinigung: 207 Gruppen, 538 überzählige Zeilen als `duplicate` markiert, Sicherung liegt in `public.email_send_log_dedupe_backup`.
-- Der Hauptverursacher ist klar sichtbar: `vermittlung_rebook_after_cancel_24h` (bis zu 48× pro Empfänger pro Tag) — genau der Pfad, für den jetzt zwei Sperren greifen (einmal pro Bewerber+Art über `application_reminder_log`, plus 20-Stunden-Sperre pro Empfänger+Vorlage).
+Von meiner Seite: **Go zum Gegenchecken.** Es sind keine Code-Punkte mehr offen; was noch aussteht, ist Konfiguration bzw. Beobachtung.
 
-Fehlt noch: der Portal-Server (Frontend). Die neue Anzeige im Mail Center — bereinigte Zeilen ausblenden, „⧉ n bereinigt" in der Verlaufszeile, korrekte Statistik — läuft erst nach diesem Schritt. Bis dahin zeigt das Mail Center die 538 markierten Zeilen noch als ungewohnten Status an.
+## Noch offene Punkte (kein Code)
 
-## Schritt 1 — Portal-Server ausrollen
+1. **LH Marketing – SMTP-Login schlägt fehl (535)**
+   Benutzer `info@l-h-marketing.de`, Passwort 15 Zeichen. Port 587 und 465 liefern beide „authentication failed". Passwort beim Anbieter neu setzen und in der Tenant-Verwaltung eintragen; nach erfolgreichem Test hebt sich die Pause automatisch auf.
+   Hinweis: Das Passwort wurde einmal im Klartext in den Chat kopiert — bitte in jedem Fall wechseln.
 
-```bash
-cd /opt/apps/portal && git reset --hard HEAD && git pull && bash scripts/deploy.sh
-```
+2. **MuS Marketing, W3 Personal, ODB – keine SMTP-Daten hinterlegt**
+   Diese Tenants können nicht senden, bis Zugangsdaten hinterlegt und der Test grün ist.
 
-Danach im Mail Center prüfen:
-- Zählerzeile oben zeigt keine aufgeblähten „offen"-Zahlen mehr.
-- Bei einem betroffenen Bewerber (z. B. `s.julke@gmx.de`) steht im Verlauf ein grüner Haken plus „⧉ n bereinigt" statt vieler Einzelzeilen.
+3. **Kontrolllauf nach dem Deploy** (in 40–50 Min, wie geplant)
+   ```bash
+   cd /opt/apps/portal-migrations && bash scripts/cleanup-duplicate-mails.sh --local
+   ```
+   Erwartung: keine neuen Gruppen mit heutigem Datum. Tauchen welche auf, greift eine Sperre nicht — Ausgabe schicken.
 
-## Schritt 2 — Wirksamkeit der Sperre belegen
+## Was du beim Gegenchecken sehen solltest
 
-Die Sperren sind Code, kein Datenstand — beweisen lässt sich das erst nach ein paar Cron-Läufen. Etwa 60–90 Minuten nach dem Deploy auf dem Backend-Server:
+- **Mail Center**: keine `duplicate`/`superseded`-Zeilen in der Liste; Zähler oben nicht mehr aufgebläht; Warnbanner „mögliche Doppelversände" nur bei echten neuen Fällen.
+- **Historie eines Bewerbers** (z. B. `s.julke@gmx.de`, `mannometer23@outlook.com`): grüner Haken bleibt sichtbar, darunter „⧉ n bereinigt".
+- **Mail-Kette in der Bewerberliste**: 4 Punkte plus Zeile „➜ Nächster Schritt", graue Punkte mit Tooltip-Begründung.
+- **Terminbestätigung**: Uhrzeit in Berliner Zeit, nicht UTC.
+- **Termin-Reminder**: kommt auch außerhalb 06–22 Uhr (Sendefenster gilt nur für Kampagnen-Reminder).
 
-```bash
-cd /opt/apps/portal-migrations && bash scripts/cleanup-duplicate-mails.sh --local
-```
+## Falls beim Gegencheck etwas auffällt
 
-Erwartung: für heute keine neuen Gruppen mit `rebook_after_cancel_*`. Tauchen doch neue auf, liegt es nicht mehr am Zeilenlimit, sondern daran, dass die Log-Zeile beim Versand gar nicht erst geschrieben wird — dann sehe ich mir den Schreibpfad in `send-application-reminders` an.
-
-## Schritt 3 — Aufräumen nach der Bestätigung
-
-Wenn Schritt 2 sauber ist:
-- Sicherungstabelle `email_send_log_dedupe_backup` kann bleiben (klein, unschädlich) oder nach ein bis zwei Wochen gelöscht werden.
-- Offene Baustelle unabhängig davon: LH Marketing hat weiterhin SMTP-Fehler 535 (Authentifizierung). Dieser Tenant sendet nicht, egal wie sauber die Dedupe-Logik ist — dort müssen die Zugangsdaten neu gesetzt werden.
-
-## Technische Details
-
-- Erste Sperre: `application_reminder_log` wird pro Bewerber und Erinnerungsart mit `count: exact, head: true` abgefragt — serverseitige Zählung, damit das 1.000-Zeilen-Limit von PostgREST nicht mehr greift.
-- Zweite Sperre: `email_send_log` wird auf Empfänger + Vorlagenname + Status `sent` der letzten 20 Stunden geprüft.
-- Beide Abfragen filtern auf `status = 'sent'`; die neu markierten `duplicate`-Zeilen verfälschen die Prüfung also nicht.
-- Bereinigung gruppiert nach `appointment_id` bzw. `application_id`, damit legitime Neubuchungen am selben Tag nicht fälschlich markiert werden.
+Melde mir konkret: Screenshot plus Bewerber-Mailadresse und Uhrzeit. Dann gehe ich gezielt über `scripts/diagnose-mail-failures.sh` bzw. `scripts/diagnose-invite-mail.sh` in die Log-Zeilen.
