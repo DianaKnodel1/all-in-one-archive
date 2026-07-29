@@ -785,7 +785,7 @@ serve(async (req) => {
       // Auch wenn oben etwas schiefging (Log-Zeile fehlt, Query gekappt):
       // dieselbe Mail geht pro Bewerber nur EINMAL raus.
       try {
-        const { count: alreadySent } = await admin
+        const { count: alreadySent } = forceKind ? { count: 0 } : await admin
           .from("application_reminder_log")
           .select("application_id", { count: "exact", head: true })
           .eq("application_id", app.id)
@@ -796,7 +796,7 @@ serve(async (req) => {
           continue;
         }
         const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
-        const { count: recentSend } = await admin
+        const { count: recentSend } = forceKind ? { count: 0 } : await admin
           .from("email_send_log")
           .select("id", { count: "exact", head: true })
           .eq("recipient_email", app.email)
