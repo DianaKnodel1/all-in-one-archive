@@ -4,6 +4,11 @@ import { createFileRoute } from "@tanstack/react-router";
 // (primary + aliases), loggt Status, schreibt bei `down` einen Activity-Log-
 // Eintrag (Admin sieht ihn auf /admin/activity).
 //
+// WICHTIG: Dieser Job pausiert KEINEN Mail-Versand mehr. Mails laufen über
+// SMTP und sind von der Erreichbarkeit der Landing-Domain unabhängig. Eine
+// offline-Domain ist nur ein Hinweis (Links in Mails könnten ins Leere zeigen).
+// Pausiert wird ausschließlich bei echten SMTP-Fehlern (siehe smtp-health-cron).
+//
 // Auth: ?key=<CRON_SECRET> oder Service-Role via Authorization/apikey.
 
 function normalizeDomain(d: string): string {
@@ -18,6 +23,14 @@ async function pingDomain(host: string, timeoutMs = 5000) {
     const res = await fetch(`https://${host}/`, { method: "HEAD", signal: ctrl.signal, redirect: "manual" });
     clearTimeout(t);
     const latency = Date.now() - start;
+    if (res.status === 404) {
+      return {
+        status: "no_landing",
+        http_status: 404,
+        latency_ms: latency,
+        error: "Erreichbar, aber keine Landing Page für diesen Host konfiguriert." as string | null,
+      };
+    }
     return { status: latency > 3000 ? "slow" : "ok", http_status: res.status, latency_ms: latency, error: null as string | null };
   } catch (e: any) {
     clearTimeout(t);
@@ -34,14 +47,17 @@ async function checkDomain(domain: string) {
   ]);
   const rootAlive = root.status !== "down";
   const portalAlive = portal.status !== "down";
-  const preferred = portalAlive ? { host: portalHost, ...portal } : rootAlive ? { host: rootHost, ...root } : { host: rootHost, ...root };
+  const rank = (s: string) => (s === "ok" ? 3 : s === "slow" ? 2 : s === "no_landing" ? 1 : 0);
+  const preferred = rank(portal.status) >= rank(root.status)
+    ? { host: portalHost, ...portal }
+    : { host: rootHost, ...root };
 
   return {
     status: portalAlive || rootAlive ? preferred.status : "down",
     http_status: preferred.http_status,
     latency_ms: preferred.latency_ms,
     error: portalAlive || rootAlive
-      ? null
+      ? preferred.error
       : `Root und Portal nicht erreichbar. Root: ${root.error ?? "keine Antwort"}; Portal: ${portal.error ?? "keine Antwort"}`,
     checked_url: `https://${preferred.host}/`,
     root_status: root.status,
