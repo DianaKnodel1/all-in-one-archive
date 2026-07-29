@@ -66,9 +66,9 @@ function AdminEmailCenterPage() {
   const load = async () => {
     setLoading(true);
     const since = new Date(Date.now() - (range === "24h" ? 1 : range === "7d" ? 7 : 30) * 86400_000).toISOString();
-    // Technische Zeilen ausblenden: "superseded" = abgelöster Retry,
-    // "duplicate" = vom Aufräum-Skript bereinigter Doppelversand.
-    const HIDDEN_STATUS = ["superseded", "duplicate"];
+    // Technische Zeilen ausblenden (zentral in email-stats definiert):
+    // "superseded" = abgelöster Retry, "duplicate" = bereinigter Doppelversand.
+    const HIDDEN_STATUS = HIDDEN_EMAIL_STATUS;
     const [{ data }, { count }, { data: tenants }] = await Promise.all([
       supabase
         .from("email_send_log")
