@@ -17,6 +17,30 @@
 set -euo pipefail
 
 # ────────────────────────────────────────────────────────────────────────────
+# 0) SCHUTZ — dieses Skript ist NUR für die einmalige Erst-Migration
+#    Lovable Cloud → eigener Server. Für normale SQL-Migrations im Alltag:
+#       bash scripts/deploy-backend-local.sh
+# ────────────────────────────────────────────────────────────────────────────
+if [ "${CONFIRM_FULL_MIGRATION:-}" != "yes" ]; then
+  cat >&2 <<'WARN'
+
+  ⚠  Falsches Skript.
+
+  scripts/migrate.sh ist die EINMALIGE Komplett-Migration von Lovable Cloud
+  auf den eigenen Server (DB-Dump + Storage-Sync + Frontend-Deploy).
+
+  Für neue SQL-Migrations + Edge Functions auf dem Backend-Server:
+
+      cd /opt/apps/portal-migrations && git pull && bash scripts/deploy-backend-local.sh
+
+  Wenn du wirklich die Erst-Migration fahren willst:
+      CONFIRM_FULL_MIGRATION=yes bash scripts/migrate.sh
+
+WARN
+  exit 1
+fi
+
+# ────────────────────────────────────────────────────────────────────────────
 # 1) CONFIG — hier alles eintragen, dann Skript ausführen
 # ────────────────────────────────────────────────────────────────────────────
 
