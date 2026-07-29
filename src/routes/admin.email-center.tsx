@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import {
   Mail, RefreshCw, CheckCircle2, XCircle, Clock, AlertTriangle, Search, FileText, ScrollText, Pencil, RotateCcw,
 } from "lucide-react";
-import { EMAIL_TYPE_LABELS, type EmailLog } from "@/lib/email-stats";
+import { EMAIL_TYPE_LABELS, HIDDEN_EMAIL_STATUS, type EmailLog } from "@/lib/email-stats";
 import { resendEmailLog, isTokenTemplate } from "@/lib/email-resend";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
