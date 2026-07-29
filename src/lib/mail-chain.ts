@@ -91,7 +91,11 @@ export function buildMailChain(
   const ids: MailStep["id"][] = ["bewerbung", "termin", "erinnerung", "zusage"];
   return ids.map((id) => {
     const keys = STEP_KEYS[id];
-    const ev = sorted.find((e) => keys.includes(e.key)) ?? null;
+    // Bereinigte Doppelversände dürfen den echten Versand nicht verdecken:
+    // das Aufräum-Skript behält die ÄLTESTE Zeile als "gesendet" und markiert
+    // die späteren — ohne diesen Vorzug würde aus ✓ ein graues ⧉.
+    const matches = sorted.filter((e) => keys.includes(e.key));
+    const ev = matches.find((e) => e.status !== "duplicate") ?? matches[0] ?? null;
     const isExpected = id === "bewerbung" ? true : id === "termin" ? expected.termin : id === "zusage" ? expected.zusage : false;
     const state: MailStepState = ev ? normalize(ev.status) : isExpected ? "pending" : "na";
     return { id, label: STEP_LABELS[id], state, event: ev };
