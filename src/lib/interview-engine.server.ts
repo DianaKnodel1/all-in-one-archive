@@ -163,48 +163,76 @@ export async function callGateway(
   return content;
 }
 
+/** Holt das JSON-Objekt aus einer Modellantwort (Codeblöcke/Vortext tolerant). */
+function extractJson(raw: string): string {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fenced ? fenced[1] : raw;
+  const start = body.indexOf("{");
+  const end = body.lastIndexOf("}");
+  return start >= 0 && end > start ? body.slice(start, end + 1) : body.trim();
+}
+
+/**
+ * Notauswertung, wenn das Modell mehrfach unlesbar antwortet.
+ * Es MUSS eine Entscheidung fallen — "keine Bewertung" gibt es nicht.
+ * Absage nur bei klarer Ablehnung/Verweigerung, sonst Zusage.
+ */
+function fallbackDecision(messages: Msg[]): { summary: string; score: number; recommendation: Recommendation } {
+  const answers = messages.filter((m) => m.role !== "assistant").map((m) => m.text.trim()).filter(Boolean);
+  const text = answers.join(" ").toLowerCase();
+  const substantial = answers.filter((a) => a.length >= 8).length;
+  const refuses = /(kein interesse|keine lust|nicht interessiert|will nicht|möchte nicht|abbrechen|absage|doch nicht|keine zeit)/.test(text);
+  const rec: Recommendation = refuses || substantial < 2 ? "reject" : "invite";
+  return {
+    summary:
+      `Automatische Entscheidung ohne KI-Auswertung (Modellantwort war technisch unlesbar). ` +
+      `Grundlage: ${answers.length} Antworten des Bewerbers, davon ${substantial} inhaltlich. ` +
+      (rec === "reject"
+        ? "Es wurde kein ernsthaftes Interesse erkennbar — Absage."
+        : "Der Bewerber hat mitgewirkt und Interesse gezeigt — Zusage."),
+    score: rec === "invite" ? 60 : 20,
+    recommendation: rec,
+  };
+}
+
 export async function runSummary(messages: Msg[]): Promise<{ summary: string; score: number; recommendation: Recommendation }> {
   const transcript = messages
     .map((m) => `${m.role === "assistant" ? "Recruiter" : "Bewerber"}: ${m.text}`)
     .join("\n");
-  const raw = await callGateway(
-    [
-      { role: "system", content: SUMMARY_PROMPT },
-      { role: "user", content: `Transcript:\n\n${transcript}` },
-    ],
-    { jsonMode: true },
-  );
-  // Manche Modelle liefern das JSON in ```json-Blöcken oder mit Vor-/Nachtext.
-  // Ohne Bereinigung landet die Auswertung im Fehler-Fallback und eine
-  // eigentlich erteilte Zusage geht verloren.
-  const cleaned = (() => {
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const body = fenced ? fenced[1] : raw;
-    const start = body.indexOf("{");
-    const end = body.lastIndexOf("}");
-    return start >= 0 && end > start ? body.slice(start, end + 1) : body.trim();
-  })();
-  try {
-    const parsed = JSON.parse(cleaned);
-    const rec = parsed.recommendation;
-    return {
-      summary: String(parsed.summary ?? ""),
-      score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
-      // Nur eine ausdrückliche Absage lehnt ab; alles andere (auch ein
-      // unklares "unsure") gilt als Zusage.
-      recommendation: rec === "reject" ? "reject" : "invite",
-    };
-  } catch (e) {
-    console.error("[interview] Auswertung nicht lesbar:", (e as any)?.message, raw.slice(0, 400));
-    return { summary: raw.slice(0, 2000), score: 50, recommendation: "error" };
+
+  // Bis zu 3 Versuche: eine unlesbare Antwort darf niemals dazu führen,
+  // dass ein geführtes Gespräch ohne Entscheidung bleibt.
+  let lastRaw = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const strict =
+        attempt === 1
+          ? SUMMARY_PROMPT
+          : `${SUMMARY_PROMPT}\n\nDEIN LETZTER VERSUCH WAR UNGÜLTIG. Antworte NUR mit dem reinen JSON-Objekt — kein Text davor oder danach, keine Markdown-Codeblöcke.`;
+      lastRaw = await callGateway(
+        [
+          { role: "system", content: strict },
+          { role: "user", content: `Transcript:\n\n${transcript}` },
+        ],
+        { jsonMode: true },
+      );
+      const parsed = JSON.parse(extractJson(lastRaw));
+      return {
+        summary: String(parsed.summary ?? "").trim() || lastRaw.slice(0, 2000),
+        score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
+        // Nur eine ausdrückliche Absage lehnt ab; alles andere gilt als Zusage.
+        recommendation: parsed.recommendation === "reject" ? "reject" : "invite",
+      };
+    } catch (e) {
+      console.error(`[interview] Auswertung Versuch ${attempt} fehlgeschlagen:`, (e as any)?.message, lastRaw.slice(0, 300));
+    }
   }
+  return fallbackDecision(messages);
 }
 
-export const toAiDecision = (rec: Recommendation) =>
-  rec === "invite" ? "zusage" : rec === "reject" ? "absage" : "pending";
+export const toAiDecision = (rec: Recommendation) => (rec === "reject" ? "absage" : "zusage");
 
-export const toApplicationStatus = (rec: Recommendation) =>
-  rec === "invite" ? "akzeptiert" : rec === "reject" ? "abgelehnt" : "neu";
+export const toApplicationStatus = (rec: Recommendation) => (rec === "reject" ? "abgelehnt" : "akzeptiert");
 
 // Manche Landing-Pages tragen als Firmenname nur die Domain („personalservice-gmbh.de").
 // Im Gespräch soll trotzdem ein lesbarer Firmenname erscheinen.
