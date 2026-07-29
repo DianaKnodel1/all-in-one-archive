@@ -66,6 +66,9 @@ function AdminEmailCenterPage() {
   const load = async () => {
     setLoading(true);
     const since = new Date(Date.now() - (range === "24h" ? 1 : range === "7d" ? 7 : 30) * 86400_000).toISOString();
+    // Technische Zeilen ausblenden: "superseded" = abgelöster Retry,
+    // "duplicate" = vom Aufräum-Skript bereinigter Doppelversand.
+    const HIDDEN_STATUS = ["superseded", "duplicate"];
     const [{ data }, { count }, { data: tenants }] = await Promise.all([
       supabase
         .from("email_send_log")
@@ -77,10 +80,10 @@ function AdminEmailCenterPage() {
         .from("email_send_log")
         .select("id", { count: "exact", head: true })
         .gte("created_at", since)
-        .neq("status", "superseded"),
+        .not("status", "in", `(${HIDDEN_STATUS.join(",")})`),
       supabase.from("tenants").select("id,name"),
     ]);
-    setRows(((data as Row[] | null) ?? []).filter(r => r.status !== "superseded"));
+    setRows(((data as Row[] | null) ?? []).filter(r => !HIDDEN_STATUS.includes(r.status)));
     setExactTotal(count ?? null);
     setTenantNames(Object.fromEntries(((tenants as { id: string; name: string }[] | null) ?? []).map(t => [t.id, t.name])));
     setVisible(100);

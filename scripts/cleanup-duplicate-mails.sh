@@ -49,8 +49,16 @@ echo " DOPPELVERSAND-BEREINIGUNG  $(date '+%Y-%m-%d %H:%M:%S')"
 echo " Modus: $([ "$APPLY" = "1" ] && echo 'ÄNDERN (--apply)' || echo 'nur anzeigen')"
 echo "=============================================================="
 
-# Gruppierung: gleiche Vorlage + gleicher Empfänger + gleicher Kalendertag.
-GROUP="template_name, lower(recipient_email), (created_at AT TIME ZONE 'Europe/Berlin')::date"
+# Gruppierung: gleiche Vorlage + gleicher Empfänger + gleicher Kalendertag
+# UND — sofern vorhanden — derselbe Vorgang (Termin bzw. Bewerbung).
+# Dadurch gilt eine legitime Wiederholung zu einem ANDEREN Vorgang (z.B. eine
+# zweite Terminbestätigung nach Umbuchung am selben Tag) nicht als Duplikat.
+VORGANG="coalesce(metadata->>'appointment_id', metadata->>'application_id', '')"
+GROUP="template_name, lower(recipient_email), (created_at AT TIME ZONE 'Europe/Berlin')::date, $VORGANG"
+PART="PARTITION BY template_name, lower(recipient_email),
+                   (created_at AT TIME ZONE 'Europe/Berlin')::date,
+                   $VORGANG
+      ORDER BY created_at ASC"
 
 hd "Betroffene Empfänger (Top 40)"
 sqlt "SELECT rpad(lower(recipient_email),38)||' '||rpad(coalesce(template_name,'(null)'),36)||' '||
@@ -91,10 +99,7 @@ sqlt "CREATE TABLE IF NOT EXISTS public.email_send_log_dedupe_backup
        WHERE l.status='sent'
          AND l.id IN (
            SELECT id FROM (
-             SELECT id, row_number() OVER (
-                      PARTITION BY template_name, lower(recipient_email),
-                                   (created_at AT TIME ZONE 'Europe/Berlin')::date
-                      ORDER BY created_at ASC) AS rn
+             SELECT id, row_number() OVER ($PART) AS rn
                FROM public.email_send_log WHERE status='sent') x
             WHERE rn > 1)
          AND NOT EXISTS (SELECT 1 FROM public.email_send_log_dedupe_backup b WHERE b.id = l.id);
@@ -107,10 +112,7 @@ sqlt "UPDATE public.email_send_log
        WHERE status='sent'
          AND id IN (
            SELECT id FROM (
-             SELECT id, row_number() OVER (
-                      PARTITION BY template_name, lower(recipient_email),
-                                   (created_at AT TIME ZONE 'Europe/Berlin')::date
-                      ORDER BY created_at ASC) AS rn
+             SELECT id, row_number() OVER ($PART) AS rn
                FROM public.email_send_log WHERE status='sent') x
             WHERE rn > 1);
       SELECT 'Markierte Zeilen: '||count(*) FROM public.email_send_log WHERE status='duplicate';"

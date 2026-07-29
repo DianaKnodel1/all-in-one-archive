@@ -14,7 +14,7 @@ import { renderEmail } from "../_shared/email-wrapper.ts";
 import { resolveSender } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo, type LogoResolution } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
-import { failedAttempts, isDuplicateSend } from "../_shared/dedupe.ts";
+import { isDuplicateSend } from "../_shared/dedupe.ts";
 import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
 
 
@@ -196,19 +196,34 @@ serve(async (req) => {
     // WICHTIG: pro Termin gezielt zählen statt "alle jemals gesendeten laden".
     // Das frühere Laden war bei 1.000 Zeilen gekappt — ältere Termine fielen
     // heraus und die Bestätigung ging erneut raus.
+    // EINE Abfrage je Status für ALLE Termine dieses Laufs (statt 2 Abfragen
+    // pro Termin) — sonst wären es bis zu 400 sequentielle Roundtrips.
     const doneAppts = new Set<string>();
     const capped = new Set<string>();
-    for (const id of apptIds) {
-      const dup = await isDuplicateSend(admin, {
-        templateName: REMINDER_KIND,
-        recipient: "",
-        metadataKey: "appointment_id",
-        metadataValue: id,
-        windowHours: 0,
-      });
-      if (dup.duplicate) { doneAppts.add(id); continue; }
+    {
+      const [{ data: sentRows }, { data: failRows }] = await Promise.all([
+        admin.from("email_send_log")
+          .select("metadata")
+          .eq("template_name", REMINDER_KIND)
+          .eq("status", "sent")
+          .in("metadata->>appointment_id", apptIds),
+        admin.from("email_send_log")
+          .select("metadata")
+          .eq("template_name", REMINDER_KIND)
+          .eq("status", "failed")
+          .in("metadata->>appointment_id", apptIds),
+      ]);
+      for (const r of (sentRows ?? []) as any[]) {
+        const aid = r?.metadata?.appointment_id;
+        if (aid) doneAppts.add(aid);
+      }
       // Retry-Cap: pro Termin max. 3 Fehlversuche → dann aussetzen.
-      if (await failedAttempts(admin, REMINDER_KIND, "appointment_id", id) >= 3) capped.add(id);
+      const failCount = new Map<string, number>();
+      for (const r of (failRows ?? []) as any[]) {
+        const aid = r?.metadata?.appointment_id;
+        if (aid) failCount.set(aid, (failCount.get(aid) ?? 0) + 1);
+      }
+      for (const [aid, n] of failCount) if (n >= 3 && !doneAppts.has(aid)) capped.add(aid);
     }
 
     const todo = appts.filter((a: any) => !doneAppts.has(a.id) && !capped.has(a.id));
