@@ -124,13 +124,6 @@ export function statusStyle(status: string): { icon: string; cls: string; text: 
   return STEP_STATE_STYLE[normalize(status)];
 }
 
-function _unusedFormatWhen(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("de-DE", {
-    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-  });
-}
-
 /** Präfixe der Flow-Varianten entfernen, damit gleiche Schritte gepaart werden. */
 export function normalizeMailKey(key: string | null | undefined): string {
   const k = String(key ?? "").toLowerCase();
