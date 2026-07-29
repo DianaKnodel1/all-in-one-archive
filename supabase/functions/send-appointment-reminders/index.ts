@@ -221,6 +221,11 @@ serve(async (req) => {
 
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const dryRun = body?.dry_run === true;
+    // Manueller Sofort-Versand aus dem Admin: genau eine Bewerbung,
+    // ohne Zeitfenster- und Dedupe-Prüfung.
+    const onlyApplicationId: string | null =
+      typeof body?.application_id === "string" ? body.application_id : null;
+    const forced = onlyApplicationId != null && body?.force === true;
 
     const now = new Date();
     const low = new Date(now.getTime() + WINDOW_LOW_MIN * 60_000);
@@ -235,11 +240,17 @@ serve(async (req) => {
     (tList ?? []).forEach((t: any) => tenants.set(t.id, t as TenantRow));
 
     // Applications im Fenster (scheduled_at zwischen +25 und +40 Min)
-    const { data: apps, error: aErr } = await admin.from("applications")
-      .select("id,email,first_name,last_name,full_name,tenant_id,scheduled_at,magic_token,magic_token_expires_at,target_landing_id,booking_status")
-      .eq("booking_status", "scheduled")
-      .gte("scheduled_at", low.toISOString())
-      .lt("scheduled_at", high.toISOString());
+    let appsQuery = admin.from("applications")
+      .select("id,email,first_name,last_name,full_name,tenant_id,scheduled_at,magic_token,magic_token_expires_at,target_landing_id,booking_status");
+    if (forced) {
+      appsQuery = appsQuery.eq("id", onlyApplicationId);
+    } else {
+      appsQuery = appsQuery
+        .eq("booking_status", "scheduled")
+        .gte("scheduled_at", low.toISOString())
+        .lt("scheduled_at", high.toISOString());
+    }
+    const { data: apps, error: aErr } = await appsQuery;
     if (aErr) return json({ error: aErr.message, version: FUNCTION_VERSION }, 500);
 
     if (!apps || apps.length === 0) {
@@ -266,7 +277,7 @@ serve(async (req) => {
         if (!page || page.length < PAGE) break;
       }
     }
-    const todo = apps.filter((a: any) => !sentSet.has(a.id));
+    const todo = forced ? apps : apps.filter((a: any) => !sentSet.has(a.id));
 
     // Landing-Pages (für Domain → Magic-Link)
     const landingIds = Array.from(new Set(todo.map((a: any) => a.target_landing_id).filter(Boolean)));
@@ -315,7 +326,7 @@ serve(async (req) => {
       if (dryRun) { sent++; results.push({ application_id: a.id, status: "would_send", to: a.email, magic_link: magicLink }); continue; }
 
       // Letzte Sicherung gegen Doppelversand (unabhängig von der Vorauswahl).
-      const dup = await isDuplicateSend(admin, {
+      const dup = forced ? { duplicate: false, reason: "" } : await isDuplicateSend(admin, {
         applicationId: a.id, kind: REMINDER_KIND,
         recipient: a.email, templateName: REMINDER_KIND,
       });
