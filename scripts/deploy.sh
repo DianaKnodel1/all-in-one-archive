@@ -281,7 +281,7 @@ if [ -z "$TARGET_DB_URL" ]; then
   TARGET_DB_URL="$(env_file_value TARGET_DB_URL || true)"
 fi
 if [ -z "$TARGET_DB_URL" ] && [ -f "$PROJECT_DIR/.env" ]; then
-  TARGET_DB_URL="$(ENV_FILE="$PROJECT_DIR/.env" env_file_value TARGET_DB_URL || true)"
+  TARGET_DB_URL="$( (ENV_FILE="$PROJECT_DIR/.env"; env_file_value TARGET_DB_URL) || true)"
 fi
 if [ -z "$TARGET_DB_URL" ]; then
   warn "TARGET_DB_URL fehlt (weder Umgebung noch $ENV_FILE) — SQL-Migrations werden NICHT eingespielt"
