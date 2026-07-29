@@ -249,9 +249,11 @@ function AdminDomainsPage() {
                     Reminder-, Recovery- und Onboarding-Mails sind für diesen Tenant gestoppt.
                   </p>
                   <p className="text-amber-800 dark:text-amber-300">
-                    {ps?.by === "auto:domain_down"
-                      ? "Automatisch pausiert weil alle Domains down waren."
-                      : "Manuell pausiert."}
+                    {ps?.by === "auto:smtp_fail"
+                      ? "Automatisch pausiert: SMTP-Login mehrfach fehlgeschlagen. Wird automatisch freigegeben, sobald SMTP wieder funktioniert."
+                      : ps?.by === "auto:domain_down"
+                        ? "Alt-Pause aus dem Domain-Health-Job (wird nicht mehr gesetzt) — kann freigegeben werden."
+                        : "Manuell pausiert."}
                     {ps?.reason && <> · Grund: {ps.reason}</>}
                     {ps?.at && <> · Seit {new Date(ps.at).toLocaleString("de-DE")}</>}
                   </p>
