@@ -1,30 +1,51 @@
-Deploy-Log ist sauber: Build ok, Release aktiviert (`20260729-054051`), `portal.service` läuft. Nur die üblichen Rollup-Hinweise zu `"use client"` in Fremdpaketen — unkritisch.
+## Ausgangslage
 
-Von meiner Seite: **Go zum Gegenchecken.** Es sind keine Code-Punkte mehr offen; was noch aussteht, ist Konfiguration bzw. Beobachtung.
+Heute pausiert ein Domain-Ping-Job den kompletten Mailversand eines Tenants, sobald alle Domains kurz nicht antworten – und hebt das nie wieder auf. Das ist die falsche Kopplung: **Mails gehen über SMTP raus, nicht über die Webseite.** Eine kurz nicht erreichbare Landing Page ist kein Grund, Bewerbungs- und Reminder-Mails zu stoppen. Deshalb wird die Logik umgebaut.
 
-## Noch offene Punkte (kein Code)
+## Neue Regel (Kern)
 
-1. **LH Marketing – SMTP-Login schlägt fehl (535)**
-   Benutzer `info@l-h-marketing.de`, Passwort 15 Zeichen. Port 587 und 465 liefern beide „authentication failed". Passwort beim Anbieter neu setzen und in der Tenant-Verwaltung eintragen; nach erfolgreichem Test hebt sich die Pause automatisch auf.
-   Hinweis: Das Passwort wurde einmal im Klartext in den Chat kopiert — bitte in jedem Fall wechseln.
+| Situation | Bisher | Neu |
+|---|---|---|
+| Alle Domains offline | Versand gestoppt, für immer | **Kein Stopp.** Nur Warnung im Admin + Activity-Log |
+| SMTP-Login schlägt 3× in Folge fehl | Versand gestoppt, für immer | Versand gestoppt (bleibt sinnvoll) |
+| SMTP funktioniert wieder | nichts | **Pause wird automatisch aufgehoben** |
+| Admin pausiert von Hand | Versand gestoppt | Bleibt gestoppt, kein Auto-Resume |
 
-2. **MuS Marketing, W3 Personal, ODB – keine SMTP-Daten hinterlegt**
-   Diese Tenants können nicht senden, bis Zugangsdaten hinterlegt und der Test grün ist.
+Links in Mails zeigen ohnehin auf die aktive Versand-Domain – fällt die aus, greift weiterhin der bestehende Domain-Wechsel („Aktiv setzen").
 
-3. **Kontrolllauf nach dem Deploy** (in 40–50 Min, wie geplant)
-   ```bash
-   cd /opt/apps/portal-migrations && bash scripts/cleanup-duplicate-mails.sh --local
-   ```
-   Erwartung: keine neuen Gruppen mit heutigem Datum. Tauchen welche auf, greift eine Sperre nicht — Ausgabe schicken.
+## Umsetzung
 
-## Was du beim Gegenchecken sehen solltest
+**1. Domain-Job entkoppeln** (`src/routes/api/public/domain-health-cron.ts`)
+- Auto-Pause-Block entfernen. Stattdessen Activity-Log-Eintrag „Alle Domains offline – Links in Mails könnten ins Leere zeigen" und ein Warn-Flag pro Tenant.
+- Antwort-Auswertung verfeinern: HTTP 404 mit „Keine Landing konfiguriert" gilt nicht mehr als „ok", sondern als eigener Status **„erreichbar, keine Landing"** (gelb) in der Domain-Übersicht.
 
-- **Mail Center**: keine `duplicate`/`superseded`-Zeilen in der Liste; Zähler oben nicht mehr aufgebläht; Warnbanner „mögliche Doppelversände" nur bei echten neuen Fällen.
-- **Historie eines Bewerbers** (z. B. `s.julke@gmx.de`, `mannometer23@outlook.com`): grüner Haken bleibt sichtbar, darunter „⧉ n bereinigt".
-- **Mail-Kette in der Bewerberliste**: 4 Punkte plus Zeile „➜ Nächster Schritt", graue Punkte mit Tooltip-Begründung.
-- **Terminbestätigung**: Uhrzeit in Berliner Zeit, nicht UTC.
-- **Termin-Reminder**: kommt auch außerhalb 06–22 Uhr (Sendefenster gilt nur für Kampagnen-Reminder).
+**2. Alt-Pausen aufräumen**
+- Migration: alle Tenants mit `emails_paused_by = 'auto:domain_down'` werden entpausiert (betrifft GTM, MM, CAC, DGG) und der Vorgang im Activity-Log vermerkt.
 
-## Falls beim Gegencheck etwas auffällt
+**3. SMTP-Status als einzige Wahrheit** (`tenant_smtp_health`)
+- Neuer Health-Cron alle 30 Min: prüft je aktivem Tenant den SMTP-Login (nur Verbindung + AUTH, kein Mailversand) und schreibt `last_verify_ok`, `last_fail_error`, `consecutive_fails`.
+- Erfolgreicher Verify hebt eine `auto:*`-Pause automatisch auf und setzt den Fehlerzähler zurück.
+- Tenants ohne SMTP-Daten werden als „nicht konfiguriert" markiert, nicht als Fehler.
 
-Melde mir konkret: Screenshot plus Bewerber-Mailadresse und Uhrzeit. Dann gehe ich gezielt über `scripts/diagnose-mail-failures.sh` bzw. `scripts/diagnose-invite-mail.sh` in die Log-Zeilen.
+**4. Admin-Anzeige neu** (`src/routes/admin.tenants.tsx`)
+Statt einem grünen Badge vier klare Zustände pro Tenant:
+- 🟢 **SMTP OK** – letzter Check erfolgreich, mit Zeitstempel
+- 🔴 **SMTP-Fehler** – mit letzter Fehlermeldung im Tooltip (z. B. „535 authentication failed")
+- ⚪ **SMTP nicht hinterlegt** – Zugangsdaten fehlen
+- ⏸ **Pausiert** – mit Grund (manuell / SMTP-Fehler) und Freigabe-Button
+
+Dazu ein **„SMTP jetzt testen"**-Button direkt in der Zeile, der sofort prüft und bei Erfolg die Pause aufhebt.
+
+**5. Stille Ausfälle sichtbar machen**
+- Blockierte Mails (Pause, SMTP tot, kein Empfänger) werden bereits geloggt – im Mail Center kommt ein Warnbanner „X Mails wurden wegen SMTP-Problemen nicht versendet" mit Sprung zur betroffenen Domain.
+- Optional gleich mit umgesetzt: Button „Blockierte Mails nachsenden" pro Tenant, sobald SMTP wieder grün ist.
+
+## Technische Details
+
+- Kein Schema-Umbau nötig; `tenant_smtp_health` und `tenants.emails_paused*` bleiben. Eine Migration nur für das Entpausieren der Alt-Fälle.
+- Der SMTP-Check nutzt die bestehende `smtp-test`-Edge-Function (kann bereits pausierte Tenants testen und entpausieren) – sie bekommt einen Batch-Modus für den Cron.
+- Cron per pg_cron auf den bestehenden `/api/public/*`-Weg, analog zum Domain-Health-Job.
+
+## Danach offen (nicht Teil dieses Plans)
+
+LH Marketing braucht ein korrektes SMTP-Passwort; MuS Marketing, W3 Personal und ODB haben noch gar keine SMTP-Daten. Nach dem Umbau siehst du das direkt an den Badges statt über Umwege.

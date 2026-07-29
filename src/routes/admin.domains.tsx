@@ -18,19 +18,21 @@ export const Route = createFileRoute("/admin/domains")({
   component: AdminDomainsPage,
 });
 
+type DomainStatus = "ok" | "down" | "slow" | "unknown" | "no_landing";
+
 interface DomainRow {
   tenant_id: string;
   tenant_name: string;
   domain: string;
   is_primary: boolean;
   is_root: boolean;
-  status: "ok" | "down" | "slow" | "unknown";
+  status: DomainStatus;
   http_status: number | null;
   latency_ms: number | null;
   error: string | null;
   checked_url?: string;
-  root_status?: "ok" | "down" | "slow" | "unknown";
-  portal_status?: "ok" | "down" | "slow" | "unknown";
+  root_status?: DomainStatus;
+  portal_status?: DomainStatus;
 }
 
 function AdminDomainsPage() {
@@ -247,9 +249,11 @@ function AdminDomainsPage() {
                     Reminder-, Recovery- und Onboarding-Mails sind für diesen Tenant gestoppt.
                   </p>
                   <p className="text-amber-800 dark:text-amber-300">
-                    {ps?.by === "auto:domain_down"
-                      ? "Automatisch pausiert weil alle Domains down waren."
-                      : "Manuell pausiert."}
+                    {ps?.by === "auto:smtp_fail"
+                      ? "Automatisch pausiert: SMTP-Login mehrfach fehlgeschlagen. Wird automatisch freigegeben, sobald SMTP wieder funktioniert."
+                      : ps?.by === "auto:domain_down"
+                        ? "Alt-Pause aus dem Domain-Health-Job (wird nicht mehr gesetzt) — kann freigegeben werden."
+                        : "Manuell pausiert."}
                     {ps?.reason && <> · Grund: {ps.reason}</>}
                     {ps?.at && <> · Seit {new Date(ps.at).toLocaleString("de-DE")}</>}
                   </p>
@@ -276,6 +280,10 @@ function AdminDomainsPage() {
                         <p className="text-[11px] text-muted-foreground">
                           {d.status === "down" ? (
                             <span className="text-destructive">Nicht erreichbar: {d.error}</span>
+                          ) : d.status === "no_landing" ? (
+                            <span className="text-amber-600 dark:text-amber-400">
+                              Erreichbar, aber keine Landing Page für diesen Host hinterlegt (HTTP 404). Mail-Versand ist davon nicht betroffen.
+                            </span>
                           ) : (
                             <>HTTP {d.http_status ?? "?"} · {d.latency_ms}ms · Root {d.root_status ?? "?"} · Portal {d.portal_status ?? "?"}</>
                           )}
@@ -388,9 +396,10 @@ function AdminDomainsPage() {
   );
 }
 
-function StatusDot({ status }: { status: "ok" | "down" | "slow" | "unknown" }) {
+function StatusDot({ status }: { status: DomainStatus }) {
   if (status === "ok") return <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />;
   if (status === "down") return <XCircle className="h-4 w-4 text-destructive shrink-0" />;
+  if (status === "no_landing") return <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />;
   if (status === "slow") return <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />;
   return <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />;
 }

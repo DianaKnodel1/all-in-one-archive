@@ -4,6 +4,11 @@ import { createFileRoute } from "@tanstack/react-router";
 // (primary + aliases), loggt Status, schreibt bei `down` einen Activity-Log-
 // Eintrag (Admin sieht ihn auf /admin/activity).
 //
+// WICHTIG: Dieser Job pausiert KEINEN Mail-Versand mehr. Mails laufen über
+// SMTP und sind von der Erreichbarkeit der Landing-Domain unabhängig. Eine
+// offline-Domain ist nur ein Hinweis (Links in Mails könnten ins Leere zeigen).
+// Pausiert wird ausschließlich bei echten SMTP-Fehlern (siehe smtp-health-cron).
+//
 // Auth: ?key=<CRON_SECRET> oder Service-Role via Authorization/apikey.
 
 function normalizeDomain(d: string): string {
@@ -18,6 +23,14 @@ async function pingDomain(host: string, timeoutMs = 5000) {
     const res = await fetch(`https://${host}/`, { method: "HEAD", signal: ctrl.signal, redirect: "manual" });
     clearTimeout(t);
     const latency = Date.now() - start;
+    if (res.status === 404) {
+      return {
+        status: "no_landing",
+        http_status: 404,
+        latency_ms: latency,
+        error: "Erreichbar, aber keine Landing Page für diesen Host konfiguriert." as string | null,
+      };
+    }
     return { status: latency > 3000 ? "slow" : "ok", http_status: res.status, latency_ms: latency, error: null as string | null };
   } catch (e: any) {
     clearTimeout(t);
@@ -34,14 +47,17 @@ async function checkDomain(domain: string) {
   ]);
   const rootAlive = root.status !== "down";
   const portalAlive = portal.status !== "down";
-  const preferred = portalAlive ? { host: portalHost, ...portal } : rootAlive ? { host: rootHost, ...root } : { host: rootHost, ...root };
+  const rank = (s: string) => (s === "ok" ? 3 : s === "slow" ? 2 : s === "no_landing" ? 1 : 0);
+  const preferred = rank(portal.status) >= rank(root.status)
+    ? { host: portalHost, ...portal }
+    : { host: rootHost, ...root };
 
   return {
     status: portalAlive || rootAlive ? preferred.status : "down",
     http_status: preferred.http_status,
     latency_ms: preferred.latency_ms,
     error: portalAlive || rootAlive
-      ? null
+      ? preferred.error
       : `Root und Portal nicht erreichbar. Root: ${root.error ?? "keine Antwort"}; Portal: ${portal.error ?? "keine Antwort"}`,
     checked_url: `https://${preferred.host}/`,
     root_status: root.status,
@@ -82,7 +98,7 @@ export const Route = createFileRoute("/api/public/domain-health-cron")({
         if (error) return Response.json({ error: error.message }, { status: 500 });
 
         const results: any[] = [];
-        const autoPaused: string[] = [];
+        const warned: string[] = [];
         for (const t of tenants ?? []) {
           const aliases: string[] = Array.isArray(t.domain_aliases) ? t.domain_aliases : [];
           const all = Array.from(new Set([t.domain, ...aliases].filter(Boolean).map(normalizeDomain)));
@@ -106,28 +122,22 @@ export const Route = createFileRoute("/api/public/domain-health-cron")({
             }
           }
 
-          // Auto-Pause: alle Domains down UND noch nicht pausiert → Mail-Versand stoppen.
-          // Bewusst KEIN Auto-Resume — Admin muss manuell freigeben, sonst Mail-Flut nach Restore.
-          if (all.length > 0 && downCount === all.length && !t.emails_paused) {
+          // KEINE Auto-Pause mehr: Mail-Versand hängt an SMTP, nicht an der
+          // Erreichbarkeit der Landing-Domain. Nur Warnung ins Activity-Log.
+          if (all.length > 0 && downCount === all.length) {
             try {
-              await sb.from("tenants").update({
-                emails_paused: true,
-                emails_paused_at: new Date().toISOString(),
-                emails_paused_reason: `Alle ${all.length} Domain(s) down — automatisch pausiert.`,
-                emails_paused_by: "auto:domain_down",
-              }).eq("id", t.id);
               await sb.from("activity_log").insert({
-                action: "emails_auto_pausiert",
+                action: "domains_alle_offline",
                 entity_type: "tenant",
                 entity_id: t.id,
-                comment: `Mail-Versand automatisch gestoppt: alle ${all.length} Domain(s) nicht erreichbar. Admin muss manuell reaktivieren.`,
+                comment: `Alle ${all.length} Domain(s) nicht erreichbar. Mail-Versand läuft weiter (SMTP), aber Links in Mails könnten ins Leere zeigen — ggf. auf eine erreichbare Alias-Domain wechseln.`,
               });
-              autoPaused.push(t.id);
+              warned.push(t.id);
             } catch {}
           }
         }
 
-        return Response.json({ ok: true, checked_at: new Date().toISOString(), domains: results, auto_paused: autoPaused });
+        return Response.json({ ok: true, checked_at: new Date().toISOString(), domains: results, warned_all_offline: warned, auto_paused: [] });
       },
     },
   },

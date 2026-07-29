@@ -31,6 +31,7 @@ import { SignatureGenerator } from "@/components/SignatureGenerator";
 
 
 function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void }) {
+  // (SmtpHealthRow siehe unten – Health-Status je Tenant)
   const [name, setName] = useState(tenant?.name ?? "");
   const [domain, setDomain] = useState(tenant?.domain ?? "");
   const [domainAliases, setDomainAliases] = useState<string>(
@@ -1069,6 +1070,68 @@ function DomainSwitchWizard({ tenant, onDone }: { tenant: Tenant; onDone: () => 
   );
 }
 
+interface SmtpHealthRow {
+  tenant_id: string;
+  last_verify_ok: boolean | null;
+  last_verify_at: string | null;
+  last_fail_error: string | null;
+  consecutive_fails: number | null;
+}
+
+type SmtpState = "ok" | "fail" | "unconfigured" | "unknown";
+
+function SmtpBadge({ state, health }: { state: SmtpState; health?: SmtpHealthRow }) {
+  const when = health?.last_verify_at
+    ? new Date(health.last_verify_at).toLocaleString("de-DE")
+    : null;
+
+  if (state === "ok") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] border-emerald-500 text-emerald-600 dark:text-emerald-400"
+        title={when ? `Letzter erfolgreicher SMTP-Check: ${when}` : "SMTP-Check erfolgreich"}
+      >
+        SMTP OK{when ? ` · ${when}` : ""}
+      </Badge>
+    );
+  }
+  if (state === "fail") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] border-destructive text-destructive"
+        title={`${health?.last_fail_error ?? "SMTP-Check fehlgeschlagen"}${when ? ` (${when})` : ""}${
+          health?.consecutive_fails ? ` · ${health.consecutive_fails}x in Folge` : ""
+        }`}
+      >
+        SMTP-Fehler
+      </Badge>
+    );
+  }
+  if (state === "unconfigured") {
+    return (
+      <Badge variant="secondary" className="text-[10px]" title="Für diese Domain sind keine SMTP-Zugangsdaten hinterlegt — es können keine Mails versendet werden.">
+        SMTP nicht hinterlegt
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] text-muted-foreground" title="SMTP wurde noch nicht geprüft. Über „SMTP testen“ sofort prüfen.">
+      SMTP ungeprüft
+    </Badge>
+  );
+}
+
+function smtpStateOf(t: Tenant, h?: SmtpHealthRow): SmtpState {
+  const configured = Boolean(
+    (t as any).smtp_host && (t as any).smtp_port && (t as any).smtp_username && (t as any).smtp_password && t.sender_email,
+  );
+  if (!configured) return "unconfigured";
+  if (!h || h.last_verify_ok === null || h.last_verify_ok === undefined) return "unknown";
+  return h.last_verify_ok ? "ok" : "fail";
+}
+
 function AdminTenantsPage() {
 
   const { tenants, loading, reload } = useAllTenants();
@@ -1077,33 +1140,67 @@ function AdminTenantsPage() {
   const [switchTenant, setSwitchTenant] = useState<Tenant | undefined>();
   const { toast } = useToast();
   const setDnsFn = useServerFn(setLandingDnsRecord);
-  const [smtpOkIds, setSmtpOkIds] = useState<Set<string>>(new Set());
+  const [smtpHealth, setSmtpHealth] = useState<Record<string, SmtpHealthRow>>({});
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const loadHealth = async () => {
+    const { data } = await supabase
+      .from("tenant_smtp_health" as any)
+      .select("tenant_id,last_verify_ok,last_verify_at,last_fail_error,consecutive_fails");
+    if (!data) return;
+    const map: Record<string, SmtpHealthRow> = {};
+    for (const r of data as any[]) map[String(r.tenant_id)] = r as SmtpHealthRow;
+    setSmtpHealth(map);
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from("tenant_smtp_health" as any)
-        .select("tenant_id,last_verify_ok");
+        .select("tenant_id,last_verify_ok,last_verify_at,last_fail_error,consecutive_fails");
       if (cancelled || !data) return;
-      setSmtpOkIds(
-        new Set(
-          (data as any[])
-            .filter((r) => r?.last_verify_ok === true)
-            .map((r) => String(r.tenant_id)),
-        ),
-      );
+      const map: Record<string, SmtpHealthRow> = {};
+      for (const r of data as any[]) map[String(r.tenant_id)] = r as SmtpHealthRow;
+      setSmtpHealth(map);
     })();
     return () => {
       cancelled = true;
     };
   }, [tenants]);
 
+  const runSmtpTest = async (t: Tenant) => {
+    setTestingId(t.id);
+    try {
+      const { data, error } = await supabase.functions.invoke<any>("smtp-test", { body: { tenant_id: t.id } });
+      if (error) throw error;
+      if (data?.success === false) {
+        toast({
+          title: "SMTP-Test fehlgeschlagen",
+          description: data?.error ?? "Unbekannter Fehler",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: data?.auto_resumed ? "SMTP OK — Versand wieder freigegeben" : "SMTP OK",
+          description: data?.message ?? "Verbindung und Login erfolgreich.",
+        });
+      }
+    } catch (e: any) {
+      toast({ title: "SMTP-Test fehlgeschlagen", description: String(e?.message ?? e), variant: "destructive" });
+    } finally {
+      setTestingId(null);
+      await loadHealth();
+      reload();
+    }
+  };
+
   const pauseTrigger = (t: Tenant) => {
     const by = (t as any).emails_paused_by as string | null;
     if (!by) return "unbekannt";
     if (by.startsWith("manual:")) return "manuell";
-    if (by === "auto:domain_down") return "automatisch (Domains offline)";
+    if (by === "auto:smtp_fail") return "automatisch (SMTP-Fehler)";
+    if (by === "auto:domain_down") return "veraltet (Domain-Ausfall)";
     if (by.startsWith("auto:")) return `automatisch (${by.slice(5)})`;
     return "manuell";
   };
@@ -1241,25 +1338,15 @@ function AdminTenantsPage() {
                     {t.is_active ? "Aktiv" : "Inaktiv"}
                   </Badge>
                   {(t as any).emails_paused && (
-                    <>
-                      <Badge
-                        variant="destructive"
-                        className="text-[10px]"
-                        title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}
-                      >
-                        ⏸ Mails pausiert · {pauseTrigger(t)}
-                      </Badge>
-                      {smtpOkIds.has(t.id) && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                          title="Letzter SMTP-Test war erfolgreich — der Versand kann freigegeben werden."
-                        >
-                          SMTP OK — jetzt freigeben
-                        </Badge>
-                      )}
-                    </>
+                    <Badge
+                      variant="destructive"
+                      className="text-[10px]"
+                      title={(t as any).emails_paused_reason ?? "Mail-Versand pausiert"}
+                    >
+                      ⏸ Mails pausiert · {pauseTrigger(t)}
+                    </Badge>
                   )}
+                  <SmtpBadge state={smtpStateOf(t, smtpHealth[t.id])} health={smtpHealth[t.id]} />
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
@@ -1274,6 +1361,16 @@ function AdminTenantsPage() {
                     <span className="truncate max-w-[120px]">{t.team_leader_name}</span>
                   </div>
                   <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      disabled={testingId === t.id}
+                      onClick={() => runSmtpTest(t)}
+                      title="SMTP-Verbindung jetzt prüfen. Bei Erfolg wird eine automatische Pause aufgehoben."
+                    >
+                      {testingId === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "SMTP testen"}
+                    </Button>
                     {(t as any).emails_paused ? (
                       <Button variant="default" size="sm" onClick={() => resumeEmails(t)} className="text-xs" title={(t as any).emails_paused_reason ?? ""}>
                         Versand fortsetzen
