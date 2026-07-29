@@ -236,12 +236,20 @@ export function MailChain({ applicationId, applicantName, events, expected, next
           <div className="max-h-[55vh] overflow-y-auto divide-y">
             {history.map((e, i) => {
               const st = statusStyle(e.status);
+              const harmless = isHarmlessReason(e.error);
+              const errorText = e.error ? reasonLabel(e.error) : "";
               return (
                 <div key={`${e.at}-${i}`} className="py-2.5 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-medium">{mailLabel(e.key)}</div>
                     <div className="text-xs text-muted-foreground">{formatWhen(e.at)}</div>
-                    {e.error && <div className="text-xs text-rose-600 mt-0.5 break-words">{e.error}</div>}
+                    {errorText && (
+                      <div
+                        className={`text-xs mt-0.5 break-words ${harmless ? "text-muted-foreground" : "text-rose-600"}`}
+                      >
+                        {errorText}
+                      </div>
+                    )}
                     {!e.error && e.status === "stuck" && (
                       <div className="text-xs text-orange-600 mt-0.5">
                         Schritt wurde ausgelöst, aber kein Versand protokolliert — der Cron holt ihn beim
@@ -250,7 +258,13 @@ export function MailChain({ applicationId, applicantName, events, expected, next
                     )}
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${st.cls}`}>
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs ${
+                        harmless
+                          ? "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          : st.cls
+                      }`}
+                    >
                       {st.icon} {st.text}
                     </span>
                     {e.logId && (
