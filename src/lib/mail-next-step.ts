@@ -83,20 +83,20 @@ export function computeNextStep(i: NextStepInput, now: Date = new Date()): NextS
     if (i.inviteMailStatus === "failed") {
       return {
         text: "Zusage-Mail fehlgeschlagen",
-        detail: `Der Versand der Registrierungseinladung ist gescheitert${when}: ${i.inviteMailError || "Grund unbekannt"}. Mit „Jetzt senden" wird ein frischer Link erzeugt und erneut versendet.`,
+        detail: `Der Versand der Registrierungseinladung ist gescheitert${when}: ${i.inviteMailError || "Grund unbekannt"}. Mit „Jetzt senden“ wird ein frischer Link erzeugt und erneut versendet.`,
         at: null, done: false, action: "send_invite",
       };
     }
     if (i.inviteMailStatus === "skipped") {
       return {
         text: "Zusage-Mail übersprungen",
-        detail: `Der Versand wurde bewusst übersprungen${when}: ${i.inviteMailError || "Grund unbekannt"}. Falls der Bewerber die Mail nie erhalten hat, kann sie mit „Jetzt senden" neu ausgelöst werden.`,
+        detail: `Der Versand wurde bewusst übersprungen${when}: ${i.inviteMailError || "Grund unbekannt"}. Falls der Bewerber die Mail nie erhalten hat, kann sie mit „Jetzt senden“ neu ausgelöst werden.`,
         at: null, done: false, action: "send_invite",
       };
     }
     return {
       text: "Zusage-Mail wurde nie ausgelöst",
-      detail: "Die Zusage ist erteilt, aber es existiert kein Versandversuch für die Registrierungseinladung — weder gesendet, noch fehlgeschlagen oder übersprungen. Mit „Jetzt senden" wird ein frischer Registrierungslink erzeugt und verschickt.",
+      detail: "Die Zusage ist erteilt, aber es existiert kein Versandversuch für die Registrierungseinladung — weder gesendet, noch fehlgeschlagen oder übersprungen. Mit „Jetzt senden“ wird ein frischer Registrierungslink erzeugt und verschickt.",
       at: null, done: false, action: "send_invite",
     };
   }
