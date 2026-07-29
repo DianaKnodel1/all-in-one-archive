@@ -25,6 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/PaginationBar";
 import { MailChain } from "@/components/mail/MailChain";
+import { computeNextStep } from "@/lib/mail-next-step";
 import { mailLabel, type MailEvent } from "@/lib/mail-chain";
 
 /**
@@ -576,6 +577,7 @@ function AdminBewerbungenPage() {
                               applicantName={r.name}
                               events={r.mailEvents}
                               expected={r.mailExpected}
+                              nextStep={r.nextStep}
                             />
 
                           </div>
