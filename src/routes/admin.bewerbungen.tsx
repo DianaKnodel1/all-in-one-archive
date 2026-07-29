@@ -580,6 +580,7 @@ function AdminBewerbungenPage() {
                               events={r.mailEvents}
                               expected={r.mailExpected}
                               nextStep={r.nextStep}
+                              onRefresh={() => setMailReload((n) => n + 1)}
                             />
 
                           </div>
