@@ -337,7 +337,7 @@ export async function loadInterviewContext(app: ApplicationRow): Promise<Intervi
 export async function sendRegistrationInviteAfterAiAccept(
   app: ApplicationRow,
   request: Request,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; source?: "ai_accept_invite" | "admin_stage_change" | "manual_resend" },
 ) {
   return await sendInviteInternal(app, request, opts);
 }
