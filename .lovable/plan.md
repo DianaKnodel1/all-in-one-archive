@@ -1,48 +1,35 @@
-## Was ich geprüft habe
+## Gegenprüfung — Ergebnis
 
-Ich habe alle 14 Mail-Funktionen durchgesehen (Bewerbungs-Reminder, Termin-Erinnerung, Terminbestätigung, Chat-Reminder, Onboarding-Reminder, Einladungen, Passwort-Reset, Registrierungs-Bestätigung, Resend, Warteschlange) samt der gemeinsamen Bausteine (Sendefenster, Kontingente, Absender-Auflösung, Protokollierung).
+Ich habe alle in der letzten Runde geänderten Stellen erneut gelesen. **Drei Sachen sind sauber**, **vier Punkte solltest du vor dem Deploy noch mitnehmen**.
 
-## Befunde
+### Sauber (geprüft, nichts zu tun)
+- `send-reminders`: Kontingent-Zähler laufen jetzt serverseitig (`count: "exact", head: true`), 1.000-Zeilen-Falle weg, Doppelzählung durch `Math.max` statt Summe korrekt.
+- `send-appointment-reminders`: „schon gesendet"-Prüfung lädt seitenweise (`.range`) — gekappt kann sie nicht mehr werden.
+- `send-application-reminders`: harte Doppelsperre direkt vor dem Versand vorhanden (einmal pro Bewerber+Art, plus 20-h-Fenster pro Adresse+Vorlage).
 
-### 1. Dieselbe Doppelversand-Ursache steckt noch in zwei weiteren Jobs (bestätigt)
+### Noch offen
 
-Die 111 Mails an einen Bewerber kamen daher, dass die Prüfung „habe ich das schon geschickt?" nur die ersten 1.000 Protokollzeilen laden konnte. Genau dieses Muster steckt unverändert noch in:
+**1. Kontingent-Zähler in `send-application-reminders` ist weiterhin gekappt**
+Zeile ~594–606 lädt für die 1-h-/12-h-Rechnung noch Zeilen (`select tenant_id, created_at`) statt serverseitig zu zählen. Ab 1.000 Zeilen im Fenster rechnet der Job das Kontingent zu niedrig und zieht die SMTP-Grenze zu spät. Gleiche Umstellung wie in `send-reminders`: pro Tenant zwei `count`-Abfragen (1 h / 12 h).
 
-- **Terminbestätigung** (`send-booking-confirmation`): lädt zur Prüfung *alle* jemals versendeten Terminbestätigungen — ungefiltert und ohne Seitenlogik. Sobald es mehr als 1.000 davon gibt, fallen ältere Termine aus dem Ergebnis und die Bestätigung geht erneut raus. Dasselbe gilt für die Fehler-Zählung („max. 3 Versuche"), die dadurch ebenfalls unwirksam wird.
-- **Termin-Erinnerung 30 Min vorher** (`send-appointment-reminders`): gleiche Prüfung ohne Seitenlogik — kippt, sobald das Protokoll eines Zeitfensters über 1.000 Zeilen kommt.
+**2. `send-booking-confirmation` macht bis zu 400 Einzelabfragen pro Lauf**
+Die neue Prüfung läuft in einer Schleife über bis zu 200 Termine × 2 Abfragen — sequenziell. Das ist bei vollem Fenster zu langsam (Timeout-Risiko alle 30 Min). Fix: **eine** Abfrage für alle Termin-IDs gleichzeitig (`.in("metadata->>appointment_id", apptIds)` für `sent` und für `failed`), Ergebnis in zwei Sets/Zähler auflösen — statt Schleife.
 
-Das erklärt auch die doppelte „Terminbestätigung" im Screenshot von vorhin.
+**3. Der Status `duplicate` aus dem Aufräum-Skript wird nirgends verstanden**
+Das Skript markiert überzählige Zeilen mit `status = 'duplicate'`. Im Mail Center wird nur `superseded` ausgefiltert; `duplicate` landet damit als **„noch kein Ergebnis"** in Liste und Statistik und auch in der Bewerber-Historie. Nach dem Aufräumen sähe es also so aus, als hingen 111 Mails. Fix:
+- Mail Center: `duplicate` genauso wie `superseded` aus Liste, Zähler und Tagesbalken ausblenden (bzw. eigene graue Kachel „Doppelversand bereinigt").
+- `src/lib/mail-chain.ts`: `duplicate` in `normalize()`/`statusStyle()` als eigener grauer Zustand „Doppelversand (bereinigt)", nicht als „pending".
 
-### 2. Kontingent-Zähler zählen nur bis 1.000
+**4. Aufräum-Skript: Gruppierung ist etwas zu grob**
+Partitioniert wird nach *Vorlage + Empfänger + Kalendertag*. Wenn dieselbe Vorlage an einem Tag legitim zweimal an dieselbe Adresse geht (z. B. Terminbestätigung nach Umbuchung), würde die zweite fälschlich als Duplikat markiert. Vorschlag: zusätzlich nach `metadata->>'appointment_id'` bzw. `metadata->>'application_id'` gruppieren, wo vorhanden — dann trifft es nur echte Wiederholungen desselben Vorgangs. Die Sicherungstabelle bleibt, das Skript verändert weiterhin nichts ohne `--apply`.
 
-Der Onboarding-Reminder-Motor (`send-reminders`) ermittelt die Stunden-/Tagesmengen pro Firma, indem er die Protokollzeilen lädt und zählt — ebenfalls bei 1.000 gekappt. Bei viel Verkehr werden die SMTP-Grenzen dadurch zu niedrig gerechnet und Grenzen zu spät gezogen.
+### Reihenfolge beim Ausrollen (nach den Fixes)
+1. Backend-Server: `git pull && bash scripts/deploy-backend-local.sh`
+2. `bash scripts/cleanup-duplicate-mails.sh --local` (nur ansehen) → dann `--apply`
+3. Portal-Server: `git reset --hard HEAD && git pull && bash scripts/deploy.sh`
 
-### 3. Altlasten in der Datenbank
+Wichtig: erst die Mail-Jobs (Backend), dann aufräumen, dann das Portal — sonst produziert der alte Cron während des Aufräumens neue Duplikate.
 
-Die bereits versendeten Duplikate (u. a. 111 Zeilen für einen Bewerber) stehen weiter in Protokoll und Mail Center und verfälschen alle Statistiken.
-
-### 4. Kein gemeinsamer Schutz
-
-Jede Funktion baut ihre Doppelsende-Prüfung selbst. Genau deshalb ist derselbe Fehler dreimal entstanden.
-
-## Was ich umsetzen will
-
-1. **Zentrale Doppelsende-Sperre** als gemeinsamer Baustein für alle Mail-Funktionen: „diese Vorlage an diese Adresse" geht nur einmal raus, plus harte Zeitsperre (dieselbe Vorlage nie zweimal innerhalb von 20 Stunden an dieselbe Adresse). Wird direkt vor dem Versand geprüft, unabhängig davon, ob vorher etwas schiefging.
-2. **Terminbestätigung und Termin-Erinnerung** auf diese Sperre umstellen und ihre Prüf-Abfragen auf den jeweiligen Vorgang eingrenzen statt „alles laden" — damit ist die 1.000-Zeilen-Falle strukturell weg.
-3. **Kontingent-Zähler** auf echte Datenbank-Zählung umstellen (statt Zeilen laden und abzählen), damit die SMTP-Grenzen wieder stimmen.
-4. **Aufräum-Skript** (`scripts/cleanup-duplicate-mails.sh`): zeigt erst alle betroffenen Empfänger und Duplikat-Zahlen an, entfernt auf Bestätigung die überzähligen Protokollzeilen (je Vorgang bleibt die erste erhalten). Nichts wird ohne Anzeige gelöscht.
-5. **Wächter im Mail Center**: ein Hinweisbanner „X Doppelversände in den letzten 24 h" mit Klick auf die Liste — falls so etwas je wieder auftritt, siehst du es sofort statt erst nach 111 Mails.
-6. **Prüf-Skript erweitern** (`scripts/mail-audit.sh`): meldet künftig auch Doppelversände und Vorgänge ohne Versandprotokoll („Hänger").
-
-## Technischer Teil
-
-- Neu: `supabase/functions/_shared/dedupe.ts` mit `alreadySent(admin, {applicationId, kind, recipient, templateName, windowHours})` — nutzt `count: "exact", head: true` statt Zeilen zu laden.
-- `send-booking-confirmation`: Dedup-/Fail-Cap-Abfragen auf `metadata->>appointment_id` der aktuellen Kandidaten eingrenzen + zentrale Sperre.
-- `send-appointment-reminders`: Reminder-Log-Abfrage seitenweise (`.range()`) + zentrale Sperre.
-- `send-reminders`: 24h/1h-Zähler auf `count: "exact", head: true` pro Tenant.
-- Kein Datenbank-Schema-Eingriff; das Aufräumen läuft über ein Skript mit Vorschau und Backup-Hinweis.
-
-## Rückfragen
-
-- Beim Aufräumen: sollen die überzähligen Zeilen **gelöscht** oder nur als „Duplikat" markiert werden (Statistiken sauber, Historie bleibt nachvollziehbar)? Ich würde Markieren empfehlen.
-- 20-Stunden-Sperrfrist für gleiche Vorlage + gleiche Adresse — passt das für alle Fälle, oder gibt es eine Mail, die bewusst öfter am Tag rausgehen darf?
+### Technische Details
+- Betroffene Dateien: `supabase/functions/send-application-reminders/index.ts`, `supabase/functions/send-booking-confirmation/index.ts`, `src/routes/admin.email-center.tsx`, `src/lib/mail-chain.ts`, `scripts/cleanup-duplicate-mails.sh`.
+- Keine DB-Migration nötig; `email_send_log.status` hat keinen Check-Constraint, `duplicate` ist als Wert zulässig.
