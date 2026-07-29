@@ -33,6 +33,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState<string | null>(null);
+  const [confirmDup, setConfirmDup] = useState<string | null>(null);
   const steps = buildMailChain(events, expected);
   const resend = useServerFn(resendRegistrationInvite);
 
@@ -65,11 +66,17 @@ export function MailChain({ applicationId, applicantName, events, expected, next
     }
   };
 
-  const doResend = async () => {
+  const doResend = async (confirmDuplicate = false) => {
     setBusy(true);
     try {
-      const res: any = await resend({ data: { applicationId } });
-      if (res?.sent) { toast.success("Einladung erneut versendet"); onRefresh?.(); }
+      const res: any = await resend({ data: { applicationId, confirmDuplicate } });
+      if (res?.sent) {
+        setConfirmDup(null);
+        toast.success("Einladung erneut versendet");
+        onRefresh?.();
+      } else if (res?.reason === "recent_invite") {
+        setConfirmDup(res.lastSentAt ?? "");
+      }
       else toast.error(res?.reason ? `Nicht versendet: ${res.reason}` : "Versand nicht möglich");
     } catch (e: any) {
       toast.error(e?.message ?? "Versand fehlgeschlagen");
@@ -117,13 +124,33 @@ export function MailChain({ applicationId, applicantName, events, expected, next
             variant="outline"
             className="h-5 px-1.5 text-[10px]"
             disabled={busy}
-            onClick={doResend}
+            onClick={() => doResend(false)}
           >
             {busy ? "Sende…" : "Jetzt senden"}
           </Button>
         )}
       </span>
       </div>
+      {confirmDup !== null && (
+        <Dialog open onOpenChange={(o) => !o && setConfirmDup(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Einladung wirklich erneut senden?</DialogTitle>
+              <DialogDescription>
+                An {applicantName} wurde bereits eine Registrierungseinladung versendet
+                {confirmDup ? ` (${formatWhen(confirmDup)})` : ""}. Ein erneuter Versand erzeugt einen
+                neuen Registrierungslink; der alte Link bleibt zusätzlich gültig.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button size="sm" variant="ghost" onClick={() => setConfirmDup(null)}>Abbrechen</Button>
+              <Button size="sm" disabled={busy} onClick={() => doResend(true)}>
+                {busy ? "Sende…" : "Trotzdem senden"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>E-Mail-Historie · {applicantName}</DialogTitle>
@@ -195,7 +222,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
         )}
 
         <div className="flex justify-end pt-2">
-          <Button size="sm" variant="outline" disabled={busy} onClick={doResend}>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => doResend(false)}>
             {busy ? "Sende…" : "Einladung erneut senden"}
           </Button>
         </div>
