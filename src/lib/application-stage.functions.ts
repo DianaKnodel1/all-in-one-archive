@@ -123,7 +123,7 @@ export const advanceApplicationStage = createServerFn({ method: "POST" })
             .maybeSingle();
           if (appRow) {
             const { recordInviteAttempt } = await import("@/lib/interview-engine.server");
-            await recordInviteAttempt(appRow as any, "skipped", reasonText);
+            await recordInviteAttempt(appRow as any, "skipped", reasonText, "admin_stage_change");
           }
           invite_mail = { sent: false, skipped: true, reason: "already_invited" };
         } else {
@@ -139,6 +139,7 @@ export const advanceApplicationStage = createServerFn({ method: "POST" })
             const req = getRequest();
             invite_mail = await sendRegistrationInviteAfterAiAccept(appRow as any, req, {
               force: !!data.sendInviteWithoutInterview,
+              source: "admin_stage_change",
             });
           }
         }
@@ -159,7 +160,11 @@ export const advanceApplicationStage = createServerFn({ method: "POST" })
 export const resendRegistrationInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ applicationId: z.string().uuid() }).parse(input),
+    z.object({
+      applicationId: z.string().uuid(),
+      // Ohne Bestätigung wird nicht doppelt versendet.
+      confirmDuplicate: z.boolean().optional(),
+    }).parse(input),
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
@@ -170,6 +175,37 @@ export const resendRegistrationInvite = createServerFn({ method: "POST" })
       .eq("id", data.applicationId)
       .maybeSingle();
     if (appErr || !appRow) throw new Error(appErr?.message ?? "Bewerbung nicht gefunden");
+
+    // Dublettenschutz wie im Cron: innerhalb von 20 Stunden nicht ungefragt
+    // ein zweites Mal einladen (jeder Klick erzeugt einen neuen Token + Mail).
+    if (!data.confirmDuplicate) {
+      const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+      const email = (appRow as any).email?.toLowerCase().trim() ?? "";
+      if (email) {
+        const { data: recent } = await supabaseAdmin
+          .from("email_send_log")
+          .select("created_at")
+          .eq("recipient_email", email)
+          .in("template_name", ["registration_invitation", "welcome_invitation", "invitation"])
+          .eq("status", "sent")
+          .gte("created_at", since)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (recent?.created_at) {
+          return {
+            sent: false,
+            skipped: true,
+            reason: "recent_invite" as const,
+            lastSentAt: recent.created_at as string,
+          };
+        }
+      }
+    }
+
     const { sendRegistrationInviteAfterAiAccept } = await import("@/lib/interview-engine.server");
-    return await sendRegistrationInviteAfterAiAccept(appRow as any, getRequest(), { force: true });
+    return await sendRegistrationInviteAfterAiAccept(appRow as any, getRequest(), {
+      force: true,
+      source: "manual_resend",
+    });
   });
