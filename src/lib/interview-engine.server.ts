@@ -481,9 +481,7 @@ export async function finalizeInterview(app: ApplicationRow, messages: Msg[], re
       interview_messages: messages,
       interview_summary: result.summary,
       interview_score: result.score,
-      // "error" ist kein gültiger DB-Wert — dann bleibt die Empfehlung leer
-      // und die Oberfläche zeigt "Auswertung fehlgeschlagen".
-      interview_recommendation: result.recommendation === "error" ? null : result.recommendation,
+      interview_recommendation: result.recommendation,
       ai_decision: toAiDecision(result.recommendation),
       ai_reason: result.summary,
       interview_completed_at: new Date().toISOString(),
@@ -492,12 +490,7 @@ export async function finalizeInterview(app: ApplicationRow, messages: Msg[], re
   if (updErr) throw new Error(updErr.message);
 
   // Stage-Lifecycle: positive KI-Entscheidung => sofort Zusage + Registrierungs-Mail.
-  const stage =
-    result.recommendation === "reject"
-      ? "vermittlung_absage"
-      : result.recommendation === "invite"
-        ? "vermittlung_zusage"
-        : null;
+  const stage = result.recommendation === "reject" ? "vermittlung_absage" : "vermittlung_zusage";
   if (stage) {
     await supabaseAdmin.rpc("advance_application_stage", {
       _application_id: app.id,
