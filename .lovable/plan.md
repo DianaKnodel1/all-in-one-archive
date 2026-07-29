@@ -1,33 +1,41 @@
-## Penible Gegenprüfung — Ergebnis
+## Stand nach deinem Log
 
-Ich habe die vier Änderungen nochmal gelesen und dabei den Weg jeder Zeile bis in die Oberfläche verfolgt. **Zwei Änderungen sind sauber**, **fünf Punkte würden nach dem Deploy Probleme machen** — vier davon hängen alle am neuen Status `duplicate`.
+Backend ist sauber durch:
+- Edge Functions neu deployed (Dedupe-Guards aktiv), keine offenen Migrations.
+- Bereinigung: 207 Gruppen, 538 überzählige Zeilen als `duplicate` markiert, Sicherung liegt in `public.email_send_log_dedupe_backup`.
+- Der Hauptverursacher ist klar sichtbar: `vermittlung_rebook_after_cancel_24h` (bis zu 48× pro Empfänger pro Tag) — genau der Pfad, für den jetzt zwei Sperren greifen (einmal pro Bewerber+Art über `application_reminder_log`, plus 20-Stunden-Sperre pro Empfänger+Vorlage).
 
-### Sauber
-- `send-application-reminders`: Kontingente werden serverseitig gezählt, keine Kappung mehr. Anzahl Tenants ist klein, die Schleife ist unkritisch.
-- `send-booking-confirmation`: statt 400 Einzelabfragen jetzt zwei Sammelabfragen. Die exakte Endprüfung direkt vor dem Versand bleibt bestehen — selbst wenn die Vorauswahl etwas übersieht, kann daraus **kein** Doppelversand entstehen.
+Fehlt noch: der Portal-Server (Frontend). Die neue Anzeige im Mail Center — bereinigte Zeilen ausblenden, „⧉ n bereinigt" in der Verlaufszeile, korrekte Statistik — läuft erst nach diesem Schritt. Bis dahin zeigt das Mail Center die 538 markierten Zeilen noch als ungewohnten Status an.
 
-### Muss vor dem Deploy noch rein
+## Schritt 1 — Portal-Server ausrollen
 
-**1. Nach dem Aufräumen würden grüne Haken grau werden**
-`buildMailChain` nimmt pro Schritt das **neueste** Ereignis. Das Aufräum-Skript behält die *älteste* Zeile als `sent` und markiert die *späteren* als `duplicate` — also ist die neueste Zeile ausgerechnet eine bereinigte. Ergebnis: bei Bewerbern mit bereinigten Duplikaten zeigt die Kette „⧉ Doppelversand" statt „✓ gesendet". Fix: bei der Auswahl des Schritt-Ereignisses `duplicate`-Zeilen überspringen, solange es ein echtes Ereignis gibt.
+```bash
+cd /opt/apps/portal && git reset --hard HEAD && git pull && bash scripts/deploy.sh
+```
 
-**2. Statistik im Verlaufs-Dialog zählt Duplikate als „ohne Ergebnis"**
-In `MailChain.tsx` fallen `duplicate`-Einträge in den Sammeltopf `other` („⏱ ohne Ergebnis"). Fix: eigene Zeile „⧉ n bereinigt" oder aus der Zusammenfassung herausrechnen.
+Danach im Mail Center prüfen:
+- Zählerzeile oben zeigt keine aufgeblähten „offen"-Zahlen mehr.
+- Bei einem betroffenen Bewerber (z. B. `s.julke@gmx.de`) steht im Verlauf ein grüner Haken plus „⧉ n bereinigt" statt vieler Einzelzeilen.
 
-**3. Dashboard-Statistik behandelt `duplicate` als „pending"**
-`src/lib/email-stats.ts` filtert nur `superseded` heraus und kennt `duplicate` weder in `STATUS_PRIORITY` noch in `FINAL_STATUSES`. Damit landen bereinigte Zeilen in `computeEmailStats` als **pending** — inklusive „hängt seit > 6 h" — und verfälschen Admin-Startseite und E-Mail-Logs. Fix: `duplicate` wie `superseded` herausfiltern und als finalen Zustand mit niedriger Priorität eintragen.
+## Schritt 2 — Wirksamkeit der Sperre belegen
 
-**4. Seite „E-Mail-Logs" blendet `duplicate` nicht aus**
-`admin.email-logs.tsx` filtert nur `.neq("status","superseded")`. Gleiche Umstellung wie im Mail Center: beide Status ausblenden. Zusätzlich `EMAIL_STATUS_LABELS`/`-COLORS` um `duplicate` („Doppelversand bereinigt", grau) ergänzen, damit nirgends der technische Rohwert auftaucht.
+Die Sperren sind Code, kein Datenstand — beweisen lässt sich das erst nach ein paar Cron-Läufen. Etwa 60–90 Minuten nach dem Deploy auf dem Backend-Server:
 
-**5. Bewerber-Historie lädt die 5.000 neuesten Mails ohne Filter**
-`admin.bewerbungen.tsx` holt `email_send_log` ungefiltert mit `limit(5000)`. Genau die 111 Duplikat-Zeilen verdrängen dort ältere echte Mails anderer Bewerber aus dem Fenster — die Kette zeigt dann fälschlich „noch kein Ergebnis". Fix: dieselbe Ausblendung (`superseded`, `duplicate`) auch in dieser Abfrage. Nach dem Aufräumen entspannt sich das zusätzlich von selbst.
+```bash
+cd /opt/apps/portal-migrations && bash scripts/cleanup-duplicate-mails.sh --local
+```
 
-### Rest-Risiken (bewusst akzeptiert, kein Code-Fix)
-- Die neue Sammelabfrage nach Termin-Kennung liefert selbst maximal 1.000 Zeilen. Das betrifft nur die *Vorauswahl* — die exakte Endprüfung pro Termin läuft weiterhin serverseitig als Zählung, ein Doppelversand kann daraus nicht entstehen. Höchstens der Zähler „übersprungen, schon gesendet" in der Job-Antwort ist minimal zu niedrig.
-- Beim Probelauf (`dry_run`) greift die Endprüfung nicht, weil vorher abgebrochen wird. Der Probelauf kann also etwas mehr „würde senden" melden als der Echtlauf tatsächlich verschickt. Für einen Testlauf unkritisch.
+Erwartung: für heute keine neuen Gruppen mit `rebook_after_cancel_*`. Tauchen doch neue auf, liegt es nicht mehr am Zeilenlimit, sondern daran, dass die Log-Zeile beim Versand gar nicht erst geschrieben wird — dann sehe ich mir den Schreibpfad in `send-application-reminders` an.
 
-### Technische Details
-- Zu ändern: `src/lib/mail-chain.ts`, `src/components/mail/MailChain.tsx`, `src/lib/email-stats.ts`, `src/routes/admin.email-logs.tsx`, `src/routes/admin.bewerbungen.tsx`.
-- Reine Anzeige-/Filterlogik, keine Datenbank-Migration, keine Änderung am Versand selbst.
-- Deploy-Reihenfolge bleibt: erst Backend (Mail-Jobs), dann `cleanup-duplicate-mails.sh` (erst ohne, dann mit `--apply`), zuletzt Portal.
+## Schritt 3 — Aufräumen nach der Bestätigung
+
+Wenn Schritt 2 sauber ist:
+- Sicherungstabelle `email_send_log_dedupe_backup` kann bleiben (klein, unschädlich) oder nach ein bis zwei Wochen gelöscht werden.
+- Offene Baustelle unabhängig davon: LH Marketing hat weiterhin SMTP-Fehler 535 (Authentifizierung). Dieser Tenant sendet nicht, egal wie sauber die Dedupe-Logik ist — dort müssen die Zugangsdaten neu gesetzt werden.
+
+## Technische Details
+
+- Erste Sperre: `application_reminder_log` wird pro Bewerber und Erinnerungsart mit `count: exact, head: true` abgefragt — serverseitige Zählung, damit das 1.000-Zeilen-Limit von PostgREST nicht mehr greift.
+- Zweite Sperre: `email_send_log` wird auf Empfänger + Vorlagenname + Status `sent` der letzten 20 Stunden geprüft.
+- Beide Abfragen filtern auf `status = 'sent'`; die neu markierten `duplicate`-Zeilen verfälschen die Prüfung also nicht.
+- Bereinigung gruppiert nach `appointment_id` bzw. `application_id`, damit legitime Neubuchungen am selben Tag nicht fälschlich markiert werden.
