@@ -11,14 +11,24 @@
 
 -- 1) Alt-Pausen aufheben ------------------------------------------------
 
-INSERT INTO public.activity_log (action, entity_type, entity_id, comment)
+-- actor_id ist NOT NULL -> Systemeintrag auf einen Admin schreiben.
+-- Gibt es keinen Admin, wird das Protokoll uebersprungen.
+INSERT INTO public.activity_log (actor_id, action, entity_type, entity_id, comment)
 SELECT
+  admin.user_id,
   'emails_reaktiviert',
   'tenant',
   t.id,
   'Automatisch freigegeben: Pause stammte aus dem Domain-Health-Job. '
   || 'Domain-Ausfall stoppt den Mail-Versand nicht mehr — nur noch SMTP-Fehler.'
 FROM public.tenants t
+CROSS JOIN LATERAL (
+  SELECT ur.user_id
+  FROM public.user_roles ur
+  WHERE ur.role = 'admin'
+  ORDER BY ur.user_id
+  LIMIT 1
+) AS admin
 WHERE t.emails_paused = true
   AND t.emails_paused_by = 'auto:domain_down';
 
