@@ -434,12 +434,24 @@ serve(async (req) => {
     const appIds = apps.map((a: any) => a.id);
     // Nur 'sent' blockiert weitere Zustellversuche. 'skipped'/'failed' dürfen erneut
     // versucht werden (z.B. wenn inzwischen ein Calendly-Link hinterlegt wurde).
-    const { data: existing } = await admin
-      .from("application_reminder_log")
-      .select("application_id,reminder_kind,status")
-      .in("application_id", appIds)
-      .eq("status", "sent");
-    const already = new Set<string>((existing ?? []).map((r: any) => `${r.application_id}|${r.reminder_kind}`));
+    // WICHTIG: seitenweise laden. PostgREST liefert sonst nur die ersten 1000
+    // Zeilen — fehlt die Zeile dieses Bewerbers, wird dieselbe Mail bei JEDEM
+    // Cron-Lauf erneut versendet (Endlosschleife).
+    const already = new Set<string>();
+    {
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data: page, error: pageErr } = await admin
+          .from("application_reminder_log")
+          .select("application_id,reminder_kind,status")
+          .in("application_id", appIds)
+          .eq("status", "sent")
+          .range(from, from + PAGE - 1);
+        if (pageErr) break;
+        for (const r of page ?? []) already.add(`${r.application_id}|${r.reminder_kind}`);
+        if (!page || page.length < PAGE) break;
+      }
+    }
 
     type ReminderKind = "no_booking_24h" | "no_booking_72h" | "no_show_24h" | "registration_pending_24h" | "registration_pending_72h" | "rebook_after_cancel_24h" | "rebook_after_cancel_72h";
     type Todo = { app: any; kind: ReminderKind; inviteToken?: string };
@@ -756,6 +768,34 @@ serve(async (req) => {
 
       const templateName = `${isRegistration ? "fasttrack" : "vermittlung"}_${kind}`;
       const messageId = `${kind}-${app.id}-${Date.now()}@${isRegistration ? "fasttrack" : "vermittlung"}`;
+
+      // ── Letzte Sicherung gegen Doppelversand ───────────────────────────────
+      // Auch wenn oben etwas schiefging (Log-Zeile fehlt, Query gekappt):
+      // dieselbe Mail geht pro Bewerber nur EINMAL raus.
+      try {
+        const { count: alreadySent } = await admin
+          .from("application_reminder_log")
+          .select("application_id", { count: "exact", head: true })
+          .eq("application_id", app.id)
+          .eq("reminder_kind", kind)
+          .eq("status", "sent");
+        if ((alreadySent ?? 0) > 0) {
+          skipped++; results.push({ app: app.id, kind, status: "skipped", reason: "already_sent" });
+          continue;
+        }
+        const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+        const { count: recentSend } = await admin
+          .from("email_send_log")
+          .select("id", { count: "exact", head: true })
+          .eq("recipient_email", app.email)
+          .eq("template_name", templateName)
+          .eq("status", "sent")
+          .gte("created_at", since);
+        if ((recentSend ?? 0) > 0) {
+          skipped++; results.push({ app: app.id, kind, status: "skipped", reason: "duplicate_within_20h" });
+          continue;
+        }
+      } catch { /* Prüfung darf den Lauf nicht abbrechen */ }
 
       try {
         await sendMail(tenant, app.email, subject, html);
