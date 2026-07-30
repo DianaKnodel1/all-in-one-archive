@@ -306,6 +306,23 @@ function renderJs(row: LandingRow): string {
   return t ? applyPlaceholders(t.js, row.branding, row.slots) : "// theme missing";
 }
 
+function statusPage(title: string, text: string): string {
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${title}</title>
+<style>
+  :root{color-scheme:light}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#f6f7f9;color:#1c2430;
+       font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:32rem;padding:2.5rem 1.5rem;text-align:center}
+  h1{font-size:1.4rem;margin:0 0 .75rem;font-weight:650}
+  p{margin:0;color:#5b6674}
+</style></head>
+<body><main><h1>${title}</h1><p>${text}</p></main></body></html>`;
+}
+
 // ── HTTP-Handler ─────────────────────────────────────────────────────────
 const server = Bun.serve({
   port: PORT,
