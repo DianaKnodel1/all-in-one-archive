@@ -1,38 +1,62 @@
 ## Ziel
 
-Ein Auftrag im Mitarbeiter-Portal, der eine Identifikation über die WebID-App abbildet: Der Admin hinterlegt pro Mitarbeiter eine **Vorgangsnummer** (und optional Auftraggeber, z. B. „Deutsche Bank"), der Mitarbeiter sieht sie im Portal, startet WebID, und meldet den Abschluss zurück.
+Der Mitarbeiter startet und durchläuft die WebID-Identifizierung **aus dem Portal heraus**. Die Identifizierung selbst läuft unverändert bei WebID — mit deren Original-Oberfläche und Original-Hinweistexten. Das Portal liefert nur den Rahmen: Vorgangsnummer, Start, Rückkehr, Status.
 
-Kein WebID-Vertrag/API-Key nötig — die Identifikation läuft in der WebID-App, das Portal führt und dokumentiert nur den Vorgang.
+## Wichtige technische Einschränkung vorab
+
+WebID sendet auf seinen Ident-Seiten Schutz-Header (`X-Frame-Options` / `CSP frame-ancestors`), die das Einbetten in fremde Seiten verhindern. Zusätzlich erlauben Browser Kamerazugriff in fremden iFrames nur eingeschränkt. Deshalb wird zweistufig gebaut:
+
+1. **Versuch: eingebettetes Fenster** im Portal (iFrame mit `allow="camera; microphone"`).
+2. **Automatischer Fallback:** öffnet sich das Fenster nicht (Schutz-Header greift), startet WebID in einem eigenen Browser-Fenster, während das Portal daneben die Station-Seite mit Fortschritt offen hält.
+
+Das ist keine Notlösung, sondern der übliche Weg — auch Banken binden WebID so ein. Für ein echtes Inline-SDK bräuchte es einen eigenen Vertrag; das lässt sich später ohne Umbau nachrüsten.
 
 ## Was gebaut wird
 
-**1. Admin: Auftragsdaten pro Mitarbeiter**
-Im bestehenden Bereich „Individuelle Daten" der Auftragszuweisung kommen Felder dazu:
-- Vorgangsnummer (Pflicht für WebID-Aufträge)
-- Auftraggeber / Bank (Freitext, z. B. Deutsche Bank)
-- optional Zugangsdaten (E-Mail/Passwort) und Hinweistext — Felder sind in der Datenbank bereits vorhanden, werden bisher nur nicht angezeigt.
+**1. Neue Portal-Seite „WebID-Station"**
+Eigene Route unter dem Auftrag. Aufbau:
 
-**2. Mitarbeiter: geführter WebID-Ablauf im Auftrag**
-Eine neue WebID-Karte in der Auftragsansicht mit klaren Schritten:
-1. WebID-App laden (App-Store-/Play-Store-Links, plus Web-Variante)
-2. Vorgangsnummer groß dargestellt mit „Kopieren"-Button
-3. „Identifikation starten" — öffnet WebID (Deep-Link mit Vorgangsnummer, Fallback: Web-Seite)
-4. Checkliste (Ausweis bereithalten, gute Beleuchtung, Datenschutz-Hinweis)
-5. „Identifikation abgeschlossen" bestätigen — setzt den Auftrag auf „eingereicht", optional Screenshot-/PDF-Upload als Nachweis
+```text
+┌─────────────────────────────────────────┐
+│ WebID-Identifikation · Deutsche Bank    │
+│ Vorgangsnummer: 4711-ABCD    [Kopieren] │
+├──────────────────────┬──────────────────┤
+│                      │ Schritt 1 ✓      │
+│   WebID-Oberfläche   │ Schritt 2 ●      │
+│   (eingebettet oder  │ Schritt 3 ○      │
+│    separates Fenster)│                  │
+│                      │ Checkliste:      │
+│                      │ ☐ Ausweis        │
+│                      │ ☐ Licht          │
+├──────────────────────┴──────────────────┤
+│ [Identifikation abgeschlossen]          │
+└─────────────────────────────────────────┘
+```
 
-**3. Neuer Baustein für den Auftrags-Builder**
-Ein Block-Typ „WebID-Identifikation", damit du den Schritt beliebig in eigene Auftragsvorlagen einbauen kannst (statt fest verdrahtet).
+- Kein Nachbau der WebID-Oberfläche, keine veränderten Warntexte — WebID rendert sich selbst.
+- Seitlich der Portal-Kontext: Vorgangsnummer, Zugangsdaten (falls hinterlegt), Checkliste, Ansprechpartner.
 
-**4. Status & Nachverfolgung**
-Der Admin sieht in der Auftragsübersicht Vorgangsnummer + Status (offen / gestartet / vom Mitarbeiter bestätigt / geprüft) und kann bestätigen oder Nachbesserung anfordern — über den vorhandenen Review-Workflow.
+**2. Start-Logik**
+Der „Identifikation starten"-Button baut die WebID-Ziel-URL mit der Vorgangsnummer zusammen und setzt den Auftrag automatisch auf `gestartet` (inkl. Zeitstempel). Auf dem Handy wird zusätzlich der App-Deep-Link angeboten, weil Kamera-Ident dort zuverlässiger läuft.
+
+**3. Rückkehr & Abschluss**
+Nach dem Ident kommt der Mitarbeiter zurück auf die Station-Seite und bestätigt den Abschluss. Optional lässt sich ein Nachweis (Screenshot/PDF der WebID-Bestätigung) hochladen — der Upload-Mechanismus des Auftragssystems wird wiederverwendet. Status geht auf `bestaetigt`, der Admin prüft und setzt auf `geprueft`.
+
+**4. Konfigurierbare WebID-Ziel-URL**
+Die Basis-URL wird nicht fest im Code stehen, sondern pro Auftrag bzw. als Einstellung hinterlegbar sein — falls der Auftraggeber (Bank) eine eigene WebID-Einstiegs-URL vorgibt, wird sie dort eingetragen. Damit ist auch der spätere Wechsel auf eine echte API-Anbindung nur ein Feldwechsel.
+
+**5. Admin-Sicht**
+In der Auftragsübersicht: Vorgangsnummer, Auftraggeber, Status-Badge und Zeitstempel (gestartet/bestätigt), plus Button „Nachbesserung anfordern" über den vorhandenen Review-Workflow.
 
 ## Technische Details
 
-- Datenbank: `task_assignments.individual_case_number`, `individual_email`, `individual_password`, `individual_hint` existieren bereits; ergänzt wird eine Migration für `webid_client_name` und `webid_status` (+ `webid_started_at`, `webid_confirmed_at`) inkl. GRANTs/RLS analog zu den bestehenden Spalten.
-- Frontend: neue Komponente `src/components/WebIdTaskCard.tsx`, eingebunden in `src/routes/_employee/tasks.$assignmentId.tsx`; Admin-Felder in `src/components/AssignmentIndividualData.tsx` und Anzeige in `AssignmentIndividualDataView.tsx`.
-- Neuer Block-Typ `webid` in `src/lib/task-blocks.ts` + Rendering im Builder und in der Mitarbeiter-Ansicht.
-- Deep-Link/Web-URL zu WebID wird als konfigurierbarer Wert gehalten, damit eine spätere echte WebID-API (Auftrag anlegen + Webhook-Status) ohne Umbau ergänzt werden kann.
+- Neue Route `src/routes/_employee/tasks.$assignmentId.webid.tsx` als Vollbild-Station.
+- `src/components/WebIdTaskCard.tsx` wird zur Einstiegskarte umgebaut (Vorgangsnummer + Button „Im Portal starten") und verlinkt auf die Station.
+- Neue Komponente `src/components/WebIdStationFrame.tsx`: iFrame mit `allow="camera; microphone; geolocation"`, Load-Timeout-Erkennung, automatischer Popup-Fallback via `window.open`.
+- Neue Spalte `webid_start_url` auf `task_assignments` (Migration mit GRANTs analog zu den bestehenden WebID-Spalten), gepflegt in `AssignmentIndividualData.tsx`.
+- Statuswechsel laufen über die bestehende `task_assignments`-Update-Logik, keine neue Auth-Ebene nötig.
+- Der bestehende Block-Typ `webid` im Auftrags-Builder bleibt und verweist künftig auf die Station.
 
-## Später möglich (nicht Teil dieses Schritts)
+## Was bewusst nicht gebaut wird
 
-Echte WebID-REST-Anbindung: Portal legt den Ident-Vorgang automatisch an, erhält die Vorgangsnummer/Ident-URL zurück und bekommt den Abschluss per Webhook — dafür braucht es Vertrag, Kunden-ID und API-Key.
+Keine Nachbildung der WebID-Oberfläche, keine ersetzten oder abgeschwächten Hinweistexte, keine Erfassung von Ausweisdaten im Portal. Ausweis, Selfie und Prüfung bleiben vollständig bei WebID — sonst wäre die Identifizierung für den Auftraggeber wertlos und rechtlich angreifbar.
