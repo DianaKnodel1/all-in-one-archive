@@ -74,7 +74,6 @@ export const EMAIL_TYPE_LABELS: Record<string, string> = {
   fasttrack_rebook_after_cancel_72h: "Fast-Track · Neuer Termin nach Absage 72h",
   application_received: "Vermittlung · Bewerbung eingegangen",
   registration_invitation: "Zusage · Registrierungs-Einladung",
-  invitation: "Einladung ins Mitarbeiter-Portal",
 };
 
 export interface EmailStats {
