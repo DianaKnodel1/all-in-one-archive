@@ -98,6 +98,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
         </PreviewInfoBox>
       );
     case "webid":
+      if (!WEBID_ENABLED) return null;
       return (
         <PreviewInfoBox variant="info">
           <p className="font-medium">🪪 WebID-Identifikation</p>
