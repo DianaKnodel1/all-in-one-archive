@@ -88,25 +88,7 @@ function AdminEmailCenterPage() {
     setExactTotal(count ?? null);
     setTenantNames(Object.fromEntries(((tenants as { id: string; name: string }[] | null) ?? []).map(t => [t.id, t.name])));
 
-    // SMTP-/Pausen-Probleme sammeln: das sind die Fälle, in denen Mails
-    // still liegen bleiben, ohne dass es jemandem auffällt.
-    const { data: health } = await supabase
-      .from("tenant_smtp_health" as any)
-      .select("tenant_id,last_verify_ok,last_fail_error");
-    const healthMap = new Map<string, any>(((health as any[]) ?? []).map(h => [String(h.tenant_id), h]));
-    const trouble: { id: string; name: string; reason: string }[] = [];
-    for (const t of ((tenants as any[]) ?? [])) {
-      const configured = Boolean(t.smtp_host && t.smtp_username && t.smtp_password && t.sender_email);
-      const h = healthMap.get(String(t.id));
-      if (t.emails_paused) {
-        trouble.push({ id: t.id, name: t.name, reason: t.emails_paused_reason || "Mail-Versand pausiert" });
-      } else if (!configured) {
-        trouble.push({ id: t.id, name: t.name, reason: "Keine SMTP-Zugangsdaten hinterlegt" });
-      } else if (h?.last_verify_ok === false) {
-        trouble.push({ id: t.id, name: t.name, reason: h.last_fail_error || "Letzter SMTP-Check fehlgeschlagen" });
-      }
-    }
-    setSmtpTrouble(trouble);
+    // SMTP-/Pausen-Probleme werden zentral in <SmtpTroubleNotice /> geladen.
     setVisible(100);
     setLoading(false);
   };
