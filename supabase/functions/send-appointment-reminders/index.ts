@@ -19,6 +19,7 @@ import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { renderEmail } from "../_shared/email-wrapper.ts";
 import { guardSend } from "../_shared/send-guard.ts";
 import { isDuplicateSend } from "../_shared/dedupe.ts";
+import { claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
 import { formatAppointmentDate, formatAppointmentTime } from "../_shared/format-datetime.ts";
 
 
@@ -348,15 +349,31 @@ serve(async (req) => {
       try {
         renderedSubject = renderTemplate(subject, vars);
         html = buildHtml(subject, bodyT, tenant.email_signature ?? "", tenant, vars);
-        await sendMail(tenant, a.email, renderedSubject, html);
-        await admin.from("application_reminder_log").upsert({
-          application_id: a.id, tenant_id: tenant.id, reminder_kind: REMINDER_KIND,
-          recipient_email: a.email, status: "sent",
-        }, { onConflict: "application_id,reminder_kind" });
-        await logEmailSend(admin, tenant, a, renderedSubject, html, "sent");
-        sent++; results.push({ application_id: a.id, status: "sent" });
-        // SMTP-Throttle gegen Rate-Limit
-        await new Promise((r) => setTimeout(r, 4000));
+        const eventKey = `interview_invite_30min:${a.id}:${a.scheduled_at}`;
+        const claim = await claimEmailEvent(admin, {
+          eventKey, templateName: REMINDER_KIND, recipient: a.email,
+          tenantId: tenant.id, senderEmail: tenant.sender_email ?? tenant.smtp_username,
+          subject: renderedSubject, html,
+          metadata: { application_id: a.id, scheduled_at: a.scheduled_at, kind: REMINDER_KIND, source: "send-appointment-reminders" },
+        });
+        if (!claim) {
+          skipped++; results.push({ application_id: a.id, status: "skipped", reason: "duplicate_blocked_by_db" });
+          continue;
+        }
+        try {
+          await sendMail(tenant, a.email, renderedSubject, html);
+          await admin.from("application_reminder_log").upsert({
+            application_id: a.id, tenant_id: tenant.id, reminder_kind: REMINDER_KIND,
+            recipient_email: a.email, status: "sent",
+          }, { onConflict: "application_id,reminder_kind" });
+          await finishEmailClaim(admin, claim, { status: "sent", metadata: { application_id: a.id, scheduled_at: a.scheduled_at, kind: REMINDER_KIND, source: "send-appointment-reminders" } });
+          sent++; results.push({ application_id: a.id, status: "sent" });
+          await new Promise((r) => setTimeout(r, 4000));
+        } catch (e: any) {
+          const errMsg = String(e?.message ?? e).slice(0, 500);
+          await finishEmailClaim(admin, claim, { status: "failed", error: errMsg, metadata: { application_id: a.id, scheduled_at: a.scheduled_at, kind: REMINDER_KIND, source: "send-appointment-reminders" } });
+          throw e;
+        }
       } catch (e: any) {
         failed++;
         const errMsg = String(e?.message ?? e).slice(0, 500);
@@ -364,7 +381,6 @@ serve(async (req) => {
           application_id: a.id, tenant_id: tenant.id, reminder_kind: REMINDER_KIND,
           recipient_email: a.email, status: "failed", error: errMsg,
         }, { onConflict: "application_id,reminder_kind" });
-        await logEmailSend(admin, tenant, a, renderedSubject, html, "failed", errMsg);
         results.push({ application_id: a.id, status: "failed", reason: errMsg });
       }
     }
