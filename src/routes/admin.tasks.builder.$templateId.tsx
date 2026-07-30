@@ -238,7 +238,8 @@ function AdminTemplateBuilderPage() {
   }
 
   const currentStep = steps[activeStep];
-  const blockTypes: BlockType[] = ["text", "info", "hint", "warning", "success", "image", "qr", "input", "question", "yes_no", "upload", "checkpoint", "webid"];
+  const blockTypes: BlockType[] = ["text", "info", "hint", "warning", "success", "image", "qr", "input", "question", "yes_no", "upload", "checkpoint",
+    ...(WEBID_ENABLED ? (["webid"] as BlockType[]) : [])];
 
   if (showPreview) {
     return (
