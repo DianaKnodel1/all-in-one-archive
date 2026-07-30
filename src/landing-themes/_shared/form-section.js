@@ -193,7 +193,7 @@
       var h2=document.createElement('h3');h2.style.cssText='margin:0 0 8px;font-size:22px;font-weight:700;';h2.textContent='Termin bestätigt';
       var start=new Date(bk.starts_at), end=new Date(bk.ends_at);
       var when=document.createElement('p');when.style.cssText='margin:0 0 6px;font-size:16px;color:#0f172a;font-weight:600;';
-      when.textContent=fmtDayLong.format(start)+' · '+fmtTime.format(start)+'–'+fmtTime.format(end)+' Uhr';
+      when.textContent=fmtDayLong.format(start)+' · '+fmtTime.format(start)+'–'+fmtTime.format(end)+' Uhr (deutsche Zeit)';
       var mail=document.createElement('p');mail.style.cssText='margin:6px 0 14px;color:#475569;font-size:13.5px;';
       mail.textContent='Sie erhalten in Kürze eine Bestätigungs-E-Mail mit allen Details.';
       wrap.appendChild(chk);wrap.appendChild(h2);wrap.appendChild(when);wrap.appendChild(mail);
@@ -219,10 +219,9 @@
           return;
         }
         state.schedule=res.body;
-        var greet='Wählen Sie Ihren Wunschtermin für das kurze Erstgespräch.';
-        var rec=res.body.recruiter_name||'unserem Recruiting-Team';
+        var greet='Wählen Sie einen freien Termin für Ihr Gespräch.';
         if(res.body.applicant_first_name){
-          greet='Hallo '+res.body.applicant_first_name+', wählen Sie Ihren Wunschtermin mit '+rec+'.';
+          greet='Hallo '+res.body.applicant_first_name+', wählen Sie einen freien Termin für Ihr Gespräch.';
         }
         sub.textContent=greet;
         loadRange();
