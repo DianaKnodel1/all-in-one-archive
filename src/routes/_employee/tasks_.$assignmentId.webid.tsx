@@ -24,7 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
-  buildWebIdStartUrl, WEBID_APP_LINKS, WEBID_STATUS_LABEL, type WebIdStatus,
+  buildWebIdStartUrl, WEBID_APP_LINKS, WEBID_ENABLED, WEBID_STATUS_LABEL, type WebIdStatus,
 } from "@/lib/webid";
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Copy, ExternalLink, Loader2,
@@ -67,6 +67,7 @@ function WebIdStationPage() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
+    if (!WEBID_ENABLED) return;
     let active = true;
     (async () => {
       if (!assignmentId) return;
@@ -84,6 +85,16 @@ function WebIdStationPage() {
     })();
     return () => { active = false; };
   }, [assignmentId]);
+
+  // Modul ist derzeit deaktiviert: Station ist für Mitarbeiter nicht erreichbar.
+  if (!WEBID_ENABLED) {
+    return (
+      <div className="space-y-4 p-4">
+        <p className="text-sm text-muted-foreground">Diese Seite ist derzeit nicht verfügbar.</p>
+        <Button variant="outline" onClick={() => navigate("/tasks")}>Zurück zu den Aufträgen</Button>
+      </div>
+    );
+  }
 
   const copy = (val: string, label: string) => {
     navigator.clipboard.writeText(val);
