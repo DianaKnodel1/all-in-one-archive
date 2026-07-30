@@ -225,9 +225,24 @@ function TaskWizardPage() {
 
   const loadData = async () => {
     try {
-      const assignRes = await supabase.from("task_assignments")
-        .select("id, task_template_id, status, admin_comment, individual_instructions, individual_phone, individual_hint, post_ident_pdf_url, post_ident_pdf_name, individual_case_number, individual_email, individual_password, webid_client_name, webid_status, webid_start_url, task_templates(id, title, description, instructions, compensation, image_url)")
+      // WebID-Spalten nur abfragen, wenn das Modul aktiv ist. Auf Installationen
+      // ohne die WebID-Migration existieren sie nicht — die Abfrage würde sonst
+      // komplett fehlschlagen und der Auftrag ließe sich nicht öffnen.
+      const BASE_SELECT =
+        "id, task_template_id, status, admin_comment, individual_instructions, individual_phone, individual_hint, post_ident_pdf_url, post_ident_pdf_name, individual_case_number, individual_email, individual_password, task_templates(id, title, description, instructions, compensation, image_url)";
+      const WEBID_SELECT = BASE_SELECT.replace(
+        ", task_templates(",
+        ", webid_client_name, webid_status, webid_start_url, task_templates(",
+      );
+      let assignRes = await supabase.from("task_assignments")
+        .select(WEBID_ENABLED ? WEBID_SELECT : BASE_SELECT)
         .eq("id", assignmentId!).eq("user_id", user!.id).single();
+      if (assignRes.error && /webid_/.test(assignRes.error.message ?? "")) {
+        // Fallback für Datenbanken ohne WebID-Spalten.
+        assignRes = await supabase.from("task_assignments")
+          .select(BASE_SELECT)
+          .eq("id", assignmentId!).eq("user_id", user!.id).single();
+      }
       if (assignRes.error) throw assignRes.error;
       const a = assignRes.data as any as TaskAssignment;
       setAssignment(a);
