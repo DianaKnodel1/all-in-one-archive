@@ -906,6 +906,42 @@ document.addEventListener('submit', function(e){
                         })()}
                       </td>
                       <td className="py-1.5 px-2">
+                        {(() => {
+                          // Was eine Landing braucht, damit der Ablauf durchläuft:
+                          // 1) Vermittlung → Ziel (Fast-Track / Partner / Calendly)
+                          // 2) Eigenes Buchungssystem → aktive Terminzeiten
+                          const problems: string[] = [];
+                          if (
+                            l.flow_type === "broker" &&
+                            !l.linked_fasttrack_landing_id &&
+                            !l.partner_company_id &&
+                            !String(l.calendly_url ?? "").trim()
+                          ) {
+                            problems.push("Vermittlungsziel fehlt");
+                          }
+                          const bookingMode = l.booking_mode ?? "calendly";
+                          if (bookingMode === "internal") {
+                            const targetId = l.linked_fasttrack_landing_id as string | null;
+                            const hasSchedule =
+                              scheduleLandingIds.has(String(l.id)) ||
+                              (targetId ? scheduleLandingIds.has(String(targetId)) : false);
+                            if (!hasSchedule) problems.push("Terminzeiten fehlen");
+                          }
+                          if (problems.length === 0) {
+                            return <span className="text-emerald-600" title="Vermittlung und Terminzeiten sind gesetzt">✓ bereit</span>;
+                          }
+                          return (
+                            <a
+                              href="/admin/verfuegbarkeit"
+                              className="text-amber-600 hover:underline"
+                              title="Ohne diese Angaben kann kein Termin gebucht werden"
+                            >
+                              ⚠ {problems.join(" · ")}
+                            </a>
+                          );
+                        })()}
+                      </td>
+                      <td className="py-1.5 px-2">
                         {l.is_published ? <span className="text-emerald-600">● live</span> : <span className="text-muted-foreground">○ pausiert</span>}
                       </td>
                       <td className="py-1.5 px-2 text-right">
