@@ -11,6 +11,7 @@ export interface EmailLog {
   created_at: string;
   acknowledged_at?: string | null;
   rendered_html?: string | null;
+  rendered_subject?: string | null;
 
 }
 
@@ -72,6 +73,7 @@ export const EMAIL_TYPE_LABELS: Record<string, string> = {
   fasttrack_rebook_after_cancel_24h: "Fast-Track · Neuer Termin nach Absage 24h",
   fasttrack_rebook_after_cancel_72h: "Fast-Track · Neuer Termin nach Absage 72h",
   application_received: "Vermittlung · Bewerbung eingegangen",
+  registration_invitation: "Zusage · Registrierungs-Einladung",
 };
 
 export interface EmailStats {
