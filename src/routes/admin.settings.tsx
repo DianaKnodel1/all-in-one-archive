@@ -90,6 +90,24 @@ function AdminSettingsPage() {
             <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
           </Card>
         </Link>
+        <Link to="/admin/contracts" className="group">
+          <Card className="hover:border-primary/40 transition-colors h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4" /> Verträge</CardTitle>
+              <CardDescription className="text-xs">Vertragsvorlagen anlegen und bearbeiten</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
+          </Card>
+        </Link>
+        <Link to="/admin/verfuegbarkeit" className="group">
+          <Card className="hover:border-primary/40 transition-colors h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Verfügbarkeit</CardTitle>
+              <CardDescription className="text-xs">Buchbare Zeiten für Bewerbungstermine</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
+          </Card>
+        </Link>
         <Link to="/admin/landing-generator" className="group">
           <Card className="hover:border-primary/40 transition-colors h-full">
             <CardHeader className="pb-2">

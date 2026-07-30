@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutGrid, FileText, Users, ClipboardList, CheckSquare, CalendarDays, Wallet, LogOut, MessageCircle, RotateCcw, History, Settings, Phone, Mail, Mailbox, Search, ShieldCheck, LayoutDashboard, Globe, Upload, Server, CalendarClock, Handshake, BarChart3 } from "lucide-react";
+import { LayoutGrid, Users, ClipboardList, CheckSquare, CalendarDays, Wallet, LogOut, MessageCircle, RotateCcw, History, Settings, Phone, Mail, Mailbox, Search, ShieldCheck, LayoutDashboard, Upload, Server, Handshake, BarChart3 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AdminCommandPalette } from "@/components/AdminCommandPalette";
 import { useAdminBadges } from "@/hooks/use-admin-badges";
@@ -40,15 +40,12 @@ const navGroups: NavGroup[] = [
       { title: "Bewerbungen", url: "/admin/bewerbungen", icon: Users, badgeKey: "newApplications" },
       { title: "Mitarbeiter", url: "/admin/mitarbeiter", icon: Users },
       // KYC ist über "Mitarbeiter → Öffnen" (Personen-Detail) erreichbar — spart Platz in der Sidebar.
-      { title: "Verträge", url: "/admin/contracts", icon: FileText },
     ],
   },
   {
     label: "Vermittlung",
     items: [
-      { title: "Landing-Generator", url: "/admin/landing-generator", icon: Globe },
       { title: "Vermittlung", url: "/admin/vermittlung", icon: Handshake },
-      { title: "Verfügbarkeit", url: "/admin/verfuegbarkeit", icon: CalendarClock },
       { title: "Bewerbungstermine", url: "/admin/bewerbungstermine", icon: CalendarDays },
     ],
   },
