@@ -81,8 +81,8 @@ function cleanLandingDomain(d: string): string {
  */
 function collapseRepeatedText(value: string): string {
   const v = String(value ?? "");
-  if (v.length < 4 || v.length > 400) return v;
-  for (let unit = 1; unit <= v.length / 2; unit++) {
+  if (v.length < 6 || v.length > 400) return v;
+  for (let unit = 3; unit <= v.length / 2; unit++) {
     if (v.length % unit !== 0) continue;
     const head = v.slice(0, unit);
     if (head.repeat(v.length / unit) === v) return head;
