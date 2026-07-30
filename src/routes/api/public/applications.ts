@@ -433,6 +433,15 @@ export const Route = createFileRoute("/api/public/applications")({
             ? `send-invitation-email ${status}`
             : message;
         };
+        // Rohes Gateway-HTML (Cloudflare-Fehlerseite) nie ins Mail-Protokoll schreiben.
+        const normalizeGatewayError = (message: string, status: number | null): string => {
+          const raw = String(message ?? "").trim();
+          const looksHtml = /^<|<!doctype|<html|cf-error|cloudflare/i.test(raw);
+          if (looksHtml || (status !== null && status >= 502 && status <= 524)) {
+            return `Mail-Dienst vorübergehend nicht erreichbar${status ? ` (Gateway ${status})` : ""} – Versand kann erneut angestoßen werden`;
+          }
+          return raw.length > 500 ? `${raw.slice(0, 500)}…` : raw;
+        };
         const invokeMailFunction = async (body: Record<string, unknown>) => {
           const supabaseUrl = (process.env.SUPABASE_URL ?? process.env.API_EXTERNAL_URL ?? "").replace(/\/+$/, "");
           const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SERVICE_ROLE_KEY ?? "";
