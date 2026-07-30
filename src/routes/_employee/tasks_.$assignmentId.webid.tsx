@@ -23,13 +23,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { WebIdStationFrame } from "@/components/WebIdStationFrame";
 import {
   buildWebIdStartUrl, WEBID_APP_LINKS, WEBID_STATUS_LABEL, type WebIdStatus,
 } from "@/lib/webid";
 import {
-  ArrowLeft, CheckCircle2, Copy, ExternalLink, Loader2, PlayCircle,
-  ShieldCheck, Smartphone, Upload,
+  ArrowLeft, ArrowRight, CheckCircle2, Copy, ExternalLink, Loader2,
+  RotateCcw, ShieldCheck, Smartphone, Upload,
 } from "lucide-react";
 
 interface WebIdAssignmentRow {
@@ -63,7 +62,6 @@ function WebIdStationPage() {
   const [loading, setLoading] = useState(true);
   const [row, setRow] = useState<WebIdAssignmentRow | null>(null);
   const [status, setStatus] = useState<WebIdStatus>("offen");
-  const [started, setStarted] = useState(false);
   const [saving, setSaving] = useState<WebIdStatus | null>(null);
   const [checked, setChecked] = useState<boolean[]>(CHECKLIST.map(() => false));
   const [uploading, setUploading] = useState(false);
@@ -82,7 +80,6 @@ function WebIdStationPage() {
       setRow(rec);
       const s = (rec?.webid_status as WebIdStatus | null) ?? "offen";
       setStatus(s);
-      if (s !== "offen") setStarted(true);
       setLoading(false);
     })();
     return () => { active = false; };
@@ -94,7 +91,7 @@ function WebIdStationPage() {
   };
 
   const setWebIdStatus = async (next: WebIdStatus) => {
-    if (!assignmentId) return;
+    if (!assignmentId) return false;
     setSaving(next);
     const payload: Record<string, unknown> = { webid_status: next };
     if (next === "gestartet") payload.webid_started_at = new Date().toISOString();
@@ -103,15 +100,19 @@ function WebIdStationPage() {
     setSaving(null);
     if (error) {
       toast({ title: "Fehler", description: error.message, variant: "destructive" });
-      return;
+      return false;
     }
     setStatus(next);
     if (next === "bestaetigt") toast({ title: "Danke! Abschluss wurde gemeldet." });
+    return true;
   };
 
-  const start = async () => {
-    setStarted(true);
+  // Übergabe an WebID im selben Tab: kein iFrame, kein Popup, kein Umschalten.
+  // Der Mitarbeiter kommt über den Zurück-/Rückkehr-Weg direkt wieder auf dieser
+  // Station an und sieht dann die Abschluss-Ansicht.
+  const goToWebId = async () => {
     if (status === "offen") await setWebIdStatus("gestartet");
+    window.location.assign(targetUrl);
   };
 
   const uploadProof = async (file: File) => {
