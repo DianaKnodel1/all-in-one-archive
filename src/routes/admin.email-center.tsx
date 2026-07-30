@@ -199,6 +199,26 @@ function AdminEmailCenterPage() {
   }, [rows]);
 
   const perTemplate = useMemo(() => {
+    return buildPerTemplate(rows);
+  }, [rows]);
+
+  /**
+   * Hängende & fehlgeschlagene Mails: alles, was Aufmerksamkeit braucht.
+   * "Hängend" = seit mehr als 15 Minuten im Status pending/claimed,
+   * also vom Versand beansprucht, aber nie als gesendet bestätigt.
+   */
+  const problems = useMemo(() => {
+    const cutoff = Date.now() - 15 * 60_000;
+    return rows
+      .filter(r => {
+        if (["failed", "dlq", "bounced"].includes(r.status)) return true;
+        if (["pending", "claimed"].includes(r.status)) return new Date(r.created_at).getTime() < cutoff;
+        return false;
+      })
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  }, [rows]);
+
+  const perTemplateUnused = useMemo(() => {
     const m = new Map<string, { sent: number; failed: number; pending: number; skipped: number; last?: string }>();
     for (const r of rows) {
       const cur = m.get(r.template_name) ?? { sent: 0, failed: 0, pending: 0, skipped: 0 };
