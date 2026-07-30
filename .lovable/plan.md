@@ -1,52 +1,44 @@
-## Ziel
+# Sporadische „Keine Landing für … konfiguriert.“
 
-Der Mitarbeiter startet und beendet den WebID-Auftrag vollständig aus dem Portal heraus — ohne zweites Browserfenster, ohne 5-Sekunden-Wartezeit, ohne dass er selbst etwas umschalten muss. Die Identifizierung läuft weiterhin bei WebID, mit deren Oberfläche und deren Hinweistexten.
+## Was ich geprüft habe
 
-## Was sich ändert
+Die Meldung kommt aus dem Landing-Renderer auf Server 1 (`landing-server/server.js`, Zeile 402). Sie wird ausgegeben, sobald die Domain-Abfrage keine Zeile liefert — und zwar **auch dann, wenn die Abfrage gar nicht beantwortet wurde**.
 
-Heute: iFrame → 5 Sekunden warten → Popup. Der Mitarbeiter sieht erst einen Ladebalken, dann springt ein Fenster auf.
-
-Künftig: Übergabe im selben Tab. Ein Klick auf „Identifikation starten" führt direkt zu WebID; nach Abschluss kommt er über einen Rückkehr-Link wieder auf der Station-Seite an, die den Auftrag exakt dort weiterführt, wo er war.
+In `loadLanding(domain)` passiert aktuell Folgendes:
 
 ```text
-Portal · Auftragsseite
-      │  [Identifikation starten]
-      ▼
-Portal · Station (Vorbereitung)
-   Vorgangsnummer, Checkliste, Was passiert jetzt
-      │  [Weiter zu WebID]   → Status: gestartet
-      ▼
-WebID (Original-Oberfläche, gleicher Tab)
-      │  fertig
-      ▼
-Portal · Station (Rückkehr)
-   „Identifikation abgeschlossen" + optionaler Nachweis
-      │
-      ▼
-Status: bestätigt → Admin prüft → geprüft
+Datenbank-Abfrage
+   ├── Antwort ok        → Zeile merken (60 s)
+   ├── HTTP-Fehler       → Fehler loggen, row = null  ──┐
+   └── Timeout / Netz    → Fehler loggen, row = null  ──┤
+                                                        ▼
+                              null wird 60 s lang gecacht → jede Anfrage
+                              in dieser Minute bekommt 404 „Keine Landing …"
 ```
 
-## Einzelteile
+Das erklärt genau das beobachtete Verhalten: es trifft **eine** Domain, **nur manchmal**, für **kurze Zeit**, während andere Landings normal laufen — weil deren Zeile noch im Cache liegt. Ein einzelner Aussetzer der Backend-Verbindung (Timeout, kurzer 5xx, Ratelimit) reicht, um eine Landing eine Minute lang offline zu nehmen. Bewerber sehen in dieser Zeit nur den Fehlertext.
 
-**1. Vorbereitungs-Ansicht auf der Station**
-Bevor übergeben wird, zeigt das Portal in eurem eigenen Branding und mit euren eigenen Texten: Vorgangsnummer groß + Kopierbutton, Zugangsdaten, Checkliste (Ausweis bereit, Licht, ruhige Umgebung, ca. 5 Minuten Zeit), und eine kurze Erklärung, was als Nächstes passiert. Das ist der Teil, den ihr frei textlich gestalten könnt — er gehört euch, nicht WebID.
+Zusätzlich: dieselbe Funktion beantwortet Caddys `on_demand_tls`-Nachfrage (`/_internal/ask`). Fällt sie in ein solches Fehlerfenster, kann auch die Zertifikatsausstellung für eine neue Domain scheitern.
 
-**2. Übergabe statt Einbetten**
-Der `WebIdStationFrame` mit iFrame, Timeout-Erkennung und `window.open`-Fallback entfällt. Stattdessen: Navigation im selben Tab, vorher Status auf `gestartet` mit Zeitstempel. Auf dem Handy zusätzlich der App-Deep-Link, weil die Kamera dort zuverlässiger ist.
+Die Ursache ist damit hinreichend eingegrenzt, ohne dass sie „Landing fehlt in der Datenbank" wäre — eine dauerhaft fehlende Zeile würde permanent 404 liefern, nicht sporadisch.
 
-**3. Rückkehr**
-Die Station merkt sich, dass eine Übergabe lief (Zustand am Auftrag, nicht im Browser). Kommt der Mitarbeiter zurück auf `/tasks/<id>/webid`, sieht er direkt die Abschluss-Ansicht: „Identifikation abgeschlossen" plus optionaler Nachweis-Upload. Bricht er ab, kann er jederzeit erneut starten.
+## Was geändert wird
 
-**4. Optionale Einbettung bleibt möglich**
-Falls WebID eure Portal-Domain irgendwann für echte Einbettung freischaltet, reicht ein Schalter am Auftrag („inline erlaubt") — der Übergabeweg bleibt Standard, die Station kann dann inline rendern. Kein Umbau nötig.
+Alles in `landing-server/server.js` (plus dieselbe Logik in `landing-server/server.ts`, damit beide Varianten gleich bleiben):
 
-## Technische Details
+1. **Fehler nie als „nicht vorhanden" cachen.** Nur ein erfolgreicher Abruf schreibt in den Cache. Fehlerfälle werden klar von „Domain existiert wirklich nicht" getrennt.
+2. **Letzten bekannten Stand weiterliefern (stale-while-error).** Eine einmal erfolgreich geladene Landing wird im Speicher behalten und bei Backend-Störung weiter ausgeliefert, statt einen 404 zu zeigen. Erst wenn nie eine Zeile geladen wurde, gibt es eine Fehlerseite.
+3. **Kurzer Retry.** Fehlgeschlagene Abfragen werden einmal nach ~300 ms wiederholt, Timeout von 10 s auf 6 s gesenkt, damit ein Retry innerhalb einer normalen Ladezeit passt.
+4. **Negativ-Cache getrennt und kurz.** Ein echtes „Domain nicht in der Tabelle" wird nur ~15 s gemerkt (statt 60 s), damit eine frisch angelegte Landing schneller live geht.
+5. **Hintergrund-Refresh.** Abgelaufene Einträge werden asynchron erneuert; die Anfrage wird sofort mit dem vorhandenen Stand beantwortet, statt auf die Datenbank zu warten.
+6. **Bessere Fehlerseite statt Rohtext.** Wenn wirklich keine Landing existiert: eine schlichte, freundliche Seite mit Hinweis („Diese Seite ist gerade nicht verfügbar") statt der technischen Meldung. Bei Backend-Störung ohne bekannten Stand: HTTP 503 mit `Retry-After`, damit Suchmaschinen die Seite nicht als dauerhaft weg werten.
+7. **`/_internal/ask` unverändert streng**, aber ebenfalls ohne Fehler-Caching, damit Zertifikate nicht an einem Aussetzer scheitern.
+8. **Diagnose:** Zähler für Fehlversuche pro Domain im vorhandenen `/_internal`-Bereich abrufbar, damit sich künftig belegen lässt, ob es wieder auftritt.
 
-- `src/routes/_employee/tasks_.$assignmentId.webid.tsx`: zwei Ansichten (Vorbereitung / Rückkehr), gesteuert über `webid_status`.
-- `src/components/WebIdStationFrame.tsx`: wird entfernt bzw. auf den optionalen Inline-Fall reduziert; kein Timeout, kein Popup.
-- `src/lib/webid.ts`: `buildWebIdStartUrl` bleibt unverändert (Platzhalter `{vorgangsnummer}`).
-- Statuswechsel weiterhin über die bestehende `task_assignments`-Update-Logik; keine neue Spalte nötig.
+## Danach
 
-## Was bewusst nicht gebaut wird
+Deploy auf Server 1 (Renderer neu starten), dann `personalservice-gmbh.de` und zwei weitere Landings prüfen. Falls die Fehler weiter auftauchen, zeigen die neuen Log-Zeilen dann direkt, ob es Timeouts, HTTP-Fehler oder tatsächlich fehlende Datensätze sind.
 
-Kein Nachbau der WebID-Oberfläche, keine ersetzten oder abgeschwächten Warnhinweise, kein Verbergen des Anbieters gegenüber dem Mitarbeiter, keine Erfassung von Ausweisdaten im Portal. Ausweis, Selfie und Prüfung bleiben vollständig bei WebID.
+## Offene Frage (kann parallel laufen)
+
+Falls du im Journal von Server 1 nachsehen kannst: `journalctl -u landing-server --since "2 days ago" | grep "DB-Error"` — die Zeilen dort bestätigen, welcher Fehlertyp es ist. Für die Umsetzung ist das nicht nötig, es macht die Bestätigung nur schneller.
