@@ -26,6 +26,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { type TaskStep, type ContentBlock } from "@/lib/task-blocks";
 import { TaskSmsMessages } from "@/components/TaskSmsMessages";
 import { AssignmentIndividualDataView } from "@/components/AssignmentIndividualDataView";
+import { WebIdTaskCard, type WebIdStatus } from "@/components/WebIdTaskCard";
 
 interface TaskTemplate {
   id: string; title: string; description: string;
@@ -46,6 +47,11 @@ interface TaskAssignment {
   individual_hint?: string | null;
   post_ident_pdf_url?: string | null;
   post_ident_pdf_name?: string | null;
+  individual_case_number?: string | null;
+  individual_email?: string | null;
+  individual_password?: string | null;
+  webid_client_name?: string | null;
+  webid_status?: string | null;
 }
 
 function InfoBox({ variant, title, children }: { variant: "info" | "hint" | "warning" | "success"; title?: string; children: React.ReactNode }) {
@@ -93,6 +99,14 @@ function DynamicBlockRenderer({
       return <InfoBox variant="success" title={(block as any).label}><p className="whitespace-pre-wrap">{block.content}</p></InfoBox>;
     case "checkpoint":
       return <InfoBox variant="success" title="Kontrollpunkt erreicht"><p>{block.content}</p></InfoBox>;
+    case "webid":
+      return (
+        <InfoBox variant="info" title="WebID-Identifikation">
+          <p className="whitespace-pre-wrap">
+            {block.content || "Deine Vorgangsnummer und die Bestätigung findest du oben in der Übersicht im Block „WebID-Identifikation“."}
+          </p>
+        </InfoBox>
+      );
     case "image":
       return block.imageUrl ? (
         <div className="rounded-xl overflow-hidden border border-border">
@@ -210,7 +224,7 @@ function TaskWizardPage() {
   const loadData = async () => {
     try {
       const assignRes = await supabase.from("task_assignments")
-        .select("id, task_template_id, status, admin_comment, individual_instructions, individual_phone, individual_hint, post_ident_pdf_url, post_ident_pdf_name, task_templates(id, title, description, instructions, compensation, image_url)")
+        .select("id, task_template_id, status, admin_comment, individual_instructions, individual_phone, individual_hint, post_ident_pdf_url, post_ident_pdf_name, individual_case_number, individual_email, individual_password, webid_client_name, webid_status, task_templates(id, title, description, instructions, compensation, image_url)")
         .eq("id", assignmentId!).eq("user_id", user!.id).single();
       if (assignRes.error) throw assignRes.error;
       const a = assignRes.data as any as TaskAssignment;
@@ -501,6 +515,21 @@ function TaskWizardPage() {
                 post_ident_pdf_url: assignment.post_ident_pdf_url ?? null,
                 post_ident_pdf_name: assignment.post_ident_pdf_name ?? null,
               }} />
+
+              {/* WebID-Identifikation */}
+              {assignmentId && (
+                <WebIdTaskCard
+                  assignmentId={assignmentId}
+                  data={{
+                    webid_client_name: assignment.webid_client_name ?? null,
+                    webid_status: (assignment.webid_status as WebIdStatus | null) ?? null,
+                    individual_case_number: assignment.individual_case_number ?? null,
+                    individual_email: assignment.individual_email ?? null,
+                    individual_password: assignment.individual_password ?? null,
+                  }}
+                  onChanged={loadData}
+                />
+              )}
 
               {/* SMS Messages for this assignment */}
               {assignmentId && <TaskSmsMessages assignmentId={assignmentId} />}

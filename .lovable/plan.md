@@ -1,30 +1,38 @@
 ## Ziel
-Bewerbungs-Interviewtermine und Mitarbeiter-/Auftragstermine werden zwei getrennte Admin-Seiten statt einer gemischten Ansicht.
 
-## Neue Struktur
-```text
-/admin/appointments          -> "Mitarbeiter-Termine" (Auftrags-Buchungen, Tabelle wie bisher)
-/admin/bewerbungstermine     -> "Bewerbungstermine" (Interview-Buchungen der Bewerber)
-```
+Ein Auftrag im Mitarbeiter-Portal, der eine Identifikation über die WebID-App abbildet: Der Admin hinterlegt pro Mitarbeiter eine **Vorgangsnummer** (und optional Auftraggeber, z. B. „Deutsche Bank"), der Mitarbeiter sieht sie im Portal, startet WebID, und meldet den Abschluss zurück.
 
-## Was gemacht wird
+Kein WebID-Vertrag/API-Key nötig — die Identifikation läuft in der WebID-App, das Portal führt und dokumentiert nur den Vorgang.
 
-**1. Neue Seite `src/routes/admin.bewerbungstermine.tsx`**
-- Enthält die bisherige Komponente `ApplicantInterviewAppointments` aus `admin.appointments.tsx`, als eigene Seite mit Überschrift „Bewerbungstermine" und Anzahl der Buchungen.
-- Volle Liste statt der bisherigen Kürzung auf 8/6 Einträge, mit den zwei Blöcken „Kommende Interviews" und „Abgesagt / erledigt / No-Show".
-- Status-Filter (alle / gebucht / abgesagt / abgeschlossen / nicht erschienen) oben rechts.
+## Was gebaut wird
 
-**2. `src/routes/admin.appointments.tsx` bereinigen**
-- Einbindung von `ApplicantInterviewAppointments` entfernen, Komponente und Hilfsfunktion in die neue Datei verschieben.
-- Titel auf „Mitarbeiter-Termine" ändern, Beschreibung anpassen (Auftrags-/Mitarbeiter-Buchungen).
-- Rest (Termin erstellen, Zuweisen, Freischaltung) bleibt unverändert.
+**1. Admin: Auftragsdaten pro Mitarbeiter**
+Im bestehenden Bereich „Individuelle Daten" der Auftragszuweisung kommen Felder dazu:
+- Vorgangsnummer (Pflicht für WebID-Aufträge)
+- Auftraggeber / Bank (Freitext, z. B. Deutsche Bank)
+- optional Zugangsdaten (E-Mail/Passwort) und Hinweistext — Felder sind in der Datenbank bereits vorhanden, werden bisher nur nicht angezeigt.
 
-**3. Navigation `src/components/AdminLayout.tsx`**
-- Bestehender Punkt „Bewerbungs-Termine" → `/admin/bewerbungstermine` (Bewerber-Interviews).
-- Zusätzlicher Punkt „Mitarbeiter-Termine" → `/admin/appointments`.
-- Beide im passenden Menü-Bereich (Bewerbungstermine bei den Bewerber-Punkten, Mitarbeiter-Termine bei den Mitarbeiter-Punkten).
+**2. Mitarbeiter: geführter WebID-Ablauf im Auftrag**
+Eine neue WebID-Karte in der Auftragsansicht mit klaren Schritten:
+1. WebID-App laden (App-Store-/Play-Store-Links, plus Web-Variante)
+2. Vorgangsnummer groß dargestellt mit „Kopieren"-Button
+3. „Identifikation starten" — öffnet WebID (Deep-Link mit Vorgangsnummer, Fallback: Web-Seite)
+4. Checkliste (Ausweis bereithalten, gute Beleuchtung, Datenschutz-Hinweis)
+5. „Identifikation abgeschlossen" bestätigen — setzt den Auftrag auf „eingereicht", optional Screenshot-/PDF-Upload als Nachweis
 
-## Technisches
-- Reines Frontend/Routing, keine Datenbank- oder Backend-Änderung.
-- Datenquellen bleiben getrennt wie bisher: `adminListAppointments` (Bewerber) bzw. `allBookings` aus `AdminDataContext` (Mitarbeiter).
-- Danach Typecheck; Deploy nur Portal-Server nötig, kein Backend-Deploy.
+**3. Neuer Baustein für den Auftrags-Builder**
+Ein Block-Typ „WebID-Identifikation", damit du den Schritt beliebig in eigene Auftragsvorlagen einbauen kannst (statt fest verdrahtet).
+
+**4. Status & Nachverfolgung**
+Der Admin sieht in der Auftragsübersicht Vorgangsnummer + Status (offen / gestartet / vom Mitarbeiter bestätigt / geprüft) und kann bestätigen oder Nachbesserung anfordern — über den vorhandenen Review-Workflow.
+
+## Technische Details
+
+- Datenbank: `task_assignments.individual_case_number`, `individual_email`, `individual_password`, `individual_hint` existieren bereits; ergänzt wird eine Migration für `webid_client_name` und `webid_status` (+ `webid_started_at`, `webid_confirmed_at`) inkl. GRANTs/RLS analog zu den bestehenden Spalten.
+- Frontend: neue Komponente `src/components/WebIdTaskCard.tsx`, eingebunden in `src/routes/_employee/tasks.$assignmentId.tsx`; Admin-Felder in `src/components/AssignmentIndividualData.tsx` und Anzeige in `AssignmentIndividualDataView.tsx`.
+- Neuer Block-Typ `webid` in `src/lib/task-blocks.ts` + Rendering im Builder und in der Mitarbeiter-Ansicht.
+- Deep-Link/Web-URL zu WebID wird als konfigurierbarer Wert gehalten, damit eine spätere echte WebID-API (Auftrag anlegen + Webhook-Status) ohne Umbau ergänzt werden kann.
+
+## Später möglich (nicht Teil dieses Schritts)
+
+Echte WebID-REST-Anbindung: Portal legt den Ident-Vorgang automatisch an, erhält die Vorgangsnummer/Ident-URL zurück und bekommt den Abschluss per Webhook — dafür braucht es Vertrag, Kunden-ID und API-Key.

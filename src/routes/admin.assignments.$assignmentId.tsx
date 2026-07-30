@@ -249,6 +249,10 @@ function AdminAssignmentDetailPage() {
           individual_hint: (assignment as any).individual_hint,
           post_ident_pdf_url: (assignment as any).post_ident_pdf_url,
           post_ident_pdf_name: (assignment as any).post_ident_pdf_name,
+          individual_case_number: (assignment as any).individual_case_number,
+          individual_email: (assignment as any).individual_email,
+          individual_password: (assignment as any).individual_password,
+          webid_client_name: (assignment as any).webid_client_name,
         }}
         onSaved={loadData}
       />

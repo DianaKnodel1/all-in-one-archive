@@ -12,7 +12,8 @@ export type BlockType =
   | "input"
   | "image"
   | "qr"
-  | "checkpoint";
+  | "checkpoint"
+  | "webid";
 
 export interface ContentBlock {
   id: string;
@@ -48,6 +49,7 @@ export const BLOCK_TYPE_LABELS: Record<BlockType, string> = {
   image: "Bild",
   qr: "QR-Code",
   checkpoint: "Kontrollpunkt",
+  webid: "WebID-Identifikation",
 };
 
 export const BLOCK_TYPE_ICONS: Record<BlockType, string> = {
@@ -63,6 +65,7 @@ export const BLOCK_TYPE_ICONS: Record<BlockType, string> = {
   image: "🖼️",
   qr: "📱",
   checkpoint: "🔒",
+  webid: "🪪",
 };
 
 export function createBlock(type: BlockType): ContentBlock {
