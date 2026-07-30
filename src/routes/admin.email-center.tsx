@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  Mail, RefreshCw, CheckCircle2, XCircle, Clock, AlertTriangle, Search, FileText, ScrollText, Pencil, RotateCcw,
+  Mail, RefreshCw, CheckCircle2, XCircle, Clock, AlertTriangle, Search, FileText, ScrollText, Pencil, RotateCcw, Eye,
 } from "lucide-react";
 import { EMAIL_TYPE_LABELS, HIDDEN_EMAIL_STATUS, type EmailLog } from "@/lib/email-stats";
 import { resendEmailLog, isTokenTemplate } from "@/lib/email-resend";
@@ -56,6 +56,8 @@ function AdminEmailCenterPage() {
   const [range, setRange] = useState<"24h" | "7d" | "30d">("7d");
   const [q, setQ] = useState("");
   const [confirmResend, setConfirmResend] = useState<Row | null>(null);
+  /** Zeile, deren gerendertes HTML gerade angesehen wird. */
+  const [previewRow, setPreviewRow] = useState<Row | null>(null);
   /** Exakte Gesamtzahl aus der DB — unabhängig vom 5.000-Zeilen-Fenster der Liste. */
   const [exactTotal, setExactTotal] = useState<number | null>(null);
   const [tenantNames, setTenantNames] = useState<Record<string, string>>({});
@@ -72,7 +74,7 @@ function AdminEmailCenterPage() {
     const [{ data }, { count }, { data: tenants }] = await Promise.all([
       supabase
         .from("email_send_log")
-        .select("id,message_id,tenant_id,template_name,recipient_email,status,error_message,metadata,created_at,acknowledged_at,rendered_html")
+        .select("id,message_id,tenant_id,template_name,recipient_email,status,error_message,metadata,created_at,acknowledged_at,rendered_subject,rendered_html")
         .gte("created_at", since)
         .order("created_at", { ascending: false })
         .limit(5000),
