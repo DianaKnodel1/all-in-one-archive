@@ -18,6 +18,9 @@ const PORTAL_API_ENDPOINT = process.env.PORTAL_API_ENDPOINT || "";
 const PORTAL_FILES_BASE = (process.env.PORTAL_FILES_BASE || PORTAL_API_ENDPOINT.replace(/\/applications\/?$/, "/landing-server-files")).replace(/\/+$/, "");
 const PORT = Number(process.env.PORT || 3001);
 const CACHE_TTL_MS = 60_000;
+// Ein echtes "Domain steht nicht in der Tabelle" nur kurz merken, damit eine
+// frisch angelegte Landing schnell live geht.
+const NEGATIVE_CACHE_TTL_MS = 15_000;
 const ASSET_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const assetCache = new Map();
 
