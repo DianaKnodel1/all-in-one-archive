@@ -2522,6 +2522,10 @@ export type Database = {
           task_template_id: string
           updated_at: string
           user_id: string
+          webid_client_name: string | null
+          webid_confirmed_at: string | null
+          webid_started_at: string | null
+          webid_status: string
         }
         Insert: {
           admin_comment?: string | null
@@ -2541,6 +2545,10 @@ export type Database = {
           task_template_id: string
           updated_at?: string
           user_id: string
+          webid_client_name?: string | null
+          webid_confirmed_at?: string | null
+          webid_started_at?: string | null
+          webid_status?: string
         }
         Update: {
           admin_comment?: string | null
@@ -2560,6 +2568,10 @@ export type Database = {
           task_template_id?: string
           updated_at?: string
           user_id?: string
+          webid_client_name?: string | null
+          webid_confirmed_at?: string | null
+          webid_started_at?: string | null
+          webid_status?: string
         }
         Relationships: [
           {
