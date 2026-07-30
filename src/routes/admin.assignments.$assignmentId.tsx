@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { TaskSmsMessages } from "@/components/TaskSmsMessages";
 import { AssignmentIndividualData } from "@/components/AssignmentIndividualData";
+import { WEBID_STATUS_LABEL, type WebIdStatus } from "@/lib/webid";
 import { getNextAvailableSlot } from "@/lib/slot-utils";
 
 type AssignmentStatus = "entwurf" | "zugewiesen" | "geplant" | "in_bearbeitung" | "eingereicht" | "in_pruefung" | "genehmigt" | "abgelehnt" | "abgeschlossen" | "nachbesserung";
