@@ -74,6 +74,7 @@ function InterviewPage() {
   // direkten Datenbank-Abfrage, die bei unveröffentlichten Seiten leer bleibt.
   const [serverBranding, setServerBranding] = useState<{ recruiter_name?: string; recruiter_avatar_url?: string | null; company_name?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const zusageRef = useRef<HTMLDivElement>(null);
 
   const applyServerBranding = (data: any) => {
     if (data?.branding) setServerBranding(data.branding);
@@ -202,6 +203,16 @@ function InterviewPage() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
+
+  // Zusage darf niemand übersehen: sobald sie steht, direkt in den Blick holen.
+  useEffect(() => {
+    if (!ended || appStatus !== "akzeptiert") return;
+    const t = setTimeout(
+      () => zusageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      250,
+    );
+    return () => clearTimeout(t);
+  }, [ended, appStatus]);
 
   // Timer aufräumen
   useEffect(() => () => { if (typingTimerRef.current) clearTimeout(typingTimerRef.current); }, []);
@@ -406,15 +417,17 @@ function InterviewPage() {
 
         {ended ? (
           appStatus === "akzeptiert" ? (
-            <ZusageCard
-              className="mt-4"
-              company={company}
-              primary={primary}
-              recruiter={recruiterName}
-              registrationLink={registrationLink ?? registerFallbackHref}
-              mailFailed={inviteMailFailed}
-              loginHref={`${portalBase}/login`}
-            />
+            <div ref={zusageRef} className="scroll-mt-24">
+              <ZusageCard
+                className="mt-4 ring-2 ring-offset-2 ring-offset-background rounded-2xl"
+                company={company}
+                primary={primary}
+                recruiter={recruiterName}
+                registrationLink={registrationLink ?? registerFallbackHref}
+                mailFailed={inviteMailFailed}
+                loginHref={`${portalBase}/login`}
+              />
+            </div>
           ) : (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-6 text-center space-y-3">
               <CheckCircle2 className="h-10 w-10 mx-auto" style={{ color: primary }} />
