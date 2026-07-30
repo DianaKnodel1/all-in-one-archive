@@ -574,7 +574,8 @@ export const Route = createFileRoute("/api/public/applications")({
         // konfiguriert, bucht der Bewerber zuerst einen Termin. Der Interview-
         // Link steckt dann in der Event-Beschreibung des Buchungssystems.
         // Erst danach greift der direkte Interview-Redirect als Fallback.
-        const useInterview = !d.is_test && !isBroker && !isFast && !!interviewMode
+        const useInterview = bookingMode !== "internal"
+          && !d.is_test && !isBroker && !isFast && !!interviewMode
           && (interviewMode === "chat" || interviewMode === "voice" || interviewMode === "both")
           && !!d.portal_url && !!d.source_slug;
 
