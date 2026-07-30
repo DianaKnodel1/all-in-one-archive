@@ -581,7 +581,7 @@ function AdminEmailCenterPage() {
           </DialogHeader>
           {previewRow?.rendered_html ? (
             <iframe
-              srcDoc={previewRow.rendered_html}
+              srcDoc={withUtf8Charset(previewRow.rendered_html)}
               sandbox=""
               title="E-Mail-Vorschau"
               className="w-full h-[60vh] border rounded-lg bg-white"
