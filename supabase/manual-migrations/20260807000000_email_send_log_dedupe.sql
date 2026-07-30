@@ -13,6 +13,7 @@ WITH ranked AS (
            PARTITION BY template_name,
                         lower(recipient_email),
                         COALESCE(metadata->>'application_id', ''),
+                        COALESCE(metadata->>'resend_nonce', ''),
                         (created_at AT TIME ZONE 'Europe/Berlin')::date
            ORDER BY created_at
          ) AS rn
@@ -31,10 +32,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS email_send_log_no_duplicate_sent
     template_name,
     lower(recipient_email),
     COALESCE(metadata->>'application_id', ''),
+    COALESCE(metadata->>'resend_nonce', ''),
     ((created_at AT TIME ZONE 'Europe/Berlin')::date)
   )
   WHERE status = 'sent';
 
 -- 3) Idempotenz der Erinnerungen absichern.
+--    Vorher evtl. vorhandene Doppelzeilen entfernen (jüngste gewinnt).
+DELETE FROM public.application_reminder_log a
+ USING public.application_reminder_log b
+ WHERE a.application_id = b.application_id
+   AND a.reminder_kind  = b.reminder_kind
+   AND a.ctid < b.ctid;
+
 CREATE UNIQUE INDEX IF NOT EXISTS application_reminder_log_unique_kind
   ON public.application_reminder_log (application_id, reminder_kind);
