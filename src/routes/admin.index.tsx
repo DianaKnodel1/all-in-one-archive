@@ -16,6 +16,7 @@ import { useNavigate } from "@/lib/router-compat";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { computeEmailStats, type EmailLog } from "@/lib/email-stats";
+import { SmtpTroubleNotice } from "@/components/admin/SmtpTroubleNotice";
 
 function EmailMonitorWidget() {
   const [stats, setStats] = useState<{ sent: number; failed: number; pending: number; stalePending: number; total: number; successRate: number; actionRequired: boolean } | null>(null);
@@ -143,6 +144,8 @@ function AdminDashboardPage() {
         <h1 className="text-lg font-heading font-bold text-foreground">Übersicht</h1>
         <p className="text-xs text-muted-foreground">Was jetzt zu tun ist</p>
       </div>
+
+      <SmtpTroubleNotice variant="dashboard" />
 
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
         {actionCards.map((c) => (
