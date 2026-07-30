@@ -116,7 +116,7 @@ export const listLandingPages = createServerFn({ method: "GET" })
     await requireAdmin(context);
     const { data, error } = await context.supabase
       .from("landing_pages")
-      .select("id, slug, domain, tenant_id, theme_id, flow_type, source_slug, is_published, logo_url, created_at, updated_at, branding, linked_fasttrack_landing_id")
+      .select("id, slug, domain, tenant_id, theme_id, flow_type, source_slug, is_published, logo_url, created_at, updated_at, branding, linked_fasttrack_landing_id, partner_company_id, calendly_url, booking_mode")
       .order("updated_at", { ascending: false });
     if (error) throw new Error(error.message);
     return { rows: data ?? [] };

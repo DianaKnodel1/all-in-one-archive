@@ -11,6 +11,7 @@ import {
   toggleLandingPublished,
 } from "@/lib/landing-pages.functions";
 import { listPartnerCompanies } from "@/lib/partner-companies.functions";
+import { adminListSchedules } from "@/lib/appointments.functions";
 import { THEME_LIST, THEMES } from "@/lib/landing-themes";
 import { THEME_ASSETS } from "@/lib/theme-assets.generated";
 import { PORTAL_THEMES, type PortalThemeId } from "@/lib/portal-themes";
@@ -252,6 +253,23 @@ function LandingGeneratorPage() {
   useEffect(() => {
     listPartnersFn({} as any).then((r: any) => setPartners(r?.rows ?? [])).catch(() => {});
   }, [listPartnersFn]);
+
+  // Terminzeiten (Verfügbarkeiten) je Landing — für den Setup-Check in der Liste.
+  const listSchedulesFn = useServerFn(adminListSchedules);
+  const [scheduleLandingIds, setScheduleLandingIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    listSchedulesFn({} as any)
+      .then((r: any) =>
+        setScheduleLandingIds(
+          new Set(
+            ((r?.rows ?? []) as any[])
+              .filter((s) => s.active && s.landing_page_id)
+              .map((s) => String(s.landing_page_id)),
+          ),
+        ),
+      )
+      .catch(() => {});
+  }, [listSchedulesFn]);
 
   const reloadLandings = useCallback(async () => {
     setLandingsLoading(true);
@@ -859,6 +877,7 @@ document.addEventListener('submit', function(e){
                     <th className="text-left py-1.5 px-2 font-medium">Theme</th>
                     <th className="text-left py-1.5 px-2 font-medium">Flow</th>
                     <th className="text-left py-1.5 px-2 font-medium">Verknüpfung</th>
+                    <th className="text-left py-1.5 px-2 font-medium">Setup</th>
                     <th className="text-left py-1.5 px-2 font-medium">Status</th>
                     <th className="text-right py-1.5 px-2 font-medium">Aktionen</th>
                   </tr>
@@ -884,6 +903,42 @@ document.addEventListener('submit', function(e){
                           const source = landings.find((x) => x.linked_fasttrack_landing_id === l.id);
                           if (source) return <span title="Wird von dieser Vermittlung beliefert – geteilte Terminzeiten">← {nameOf(source)}</span>;
                           return <span className="opacity-40">–</span>;
+                        })()}
+                      </td>
+                      <td className="py-1.5 px-2">
+                        {(() => {
+                          // Was eine Landing braucht, damit der Ablauf durchläuft:
+                          // 1) Vermittlung → Ziel (Fast-Track / Partner / Calendly)
+                          // 2) Eigenes Buchungssystem → aktive Terminzeiten
+                          const problems: string[] = [];
+                          if (
+                            l.flow_type === "broker" &&
+                            !l.linked_fasttrack_landing_id &&
+                            !l.partner_company_id &&
+                            !String(l.calendly_url ?? "").trim()
+                          ) {
+                            problems.push("Vermittlungsziel fehlt");
+                          }
+                          const bookingMode = l.booking_mode ?? "calendly";
+                          if (bookingMode === "internal") {
+                            const targetId = l.linked_fasttrack_landing_id as string | null;
+                            const hasSchedule =
+                              scheduleLandingIds.has(String(l.id)) ||
+                              (targetId ? scheduleLandingIds.has(String(targetId)) : false);
+                            if (!hasSchedule) problems.push("Terminzeiten fehlen");
+                          }
+                          if (problems.length === 0) {
+                            return <span className="text-emerald-600" title="Vermittlung und Terminzeiten sind gesetzt">✓ bereit</span>;
+                          }
+                          return (
+                            <a
+                              href="/admin/verfuegbarkeit"
+                              className="text-amber-600 hover:underline"
+                              title="Ohne diese Angaben kann kein Termin gebucht werden"
+                            >
+                              ⚠ {problems.join(" · ")}
+                            </a>
+                          );
                         })()}
                       </td>
                       <td className="py-1.5 px-2">
