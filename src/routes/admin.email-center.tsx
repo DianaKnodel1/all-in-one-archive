@@ -55,6 +55,8 @@ function AdminEmailCenterPage() {
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<"24h" | "7d" | "30d">("7d");
   const [q, setQ] = useState("");
+  /** Filter auf einen Tenant (Absender-Mandant) — "" = alle. */
+  const [tenantFilter, setTenantFilter] = useState("");
   const [confirmResend, setConfirmResend] = useState<Row | null>(null);
   /** Zeile, deren gerendertes HTML gerade angesehen wird. */
   const [previewRow, setPreviewRow] = useState<Row | null>(null);
@@ -226,12 +228,17 @@ function AdminEmailCenterPage() {
 
   const filtered = useMemo(() => {
     const ql = q.trim().toLowerCase();
-    if (!ql) return rows;
-    return rows.filter(r =>
-      r.recipient_email?.toLowerCase().includes(ql) ||
-      r.template_name?.toLowerCase().includes(ql)
-    );
-  }, [rows, q]);
+    return rows.filter(r => {
+      if (tenantFilter && (r.tenant_id ?? "") !== tenantFilter) return false;
+      if (!ql) return true;
+      return (
+        r.recipient_email?.toLowerCase().includes(ql) ||
+        r.template_name?.toLowerCase().includes(ql) ||
+        (EMAIL_TYPE_LABELS[r.template_name] ?? "").toLowerCase().includes(ql) ||
+        (tenantNames[r.tenant_id ?? ""] ?? "").toLowerCase().includes(ql)
+      );
+    });
+  }, [rows, q, tenantFilter, tenantNames]);
   const shown = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
 
   return (
