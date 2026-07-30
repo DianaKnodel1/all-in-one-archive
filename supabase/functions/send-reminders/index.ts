@@ -26,6 +26,7 @@ import {
   MAX_PER_24H_PER_TENANT as LIMIT_24H,
   MAX_SENDS_PER_RUN_PER_TENANT as LIMIT_RUN_TYPE,
 } from "../_shared/limits.ts";
+import { claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
 
 
 const corsHeaders = {
@@ -34,13 +35,18 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Welle 1 tuning (Juni 2026): weniger Druck auf Empfänger.
-//   - 3 statt 5 Versuche pro Empfänger+Typ
-//   - 4 statt 3 Tage Mindestabstand
-const MAX_ATTEMPTS = 3;
-// Abstand vom letzten Reminder zum nächsten (Attempt-Index → Stunden).
-// Reminder 1: 24h nach Trigger, Reminder 2: 48h nach R1, Reminder 3: 72h nach R2.
-const ATTEMPT_HOURS = [24, 48, 72];
+// Feste fachliche Grenzen statt einer allgemeinen Drip-Logik:
+// - E-Mail unbestätigt: genau einmal nach 24h
+// - Onboarding unvollständig: nach 24h und 72h, danach Ende
+// Andere Reminder-Typen behalten höchstens einen Lauf, sofern sie nicht separat
+// ereignisbezogen gesteuert werden.
+const REMINDER_SCHEDULE_HOURS: Record<ReminderType, readonly number[]> = {
+  invite: [], // Legacy-Automatik deaktiviert
+  confirm_email: [24],
+  complete_registration: [24, 72],
+  no_recent_booking: [7 * 24],
+  domain_recovery: [0],
+};
 const MIN_DAYS_BETWEEN = 1; // Legacy: nur noch für Cutoff-Queries (>=24h alt).
 const NO_BOOKING_DAYS = 7;
 
@@ -327,6 +333,7 @@ async function canSend(
   admin: SendCtx["admin"],
   email: string,
   type: ReminderType,
+  triggerAt?: string | null,
 ): Promise<{ ok: boolean; nextAttempt: number; reason?: string }> {
   // Bounce-Schutz: tote Adressen niemals erneut anschreiben.
   const isBounced = await isEmailBounced(admin, email);
@@ -346,14 +353,15 @@ async function canSend(
   if (error) return { ok: false, nextAttempt: 0, reason: error.message };
 
   const sentLogs = (data ?? []).filter((r: any) => r.status === "sent");
-  if (sentLogs.length >= MAX_ATTEMPTS) return { ok: false, nextAttempt: 0, reason: "max_attempts" };
-
-  if (sentLogs.length > 0) {
-    const lastAt = new Date(sentLogs[0].sent_at).getTime();
-    const ageHours = (Date.now() - lastAt) / (1000 * 60 * 60);
-    // Nächster Attempt = sentLogs.length (0-basiert): [0]=24h, [1]=48h, [2]=72h.
-    const needHours = ATTEMPT_HOURS[sentLogs.length] ?? 72;
-    if (ageHours < needHours) return { ok: false, nextAttempt: 0, reason: "too_soon" };
+  const schedule = REMINDER_SCHEDULE_HOURS[type];
+  if (sentLogs.length >= schedule.length) return { ok: false, nextAttempt: 0, reason: "max_attempts" };
+  if (triggerAt) {
+    const triggerMs = new Date(triggerAt).getTime();
+    const dueHours = schedule[sentLogs.length];
+    if (Number.isFinite(triggerMs) && dueHours != null) {
+      const ageHours = (Date.now() - triggerMs) / 3600_000;
+      if (ageHours < dueHours) return { ok: false, nextAttempt: 0, reason: "too_soon" };
+    }
   }
   return { ok: true, nextAttempt: sentLogs.length + 1 };
 }
@@ -634,7 +642,7 @@ async function runConfirmEmail(ctx: SendCtx) {
     if (capReached(ctx, tenant.id, "confirm_email")) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", "tenant_run_cap_reached"); continue; }
     if (tenantVolumeCapReached(ctx, tenant.id)) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: (ctx.lastCapReason ?? "tenant_volume_cap") }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", (ctx.lastCapReason ?? "tenant_volume_cap")); continue; }
 
-    const gate = await canSend(ctx.admin, email, "confirm_email");
+    const gate = await canSend(ctx.admin, email, "confirm_email", u.created_at);
     if (!gate.ok) { ctx.results.push({ type: "confirm_email", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "confirm_email", gate.reason ?? "skip"); await maybeMarkCold(ctx.admin, email, tenant.id, "confirm_email", gate.reason); continue; }
 
     if (ctx.dryRun) { ctx.results.push({ type: "confirm_email", email, status: "sent" }); continue; }
@@ -652,18 +660,28 @@ async function runConfirmEmail(ctx: SendCtx) {
     const vars = baseVars(tenant, { email, confirmation_link: actionLink, portal_link: actionLink, login_link: actionLink, booking_link: actionLink });
     const subject = renderSubject(tenant.reminder_confirm_subject, DEFAULT_TEMPLATES.confirm.subject, vars);
     const html = renderBodyHtml(tenant, tenant.reminder_confirm_body, DEFAULT_TEMPLATES.confirm.body, vars);
+    const eventKey = `confirm_email:${u.id}:attempt:${gate.nextAttempt}`;
+    const claim = await claimEmailEvent(ctx.admin, {
+      eventKey, templateName: "reminder_confirm_email", recipient: email,
+      tenantId: tenant.id, senderEmail: tenant.sender_email ?? tenant.smtp_username,
+      subject, html, metadata: { reminder_type: "confirm_email", user_id: u.id, attempt: gate.nextAttempt },
+    });
+    if (!claim) {
+      ctx.results.push({ type: "confirm_email", email, status: "skipped", error: "duplicate_blocked_by_db" });
+      continue;
+    }
 
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "sent");
-      await logEmailSend(ctx.admin, tenant, "confirm_email", email, subject, html, "sent");
+      await finishEmailClaim(ctx.admin, claim, { status: "sent", metadata: { reminder_type: "confirm_email", user_id: u.id, attempt: gate.nextAttempt } });
       ctx.results.push({ type: "confirm_email", email, status: "sent" });
       bumpSent(ctx, tenant.id, "confirm_email");
       await jitterDelay();
     } catch (e: any) {
       const errMsg = String(e?.message ?? e);
       await logReminder(ctx.admin, email, tenant.id, "confirm_email", gate.nextAttempt, "failed", errMsg);
-      await logEmailSend(ctx.admin, tenant, "confirm_email", email, subject, html, "failed", errMsg);
+      await finishEmailClaim(ctx.admin, claim, { status: "failed", error: errMsg, metadata: { reminder_type: "confirm_email", user_id: u.id, attempt: gate.nextAttempt } });
       ctx.results.push({ type: "confirm_email", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
@@ -712,7 +730,7 @@ async function runCompleteRegistration(ctx: SendCtx) {
     if (capReached(ctx, tenant.id, "complete_registration")) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", "tenant_run_cap_reached"); continue; }
     if (tenantVolumeCapReached(ctx, tenant.id)) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: (ctx.lastCapReason ?? "tenant_volume_cap") }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", (ctx.lastCapReason ?? "tenant_volume_cap")); continue; }
 
-    const gate = await canSend(ctx.admin, email, "complete_registration");
+    const gate = await canSend(ctx.admin, email, "complete_registration", (p as any).created_at);
     if (!gate.ok) { ctx.results.push({ type: "complete_registration", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "complete_registration", gate.reason ?? "skip"); await maybeMarkCold(ctx.admin, email, tenant.id, "complete_registration", gate.reason); continue; }
 
     if (ctx.dryRun) { ctx.results.push({ type: "complete_registration", email, status: "sent" }); continue; }
@@ -737,18 +755,28 @@ async function runCompleteRegistration(ctx: SendCtx) {
     });
     const subject = renderSubject(tenant.reminder_completion_subject, DEFAULT_TEMPLATES.completion.subject, vars);
     const html = renderBodyHtml(tenant, tenant.reminder_completion_body, DEFAULT_TEMPLATES.completion.body, vars);
+    const eventKey = `complete_registration:${(p as any).user_id}:attempt:${gate.nextAttempt}`;
+    const claim = await claimEmailEvent(ctx.admin, {
+      eventKey, templateName: "reminder_complete_registration", recipient: email,
+      tenantId: tenant.id, senderEmail: tenant.sender_email ?? tenant.smtp_username,
+      subject, html, metadata: { reminder_type: "complete_registration", user_id: (p as any).user_id, attempt: gate.nextAttempt },
+    });
+    if (!claim) {
+      ctx.results.push({ type: "complete_registration", email, status: "skipped", error: "duplicate_blocked_by_db" });
+      continue;
+    }
 
     try {
       await sendMail(tenant, email, subject, html);
       await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "sent");
-      await logEmailSend(ctx.admin, tenant, "complete_registration", email, subject, html, "sent");
+      await finishEmailClaim(ctx.admin, claim, { status: "sent", metadata: { reminder_type: "complete_registration", user_id: (p as any).user_id, attempt: gate.nextAttempt } });
       ctx.results.push({ type: "complete_registration", email, status: "sent" });
       bumpSent(ctx, tenant.id, "complete_registration");
       await jitterDelay();
     } catch (e: any) {
       const errMsg = String(e?.message ?? e);
       await logReminder(ctx.admin, email, tenant.id, "complete_registration", gate.nextAttempt, "failed", errMsg);
-      await logEmailSend(ctx.admin, tenant, "complete_registration", email, subject, html, "failed", errMsg);
+      await finishEmailClaim(ctx.admin, claim, { status: "failed", error: errMsg, metadata: { reminder_type: "complete_registration", user_id: (p as any).user_id, attempt: gate.nextAttempt } });
       ctx.results.push({ type: "complete_registration", email, status: "failed", error: errMsg });
       await maybeMarkBounced(ctx.admin, email, e);
     }
@@ -802,7 +830,7 @@ async function runNoRecentBooking(ctx: SendCtx) {
     if (capReached(ctx, tenant.id, "no_recent_booking")) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: "tenant_run_cap_reached" }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", "tenant_run_cap_reached"); continue; }
     if (tenantVolumeCapReached(ctx, tenant.id)) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: (ctx.lastCapReason ?? "tenant_volume_cap") }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", (ctx.lastCapReason ?? "tenant_volume_cap")); continue; }
 
-    const gate = await canSend(ctx.admin, email, "no_recent_booking");
+    const gate = await canSend(ctx.admin, email, "no_recent_booking", u.created_at);
     if (!gate.ok) { ctx.results.push({ type: "no_recent_booking", email, status: "skipped", error: gate.reason }); await logSkipped(ctx.admin, email, tenant.id, "no_recent_booking", gate.reason ?? "skip"); await maybeMarkCold(ctx.admin, email, tenant.id, "no_recent_booking", gate.reason); continue; }
 
     if (ctx.dryRun) { ctx.results.push({ type: "no_recent_booking", email, status: "sent" }); continue; }

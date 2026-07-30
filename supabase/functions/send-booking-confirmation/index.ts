@@ -15,6 +15,7 @@ import { resolveSender } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo, type LogoResolution } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
 import { isDuplicateSend } from "../_shared/dedupe.ts";
+import { claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
 import { APP_TZ, formatAppointmentDate, formatAppointmentTime, icsLocalBerlin } from "../_shared/format-datetime.ts";
 
 
@@ -367,6 +368,18 @@ serve(async (req) => {
       });
       if (!allowance.allowed) { skipped++; results.push({ id: appt.id, reason: allowance.reason }); continue; }
 
+      const claim = await claimEmailEvent(admin, {
+        eventKey: `booking_confirmation:${appt.id}`,
+        templateName: REMINDER_KIND,
+        recipient: app.email,
+        tenantId: tenant.id,
+        senderEmail: tenant.sender_email ?? tenant.smtp_username,
+        subject,
+        html,
+        metadata: { appointment_id: appt.id, application_id: app.id, source: "send-booking-confirmation" },
+      });
+      if (!claim) { skipped++; results.push({ id: appt.id, status: "skipped", reason: "duplicate_blocked_by_db" }); continue; }
+
       try {
         const transporter = nodemailer.createTransport({
           host: tenant.smtp_host!, port: tenant.smtp_port!, secure: tenant.smtp_port === 465,
@@ -387,7 +400,7 @@ serve(async (req) => {
           application_id: app.id, tenant_id: tenant.id, reminder_kind: REMINDER_KIND,
           recipient_email: app.email, status: "sent",
         }, { onConflict: "application_id,reminder_kind" });
-        await logEmailSend(admin, tenant, appt, app, subject, html, "sent", undefined, logoMetadata);
+        await finishEmailClaim(admin, claim, { status: "sent", metadata: { appointment_id: appt.id, application_id: app.id, source: "send-booking-confirmation", ...logoMetadata } });
         sent++; results.push({ id: appt.id, status: "sent" });
         await new Promise((r) => setTimeout(r, 3000));
       } catch (e: any) {
@@ -397,7 +410,7 @@ serve(async (req) => {
           application_id: app.id, tenant_id: tenant.id, reminder_kind: REMINDER_KIND,
           recipient_email: app.email, status: "failed", error: err,
         }, { onConflict: "application_id,reminder_kind" });
-        await logEmailSend(admin, tenant, appt, app, subject, html, "failed", err, logoMetadata);
+        await finishEmailClaim(admin, claim, { status: "failed", error: err, metadata: { appointment_id: appt.id, application_id: app.id, source: "send-booking-confirmation", ...logoMetadata } });
         results.push({ id: appt.id, status: "failed", error: err });
       }
     }

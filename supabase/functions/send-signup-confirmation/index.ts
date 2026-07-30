@@ -20,6 +20,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { guardSend } from "../_shared/send-guard.ts";
+import { claimEmailEvent, finishEmailClaim, type EmailClaim } from "../_shared/send-claim.ts";
 import { logMailAbort } from "../_shared/log-abort.ts";
 
 const corsHeaders = {
@@ -83,6 +84,7 @@ serve(async (req) => {
     }
 
     // Bounce-Suppression: bekanntermaßen tote Adressen nicht erneut anschreiben.
+    let signupClaim: EmailClaim | null = null;
     try {
       const [{ data: prof }, { data: app }, { data: sup }, { data: rf }] = await Promise.all([
         supabaseAdmin.from("profiles").select("email_status").ilike("email", email).neq("email_status", "active").limit(1).maybeSingle(),
@@ -187,9 +189,18 @@ serve(async (req) => {
       if (!allowance.allowed) {
         throw new Error(`Versand blockiert: ${allowance.reason}`);
       }
+      const subject = `Bestätige deine E-Mail-Adresse – ${tenant.name}`;
+      signupClaim = await claimEmailEvent(supabaseAdmin, {
+        eventKey: `signup_confirmation:${userId}`,
+        templateName: "signup_confirmation", recipient: email,
+        tenantId: tenant_id, senderEmail, subject, html,
+        metadata: { user_id: userId, source: "send-signup-confirmation" },
+      });
+      if (!signupClaim) throw new Error("Bestätigungs-E-Mail wurde bereits übernommen");
 
       const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
       if (!verifyRes.ok) {
+        await finishEmailClaim(supabaseAdmin, signupClaim, { status: "failed", error: `SMTP-Verify fehlgeschlagen: ${verifyRes.reason}`, metadata: { user_id: userId, source: "send-signup-confirmation" } });
         throw new Error(`SMTP-Verify fehlgeschlagen: ${verifyRes.reason}${verifyRes.paused ? " — Mandant wurde automatisch pausiert." : ""}`);
       }
 
@@ -197,24 +208,18 @@ serve(async (req) => {
         from: `"${senderName}" <${senderEmail}>`,
         to: email,
         replyTo: tenant.reply_to_email ?? senderEmail,
-        subject: `Bestätige deine E-Mail-Adresse – ${tenant.name}`,
+        subject,
         html,
       });
 
       // 6. Log
-      await supabaseAdmin.from("email_send_log").insert({
-        tenant_id,
-        template_name: "signup_confirmation",
-        recipient_email: email,
-        status: "sent",
-        rendered_subject: `Bestätige deine E-Mail-Adresse – ${tenant.name}`,
-        rendered_html: html,
-        sender_email: senderEmail,
-        metadata: { user_id: userId, source: "send-signup-confirmation" },
-      }).then(() => {}, () => {}); // ignore log errors
+      await finishEmailClaim(supabaseAdmin, signupClaim, { status: "sent", metadata: { user_id: userId, source: "send-signup-confirmation" } });
 
       return json({ success: true, user_id: userId }, 200);
     } catch (sendErr: any) {
+      if (signupClaim) {
+        await finishEmailClaim(supabaseAdmin, signupClaim, { status: "failed", error: String(sendErr?.message ?? sendErr), metadata: { user_id: userId, source: "send-signup-confirmation" } });
+      }
       // Rollback: User wieder löschen, damit er es nochmal versuchen kann
       await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
       console.error("SMTP send failed:", sendErr);

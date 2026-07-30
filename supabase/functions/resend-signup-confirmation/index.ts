@@ -12,6 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { guardSend } from "../_shared/send-guard.ts";
 import { logMailAbort } from "../_shared/log-abort.ts";
+import { actionBucketEventKey, claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,6 +134,13 @@ serve(async (req) => {
 
     const mailSubject = `Neue Bestätigungs-E-Mail – ${tenant.name}`;
     const messageId = `signup_confirmation_resend-${user.id}-${Date.now()}`;
+    const eventKey = actionBucketEventKey("signup_confirmation_resend", email);
+    const claim = await claimEmailEvent(supabaseAdmin, {
+      eventKey, templateName: "signup_confirmation_resend", recipient: email,
+      tenantId: tenant.id, senderEmail, subject: mailSubject, html,
+      metadata: { user_id: user.id, source: "resend-signup-confirmation", user_initiated: true },
+    });
+    if (!claim) return json({ success: true }, 200);
 
     try {
       await transporter.sendMail({
@@ -143,17 +151,11 @@ serve(async (req) => {
         html,
       });
     } catch (sendErr: any) {
-      await logSend(supabaseAdmin, {
-        messageId, tenantId: tenant.id, to: email, subject: mailSubject, html,
-        senderEmail, status: "failed", error: String(sendErr?.message ?? sendErr).slice(0, 500),
-      });
+      await finishEmailClaim(supabaseAdmin, claim, { status: "failed", error: String(sendErr?.message ?? sendErr).slice(0, 500), metadata: { user_id: user.id, source: "resend-signup-confirmation", user_initiated: true } });
       return json({ success: true }, 200); // generic OK, kein Enumeration-Hint
     }
 
-    await logSend(supabaseAdmin, {
-      messageId, tenantId: tenant.id, to: email, subject: mailSubject, html,
-      senderEmail, status: "sent",
-    });
+    await finishEmailClaim(supabaseAdmin, claim, { status: "sent", metadata: { user_id: user.id, source: "resend-signup-confirmation", user_initiated: true } });
 
     return json({ success: true }, 200);
 

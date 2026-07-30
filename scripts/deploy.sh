@@ -344,6 +344,21 @@ if [ -d "$MIG_DIR" ] && [ "$db_reachable" = "1" ]; then
   elif [ "$dedupe_index" = "t" ]; then
     ok "Doppelversand-Sperre in der Datenbank aktiv"
   fi
+
+  EVENT_CLAIM_MIG="$MIG_DIR/20260808000000_email_event_claims.sql"
+  event_claim_index="$(psql "$TARGET_DB_URL" -tAc "select to_regclass('public.email_send_log_unique_active_event') is not null" | tr -d '[:space:]')"
+  if [ "$event_claim_index" != "t" ] && [ -f "$EVENT_CLAIM_MIG" ]; then
+    warn "Atomare E-Mail-Ereignissperre fehlt — Migration wird jetzt angewendet"
+    if psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -f "$EVENT_CLAIM_MIG"; then
+      grep -qxF "$(basename "$EVENT_CLAIM_MIG")" "$STATE_FILE" || basename "$EVENT_CLAIM_MIG" >> "$STATE_FILE"
+      ok "Atomare E-Mail-Ereignissperre aktiv"
+    else
+      echo "  ✗ Atomare E-Mail-Ereignissperre konnte nicht angelegt werden. Deploy abgebrochen." >&2
+      exit 1
+    fi
+  elif [ "$event_claim_index" = "t" ]; then
+    ok "Atomare E-Mail-Ereignissperre in der Datenbank aktiv"
+  fi
 else
   echo "  (keine Manual-Migrations, TARGET_DB_URL nicht gesetzt oder DB unreachable — übersprungen)"
 fi
