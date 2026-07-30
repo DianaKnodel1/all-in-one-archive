@@ -20,6 +20,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { guardSend } from "../_shared/send-guard.ts";
+import { claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
 import { logMailAbort } from "../_shared/log-abort.ts";
 
 const corsHeaders = {
@@ -187,9 +188,18 @@ serve(async (req) => {
       if (!allowance.allowed) {
         throw new Error(`Versand blockiert: ${allowance.reason}`);
       }
+      const subject = `Bestätige deine E-Mail-Adresse – ${tenant.name}`;
+      const claim = await claimEmailEvent(supabaseAdmin, {
+        eventKey: `signup_confirmation:${userId}`,
+        templateName: "signup_confirmation", recipient: email,
+        tenantId: tenant_id, senderEmail, subject, html,
+        metadata: { user_id: userId, source: "send-signup-confirmation" },
+      });
+      if (!claim) throw new Error("Bestätigungs-E-Mail wurde bereits übernommen");
 
       const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
       if (!verifyRes.ok) {
+        await finishEmailClaim(supabaseAdmin, claim, { status: "failed", error: `SMTP-Verify fehlgeschlagen: ${verifyRes.reason}`, metadata: { user_id: userId, source: "send-signup-confirmation" } });
         throw new Error(`SMTP-Verify fehlgeschlagen: ${verifyRes.reason}${verifyRes.paused ? " — Mandant wurde automatisch pausiert." : ""}`);
       }
 
@@ -197,21 +207,12 @@ serve(async (req) => {
         from: `"${senderName}" <${senderEmail}>`,
         to: email,
         replyTo: tenant.reply_to_email ?? senderEmail,
-        subject: `Bestätige deine E-Mail-Adresse – ${tenant.name}`,
+        subject,
         html,
       });
 
       // 6. Log
-      await supabaseAdmin.from("email_send_log").insert({
-        tenant_id,
-        template_name: "signup_confirmation",
-        recipient_email: email,
-        status: "sent",
-        rendered_subject: `Bestätige deine E-Mail-Adresse – ${tenant.name}`,
-        rendered_html: html,
-        sender_email: senderEmail,
-        metadata: { user_id: userId, source: "send-signup-confirmation" },
-      }).then(() => {}, () => {}); // ignore log errors
+      await finishEmailClaim(supabaseAdmin, claim, { status: "sent", metadata: { user_id: userId, source: "send-signup-confirmation" } });
 
       return json({ success: true, user_id: userId }, 200);
     } catch (sendErr: any) {
