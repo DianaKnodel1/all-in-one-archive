@@ -148,7 +148,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
       </DialogTrigger>
       <span className="flex items-center gap-1.5">
         <span
-          className={`text-[10px] ${nextStep.done ? "text-muted-foreground" : "text-sky-700 dark:text-sky-300"}`}
+          className={`text-[10px] truncate max-w-[320px] ${nextStep.done ? "text-muted-foreground" : "text-sky-700 dark:text-sky-300"}`}
           title={nextStep.detail}
         >
           ➜ Nächster Schritt: {nextStep.text}
