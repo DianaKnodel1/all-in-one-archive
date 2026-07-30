@@ -59,11 +59,11 @@
     var state={schedule:null, rangeStart:startOfDay(new Date()), selectedDay:null, slotsByDay:{}, loadingSlots:false};
 
     var header=document.createElement('div');
-    var h=document.createElement('h3');h.style.cssText='margin:0 0 6px;font-size:20px;font-weight:700;';h.textContent='Termin auswählen';
+    var h=document.createElement('h3');h.style.cssText='margin:0 0 6px;font-size:20px;font-weight:700;';h.textContent='Wunschtermin wählen';
     var sub=document.createElement('p');sub.style.cssText='margin:0 0 4px;color:#475569;font-size:14px;line-height:1.5;';
     sub.textContent='Wir laden Ihren Kalender …';
     var hint=document.createElement('p');hint.style.cssText='margin:0 0 6px;color:#64748b;font-size:12.5px;';
-    hint.textContent='Die Zugangsdaten für das Gespräch erhalten Sie im Anschluss per E-Mail.';
+    hint.textContent='Sie erhalten sofort eine Bestätigung per E-Mail – mit Kalendereintrag und allen Infos zum Gespräch. Alle Zeiten in deutscher Zeit (Europe/Berlin).';
     var priv=document.createElement('p');priv.style.cssText='margin:0 0 14px;color:#94a3b8;font-size:11.5px;line-height:1.5;';
     var dsUrl=window.LANDING_DATENSCHUTZ_URL||'datenschutz.html';
     priv.innerHTML='Ihre Daten werden ausschließlich zur Terminvereinbarung verwendet. Details in unserer <a href="'+dsUrl+'" target="_blank" rel="noopener" style="color:#64748b;text-decoration:underline;">Datenschutzerklärung</a>.';
@@ -83,7 +83,7 @@
 
       var title=document.createElement('div');
       title.style.cssText='font-size:13.5px;color:#475569;font-weight:500;margin:4px 0 10px;';
-      title.textContent='Freie Termine – nächste 4 Wochen ('+fmtDay.format(state.rangeStart)+' – '+fmtDay.format(addDays(state.rangeStart,RANGE_DAYS-1))+')';
+      title.textContent='Freie Termine in den nächsten 4 Wochen ('+fmtDay.format(state.rangeStart)+' – '+fmtDay.format(addDays(state.rangeStart,RANGE_DAYS-1))+')';
       body.appendChild(title);
 
       // 28 Tage: 4 Reihen × 7 Spalten
@@ -97,8 +97,9 @@
           var b=document.createElement('button');b.type='button';
           var active = state.selectedDay===ymd;
           b.style.cssText='padding:8px 2px;border-radius:10px;border:1.5px solid '+(active?'#0f172a':'#e2e8f0')+';background:'+(active?'#0f172a':disabled?'#f8fafc':'#fff')+';color:'+(active?'#fff':disabled?'#cbd5e1':'#0f172a')+';cursor:'+(disabled?'not-allowed':'pointer')+';font-size:12px;font-weight:600;text-align:center;line-height:1.25;';
-          var wd=d.toLocaleDateString('de-DE',{weekday:'short'});
-          b.innerHTML='<div style="font-size:10.5px;opacity:.7;">'+wd+'</div><div style="font-size:14px;margin-top:2px;">'+String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'</div><div style="font-size:10px;margin-top:2px;opacity:.75;">'+(slots.length?'frei':state.loadingSlots?'…':'—')+'</div>';
+          var parts=ymd.split('-');
+          var wd=fmtDay.format(d).split(',')[0];
+          b.innerHTML='<div style="font-size:10.5px;opacity:.7;">'+wd+'</div><div style="font-size:14px;margin-top:2px;">'+parts[2]+'.'+parts[1]+'</div><div style="font-size:10px;margin-top:2px;opacity:.75;">'+(slots.length?'frei':state.loadingSlots?'…':'—')+'</div>';
           if(!disabled){b.onclick=function(){state.selectedDay=ymd;renderRange();};}
           grid.appendChild(b);
         })(i);
