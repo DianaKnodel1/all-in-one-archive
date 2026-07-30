@@ -39,6 +39,7 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [needsVerify, setNeedsVerify] = useState(false);
+  const [resending, setResending] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -159,21 +160,26 @@ function LoginPage() {
 
   const resendVerify = async () => {
     const trimmedEmail = email.trim();
-    if (!trimmedEmail) return;
+    if (!trimmedEmail || resending) return;
     const tenantId = tenant?.id;
     if (!tenantId) {
       toast({ title: "Fehler", description: "Tenant konnte nicht ermittelt werden. Bitte lade die Seite neu.", variant: "destructive" });
       return;
     }
-    const { data, error } = await supabase.functions.invoke("resend-signup-confirmation", {
-      body: { email: trimmedEmail, tenant_id: tenantId, redirect_to: `${window.location.origin}/auth/confirmed` },
-    });
-    if (error || (data as any)?.error) {
-      toast({ title: "Fehler", description: (data as any)?.error ?? error?.message ?? "Versand fehlgeschlagen", variant: "destructive" });
-    } else if ((data as any)?.already_confirmed) {
-      toast({ title: "Bereits bestätigt", description: "Diese E-Mail ist schon aktiviert. Bitte melde dich an." });
-    } else {
-      toast({ title: "Bestätigungs-E-Mail versendet", description: `An ${trimmedEmail}` });
+    setResending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("resend-signup-confirmation", {
+        body: { email: trimmedEmail, tenant_id: tenantId, redirect_to: `${window.location.origin}/auth/confirmed` },
+      });
+      if (error || (data as any)?.error) {
+        toast({ title: "Fehler", description: (data as any)?.error ?? error?.message ?? "Versand fehlgeschlagen", variant: "destructive" });
+      } else if ((data as any)?.already_confirmed) {
+        toast({ title: "Bereits bestätigt", description: "Diese E-Mail ist schon aktiviert. Bitte melde dich an." });
+      } else {
+        toast({ title: "Bestätigungs-E-Mail versendet", description: `An ${trimmedEmail}` });
+      }
+    } finally {
+      setResending(false);
     }
   };
 
@@ -187,7 +193,7 @@ function LoginPage() {
           <MailCheck className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
           <div className="space-y-1.5 flex-1">
             <p className={t.warnText}>Bitte bestätige deine E-Mail-Adresse, bevor du dich anmeldest.</p>
-            <button type="button" onClick={resendVerify} className={t.warnAction}>
+            <button type="button" onClick={resendVerify} disabled={resending} className={t.warnAction}>
               Bestätigungslink erneut senden
             </button>
           </div>
