@@ -17,6 +17,7 @@ export interface IndividualData {
   individual_email: string | null;
   individual_password: string | null;
   webid_client_name: string | null;
+  webid_start_url: string | null;
 }
 
 interface Props {
@@ -44,6 +45,7 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
     individual_email: initial.individual_email ?? "",
     individual_password: initial.individual_password ?? "",
     webid_client_name: initial.webid_client_name ?? "",
+    webid_start_url: initial.webid_start_url ?? "",
   });
 
   const update = (field: keyof IndividualData, val: string) => setData((d) => ({ ...d, [field]: val }));
@@ -58,6 +60,7 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
       individual_email: data.individual_email || null,
       individual_password: data.individual_password || null,
       webid_client_name: data.webid_client_name || null,
+      webid_start_url: data.webid_start_url || null,
     } as any).eq("id", assignmentId);
     setSaving(false);
     if (error) {
@@ -119,7 +122,8 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
   };
 
   const hasAny = data.individual_instructions || data.individual_phone || data.individual_hint || data.post_ident_pdf_url
-    || data.individual_case_number || data.individual_email || data.individual_password || data.webid_client_name;
+    || data.individual_case_number || data.individual_email || data.individual_password || data.webid_client_name
+    || data.webid_start_url;
 
   return (
     <Card>
@@ -146,6 +150,7 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
             {data.individual_hint && <Row label="Hinweistext" value={data.individual_hint} />}
             {data.webid_client_name && <Row label="WebID-Auftraggeber" value={data.webid_client_name} />}
             {data.individual_case_number && <Row label="Vorgangsnummer" value={data.individual_case_number} />}
+            {data.webid_start_url && <Row label="WebID-Start-Adresse" value={data.webid_start_url} />}
             {data.individual_email && <Row label="E-Mail (Zugang)" value={data.individual_email} />}
             {data.individual_password && <Row label="Passwort (Zugang)" value={data.individual_password} />}
             {data.post_ident_pdf_name && <Row label="Post-Ident PDF" value={data.post_ident_pdf_name} />}
@@ -189,6 +194,12 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
               </Field>
               <Field label="Vorgangsnummer" hint="Diese Nummer gibt der Mitarbeiter in der WebID App ein.">
                 <Input value={data.individual_case_number ?? ""} onChange={(e) => update("individual_case_number", e.target.value)} placeholder="z. B. WID-123456789" />
+              </Field>
+              <Field
+                label="WebID-Start-Adresse (optional)"
+                hint="Die vom Auftraggeber vorgegebene WebID-Einstiegsseite. Leer lassen für die Standard-Seite von WebID. Enthält die Adresse den Platzhalter {vorgangsnummer}, wird die Nummer automatisch eingesetzt."
+              >
+                <Input value={data.webid_start_url ?? ""} onChange={(e) => update("webid_start_url", e.target.value)} placeholder="https://…" />
               </Field>
               <Field label="E-Mail (optionaler Zugang)">
                 <Input value={data.individual_email ?? ""} onChange={(e) => update("individual_email", e.target.value)} placeholder="name@example.com" />

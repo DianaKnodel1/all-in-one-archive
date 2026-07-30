@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { TaskSmsMessages } from "@/components/TaskSmsMessages";
 import { AssignmentIndividualData } from "@/components/AssignmentIndividualData";
+import { WEBID_STATUS_LABEL, type WebIdStatus } from "@/lib/webid";
 import { getNextAvailableSlot } from "@/lib/slot-utils";
 
 type AssignmentStatus = "entwurf" | "zugewiesen" | "geplant" | "in_bearbeitung" | "eingereicht" | "in_pruefung" | "genehmigt" | "abgelehnt" | "abgeschlossen" | "nachbesserung";
@@ -253,9 +254,52 @@ function AdminAssignmentDetailPage() {
           individual_email: (assignment as any).individual_email,
           individual_password: (assignment as any).individual_password,
           webid_client_name: (assignment as any).webid_client_name,
+          webid_start_url: (assignment as any).webid_start_url,
         }}
         onSaved={loadData}
       />
+
+      {/* WebID-Status */}
+      {((assignment as any).webid_client_name || (assignment as any).individual_case_number) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">WebID-Identifikation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Status</span>
+              <Badge className={(WEBID_STATUS_LABEL[((assignment as any).webid_status as WebIdStatus) ?? "offen"] ?? WEBID_STATUS_LABEL.offen).className}>
+                {(WEBID_STATUS_LABEL[((assignment as any).webid_status as WebIdStatus) ?? "offen"] ?? WEBID_STATUS_LABEL.offen).label}
+              </Badge>
+            </div>
+            {(assignment as any).webid_started_at && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Gestartet</span>
+                <span>{new Date((assignment as any).webid_started_at).toLocaleString("de-DE")}</span>
+              </div>
+            )}
+            {(assignment as any).webid_confirmed_at && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Vom Mitarbeiter bestätigt</span>
+                <span>{new Date((assignment as any).webid_confirmed_at).toLocaleString("de-DE")}</span>
+              </div>
+            )}
+            {((assignment as any).webid_status === "bestaetigt") && (
+              <Button
+                size="sm"
+                className="mt-2"
+                onClick={async () => {
+                  await supabase.from("task_assignments").update({ webid_status: "geprueft" } as any).eq("id", assignment.id);
+                  toast({ title: "WebID-Identifikation als geprüft markiert" });
+                  loadData();
+                }}
+              >
+                Als geprüft markieren
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Optionaler SMS-Kanal (technisch) */}
       <Card>
