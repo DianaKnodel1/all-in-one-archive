@@ -244,8 +244,10 @@ function buildHtml(subject: string, body: string, signature: string, tenant: Ten
   // Erst CTAs zu Platzhaltern (damit ihre URLs nicht von der Auto-Linkify-Regex verstümmelt werden),
   // dann Klartext-URLs verlinken, dann CTAs als Buttons einsetzen.
   const ctaHtml: string[] = [];
-  const withPlaceholders = render(body, vars).replace(/\{\{cta:([^|}]+)\|([^}]+)\}\}/g, (_m, label, href) => {
-    ctaHtml.push(`<table cellpadding="0" cellspacing="0" style="margin:16px 0"><tr><td style="background:${color};border-radius:8px"><a href="${String(href).trim()}" style="display:inline-block;padding:14px 28px;color:#fff;text-decoration:none;font-weight:600;font-size:15px">${String(label).trim()}</a></td></tr></table>`);
+  const withPlaceholders = render(body, vars).replace(/\{\{cta:([^|}]*)\|([^}]*)\}\}/g, (_m, label, href) => {
+    const cleanHref = String(href).trim();
+    if (!cleanHref) return "";
+    ctaHtml.push(`<table cellpadding="0" cellspacing="0" style="margin:16px 0"><tr><td style="background:${color};border-radius:8px"><a href="${cleanHref}" style="display:inline-block;padding:14px 28px;color:#fff;text-decoration:none;font-weight:600;font-size:15px">${String(label).trim()}</a></td></tr></table>`);
     return `\u0000CTA${ctaHtml.length - 1}\u0000`;
   });
   const bodyHtml = withPlaceholders

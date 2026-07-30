@@ -305,9 +305,12 @@ serve(async (req) => {
           hasCta: false,
         };
 
+    const fallbackCta = registrationLink
+      ? `<table cellpadding="0" cellspacing="0" align="center" style="margin:4px auto 24px"><tr><td style="background:${brand};border-radius:10px"><a href="${escapeAttr(registrationLink)}" style="display:inline-block;padding:15px 36px;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;letter-spacing:0.4px;text-transform:uppercase">${escapeHtml(buttonLabel)}</a></td></tr></table><p style="font-size:12px;color:#94a3b8;margin:12px 0 0;">Sollte der Button nicht funktionieren, kopieren Sie bitte den folgenden Link in Ihren Browser:<br><a href="${escapeAttr(registrationLink)}" style="color:${brand};word-break:break-all">${escapeHtml(registrationLink)}</a></p>`
+      : "";
     const bodyForWrapper = renderedBody.hasCta
       ? renderedBody.html
-      : `${renderedBody.html}\n{{cta:${buttonLabel}|${registrationLink}}}\n<p style="font-size:12px;color:#94a3b8;margin:12px 0 0;">Sollte der Button nicht funktionieren, kopieren Sie bitte den folgenden Link in Ihren Browser:<br><a href="${escapeAttr(registrationLink)}" style="color:${brand};word-break:break-all">${escapeHtml(registrationLink)}</a></p>`;
+      : `${renderedBody.html}\n${fallbackCta}`;
     // Einheitliche Logo-Auflösung: Tenant → Fast-Track-Landing → Ziel-Landing → Quell-Landing.
     let sourceLanding: any = null;
     let targetLanding: any = null;
@@ -537,12 +540,13 @@ function renderTemplateBody(template: string, phMap: Record<string, string>, bra
       flushList();
       continue;
     }
-    const cta = line.match(/^\{\{cta:([^|]+)\|([^}]+)\}\}$/);
+    const cta = line.match(/^\{\{cta:([^|]*)\|([^}]*)\}\}$/);
     if (cta) {
       flushPara();
       flushList();
       const label = cta[1].trim() || defaultButtonLabel;
       const href = cta[2].trim() || registrationLink;
+      if (!href) continue;
       hasCta = true;
       parts.push(`<table cellpadding="0" cellspacing="0" align="center" style="margin:4px auto 24px"><tr><td style="background:${brand};border-radius:10px"><a href="${escapeAttr(href)}" style="display:inline-block;padding:15px 36px;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;letter-spacing:0.4px;text-transform:uppercase">${escapeHtml(label)}</a></td></tr></table>`);
       continue;

@@ -388,6 +388,7 @@ export const Route = createFileRoute("/api/public/applications")({
         }
 
         let redirect_url: string | null = null;
+        let booking_error: string | null = null;
         let broker_block: any = null;
         let email_status: {
           attempted: boolean;
@@ -574,13 +575,22 @@ export const Route = createFileRoute("/api/public/applications")({
         // konfiguriert, bucht der Bewerber zuerst einen Termin. Der Interview-
         // Link steckt dann in der Event-Beschreibung des Buchungssystems.
         // Erst danach greift der direkte Interview-Redirect als Fallback.
-        const useInterview = !d.is_test && !isBroker && !isFast && !!interviewMode
+        const useInterview = bookingMode !== "internal"
+          && !d.is_test && !isBroker && !isFast && !!interviewMode
           && (interviewMode === "chat" || interviewMode === "voice" || interviewMode === "both")
           && !!d.portal_url && !!d.source_slug;
 
 
         if (ownBookingUrl) {
           redirect_url = ownBookingUrl;
+        } else if (bookingMode === "internal" && !d.is_test) {
+          booking_error = "internal_schedule_missing";
+          console.warn("[applications] internal_schedule_missing", {
+            requestId,
+            application_id: appId,
+            landing_id: landingPage?.id ?? null,
+            schedule_candidates: scheduleCandidateIds,
+          });
         } else if (useInterview) {
           const base = d.portal_url!.replace(/\/+$/, "");
           const qs = new URLSearchParams({
@@ -731,7 +741,7 @@ export const Route = createFileRoute("/api/public/applications")({
           has_broker: !!broker_block,
           email_status,
         });
-        return json({ success: true, flow_type: d.flow_type ?? "classic", redirect_url, broker: broker_block, email_status });
+        return json({ success: true, flow_type: d.flow_type ?? "classic", redirect_url, broker: broker_block, email_status, booking_error });
 
 
       },

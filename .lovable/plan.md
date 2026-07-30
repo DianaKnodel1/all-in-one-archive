@@ -1,37 +1,34 @@
-## Was ich geprüft habe (live)
+## Ziel
+Der Ablauf wird verbindlich auf **Bewerbung → Terminwahl → Bestätigungsmail → späteres Interview** gestellt. Gleichzeitig werden kaputte CTA-Platzhalter und paralleler Doppelversand technisch blockiert.
 
-- **gtm-strategies.de** (theme-tts-beratung): Das Bewerbungs-Modal öffnet sich, Formular + DSGVO-Checkbox sind da, keine JS-Fehler. Der Portal-Endpunkt `.../api/public/applications` antwortet korrekt (CORS ok, Validierung greift). Auffällig: Das Status-Feld im Formular heißt `ttsb-form-status`, das Skript setzt beim Absenden aber `lv-form-status` — Erfolgs- und Fehlermeldungen (z. B. „Bitte Datenschutz bestätigen“) sind dadurch praktisch unsichtbar. Für den Bewerber sieht es aus, als „passiere nichts“.
-- **mus-marketing.de** (theme-nebula-flux):
-  - Projekt-Karten laufen über den Rand: die Meta-Kacheln (Vergütung/Dauer/Plattform/Level) sind breiter als die Karte, Text wird abgeschnitten („Fortgeschritte…“); Karten unterschiedlich hoch, Titel umbrechen unsauber.
-  - Prozess-Schritte enthalten mehrfach denselben Text: `STEP · 02STEP · 02STEP · 02STEP · 02` (Schritte 2–6), und Schritt 6 zeigt fälschlich „STEP · 05“. Das steckt so in den gespeicherten Inhalten der Seite, nicht im Theme-HTML.
-- **Die 4 Domains** (bv-agentur.com, mm-personalvermittlung.de, cac-vermittlung.de, personalservice-gmbh.de) liefern alle die Fehlerseite „Diese Seite ist nicht verfügbar“ (404 vom Landing-Server) — die Seiten kommen also beim Server nicht mehr an. Ursache noch nicht bestätigt (die Produktionsdaten liegen auf eurem eigenen Backend, nicht hier).
-- **Doppelte Mails**: Im Code ist die Sperre vorhanden (Vorgangsprotokoll + 20-Stunden-Fenster direkt vor dem Versand). Ob sie auf eurem Backend aktiv ist, hängt am Edge-Function-Deploy — beim letzten Deploy lief nur Portal/DB, das Backend-Deploy nicht durch.
+## Bestätigte Ursachen
+- Die öffentliche Bewerbungsroute fällt derzeit auf den direkten `/interview/...`-Link zurück, wenn sie keinen aktiven internen Kalender für die aufgelöste Landing findet. Der interne Modus verhindert diesen Fallback noch nicht ausdrücklich.
+- Der Landing-Code kann die Terminwahl bereits direkt unter dem Formular anzeigen, sobald die API eine `/termin/buchen/<token>`-URL zurückgibt.
+- Die Reminder-Renderer erkennen CTA-Blöcke nur, wenn die URL mindestens ein Zeichen enthält. Bei leerem Link bleibt deshalb `{{cta:Jetzt Termin buchen|}}` sichtbar.
+- Der neue Doppelversand-Index ist in dieser geprüften Backend-Instanz nicht vorhanden. Damit ist der Datenbank-Schutz hier noch nicht ausgerollt. Der bestehende Deploy-Prozess kann zudem eine neue Migration beim ersten Bootstrap nur als „bereits angewendet“ markieren.
 
-## Plan
+## Umsetzung
+1. **Buchungsablauf erzwingen**
+   - Bei `booking_mode = internal` niemals direkt zum Interview weiterleiten.
+   - Einen vorhandenen aktiven Source-/Fast-Track-Kalender auflösen und eine stabile Buchungs-URL mit Magic Token zurückgeben.
+   - Fehlt trotz internem Modus ein Kalender, einen klaren konfigurationsbezogenen Fehler liefern statt den falschen Interview-Schritt zu öffnen.
+   - Die vorhandene Inline-Terminwahl des Landing-Formulars weiterverwenden, damit die Bestätigung wie beim AZB-Theme wirkt und direkt die Terminwahl anschließt.
 
-### 1. Nebula-Flux Projekt-Karten reparieren
-- Meta-Kacheln: Umbruch erlauben und Überlauf verhindern (schmalere Mindestbreite, `min-width:0`, Silbentrennung), Karten auf gleiche Höhe, Button unten bündig.
-- Raster auf max. 3 Spalten begrenzen, damit Karten nicht gequetscht werden; mobil sauber einspaltig.
-- Schritt-Nummer (`nf-tl-num`) sichtbar als Badge stylen.
+2. **E-Mail-CTA robust rendern**
+   - CTA-Syntax mit leerem Link in Bewerbungs-, Bewerbungs-Reminder- und Termin-Reminder-Mails vollständig konsumieren.
+   - Ist ein gültiger Ersatzlink vorhanden, einen echten Button rendern; andernfalls den CTA-Block entfernen, niemals Rohsyntax anzeigen.
+   - Im Einladungspfad den Fallback-Button direkt als HTML erzeugen, statt nochmals unverarbeitete Template-Syntax an den Wrapper zu geben.
 
-### 2. Doppelte Step-Texte entschärfen
-- Beim Rendern jeden Slot-Wert normalisieren: identische, direkt wiederholte Textblöcke werden auf eine Ausgabe reduziert (behebt „STEP · 02STEP · 02…“ auch für bereits gespeicherte Seiten, ohne dass ihr neu generieren müsst).
-- Zusätzlich beim Generieren: fortlaufende Schrittnummern erzwingen, damit Schritt 6 nicht wieder „05“ zeigt.
+3. **Doppelversand endgültig blockieren**
+   - Eine neue idempotente Reparaturmigration hinzufügen, damit auch Installationen mit vorpopulierter Migrationshistorie den Unique-Index sicher erhalten.
+   - Alte Mehrfachprotokolle auf `superseded` setzen und anschließend genau eine automatische Mail pro Vorlage, Empfänger, Bewerbung und Tag zulassen.
+   - Den bereits ergänzten „Claim vor SMTP-Versand“ beibehalten; parallele Cron-Läufe verlieren dann vor dem tatsächlichen Versand.
+   - Manuelle „Erneut senden“-Aktionen bleiben über ihre eigene Nonce erlaubt.
 
-### 3. Bewerbungsformular TTS-Beratung
-- Statusmeldungen theme-übergreifend sichtbar machen: das Skript setzt die vorhandene Theme-Klasse nicht mehr zurück, sondern ergänzt nur den Zustand (Erfolg/Fehler) — inkl. Styling für die TTS-Beratung-Variante.
-- Fehler vom Server konkret anzeigen (statt pauschal „etwas schiefgelaufen“), damit erkennbar ist, ob z. B. Pflichtfelder oder die Domain-Zuordnung das Problem sind.
-- Danach eine echte Testbewerbung über die Live-Seite abschicken und im Mail-Center gegenprüfen.
+4. **Deployment und Prüfung**
+   - Portal/Frontend inklusive Landing-Assets deployen und die betroffenen Landing Pages neu veröffentlichen.
+   - Backend-Funktionen und neue Migration mit dem Backend-Deploy ausrollen.
+   - Danach prüfen: Formular zeigt Terminwahl statt Interview, Bestätigungs- und Reminder-Mail enthalten einen echten Button, DB-Indizes existieren, parallele Testläufe erzeugen nur einen Versand.
 
-### 4. Doppelversand endgültig absichern
-- Prüfen, ob auf dem Backend-Server die aktuelle Version der Mail-Funktionen läuft (Versionskennung der Funktionen abfragen) — die Sperre wirkt nur, wenn sie deployed ist.
-- Zusätzliche, nicht umgehbare Sperre auf Datenbankebene: eindeutiger Index auf „gleiche Vorlage + gleicher Empfänger + gleiche Bewerbung“ im Versandprotokoll, plus Sperrvermerk vor dem Versand statt danach.
-- Auswertung „mögliche Doppelversendungen“ so anpassen, dass Alt-Fälle (vor der Sperre) und übersprungene Einträge nicht mehr als aktueller Doppelversand gezählt werden.
-
-### 5. Die 4 offline Landing Pages
-- Diagnose-Ablauf: Auslieferung der Seiten-Dateien vom Portal an den Landing-Server für genau diese vier Domains prüfen (existiert der Eintrag, ist er veröffentlicht, hängt ein Server dran, liefert die Datei-Schnittstelle Inhalte).
-- Je nach Befund: erneute Veröffentlichung anstoßen bzw. die Zuordnung Domain → Server wiederherstellen; falls die Auslieferung stillschweigend leer bleibt, protokollieren wir das künftig sichtbar statt eine 404-Seite zu zeigen.
-
-### Technische Details
-- Dateien: `src/landing-themes/theme-nebula-flux/style.css` (Karten/Meta/Timeline), `src/lib/landing-generator.functions.ts` (Slot-Normalisierung, Schrittnummern), `src/landing-themes/_shared/*` bzw. die geteilte Formular-JS in `src/lib/landing-themes.ts` (Statusklassen, Fehlertexte), Mail-Funktionen `supabase/functions/send-application-reminders` / `_shared/dedupe.ts` plus eine Migration für den eindeutigen Index.
-- Nach Umsetzung: betroffene Landing Pages neu veröffentlichen, Edge Functions auf das Backend deployen.
+## Noch wichtig
+Die aktuelle Cloud-Testdatenbank enthält keinen Datensatz für `gtm-strategies.de`; die produktive Konfiguration liegt damit offenbar im self-hosted Backend. Die konkrete Domain-/Schedule-Zuordnung wird deshalb nach dem Selfhosting-Deploy dort verifiziert.
