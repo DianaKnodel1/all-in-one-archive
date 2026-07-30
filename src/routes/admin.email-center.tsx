@@ -12,6 +12,7 @@ import { EMAIL_TYPE_LABELS, HIDDEN_EMAIL_STATUS, type EmailLog } from "@/lib/ema
 import { resendEmailLog, isTokenTemplate } from "@/lib/email-resend";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { SmtpTroubleNotice } from "@/components/admin/SmtpTroubleNotice";
 
 
 
@@ -59,9 +60,6 @@ function AdminEmailCenterPage() {
   /** Exakte Gesamtzahl aus der DB — unabhängig vom 5.000-Zeilen-Fenster der Liste. */
   const [exactTotal, setExactTotal] = useState<number | null>(null);
   const [tenantNames, setTenantNames] = useState<Record<string, string>>({});
-  const [smtpTrouble, setSmtpTrouble] = useState<
-    { id: string; name: string; reason: string }[]
-  >([]);
   const [visible, setVisible] = useState(100);
   const [resending, setResending] = useState(false);
   const { toast } = useToast();
