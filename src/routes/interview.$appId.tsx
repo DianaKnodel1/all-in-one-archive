@@ -11,9 +11,10 @@ import { ZusageCard } from "@/components/interview/ZusageCard";
 
 type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
-// Menschlichere Reaktionszeit: die KI "liest" erst kurz, bevor die Tippblase erscheint.
-const READ_DELAY_MIN_MS = 1200;
-const READ_DELAY_MAX_MS = 2500;
+// Menschlichere Reaktionszeit: erst "lesen/nachdenken", dann erst die Tippblase.
+// Bewusst deutlich länger — sofortige Antworten wirken maschinell.
+const READ_DELAY_MIN_MS = 3000;
+const READ_DELAY_MAX_MS = 7000;
 const readDelay = () =>
   READ_DELAY_MIN_MS + Math.random() * (READ_DELAY_MAX_MS - READ_DELAY_MIN_MS);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -73,6 +74,7 @@ function InterviewPage() {
   // direkten Datenbank-Abfrage, die bei unveröffentlichten Seiten leer bleibt.
   const [serverBranding, setServerBranding] = useState<{ recruiter_name?: string; recruiter_avatar_url?: string | null; company_name?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const zusageRef = useRef<HTMLDivElement>(null);
 
   const applyServerBranding = (data: any) => {
     if (data?.branding) setServerBranding(data.branding);
@@ -202,6 +204,16 @@ function InterviewPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
+  // Zusage darf niemand übersehen: sobald sie steht, direkt in den Blick holen.
+  useEffect(() => {
+    if (!ended || appStatus !== "akzeptiert") return;
+    const t = setTimeout(
+      () => zusageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      250,
+    );
+    return () => clearTimeout(t);
+  }, [ended, appStatus]);
+
   // Timer aufräumen
   useEffect(() => () => { if (typingTimerRef.current) clearTimeout(typingTimerRef.current); }, []);
 
@@ -227,10 +239,11 @@ function InterviewPage() {
       // Menschlichere Antwortzeit: kurze Denkpause + „Tipp"-Zeit abhängig von Antwortlänge
       const reply = (data.history ?? []).slice(-1)[0]?.text ?? "";
       const chars = reply.length;
-      // ~35ms pro Zeichen "Tippen", + 900ms Denkpause, gedeckelt bei 6s
-      const targetMs = Math.min(6000, 900 + chars * 35);
-      // Lesepause zählt mit, aber es wird immer mindestens ~600 ms sichtbar getippt.
-      const minVisible = readMs + 600;
+      // ~55 ms pro Zeichen "Tippen" (realistische Schreibgeschwindigkeit),
+      // plus Denkpause; gedeckelt bei 16 s, damit niemand ewig wartet.
+      const targetMs = Math.min(16000, readMs + 1200 + chars * 55);
+      // Es wird immer mindestens ~1,5 s sichtbar getippt.
+      const minVisible = readMs + 1500;
       const elapsed = Date.now() - startedAt;
       const wait = Math.max(0, Math.max(targetMs, minVisible) - elapsed);
       if (wait > 0) await sleep(wait);
@@ -355,7 +368,24 @@ function InterviewPage() {
         </div>
       </header>
 
-
+      {/* Zusage-Hinweis direkt unter dem Header — sichtbar ohne Scrollen. */}
+      {ended && appStatus === "akzeptiert" && (
+        <div className="sticky top-[64px] z-10 border-b border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/60">
+          <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+              🎉 Zusage erhalten — jetzt im Mitarbeiterportal registrieren
+            </span>
+            <Button
+              size="sm"
+              style={{ background: primary }}
+              className="text-white shrink-0"
+              onClick={() => zusageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+            >
+              Zur Registrierung
+            </Button>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 pb-4 flex flex-col">
         {error && (
@@ -404,15 +434,17 @@ function InterviewPage() {
 
         {ended ? (
           appStatus === "akzeptiert" ? (
-            <ZusageCard
-              className="mt-4"
-              company={company}
-              primary={primary}
-              recruiter={recruiterName}
-              registrationLink={registrationLink ?? registerFallbackHref}
-              mailFailed={inviteMailFailed}
-              loginHref={`${portalBase}/login`}
-            />
+            <div ref={zusageRef} className="scroll-mt-24">
+              <ZusageCard
+                className="mt-4 ring-2 ring-offset-2 ring-offset-background rounded-2xl"
+                company={company}
+                primary={primary}
+                recruiter={recruiterName}
+                registrationLink={registrationLink ?? registerFallbackHref}
+                mailFailed={inviteMailFailed}
+                loginHref={`${portalBase}/login`}
+              />
+            </div>
           ) : (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-6 text-center space-y-3">
               <CheckCircle2 className="h-10 w-10 mx-auto" style={{ color: primary }} />

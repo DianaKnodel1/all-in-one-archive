@@ -15,7 +15,11 @@ WICHTIG — Identität:
 
 Tonalität:
 - Warm, ruhig, professionell, per „Sie". Wie ein echtes HR-Gespräch, nicht wie ein Fragebogen und nicht lässig-flapsig.
-- Maximal 2–3 Sätze pro Wortmeldung. KEINE Aufzählungen, KEINE Bulletpoints, KEINE Fettschrift. Sparsam ein dezentes Emoji (😊) ist ok, aber nur wenn es natürlich passt.
+- Maximal 2–3 Sätze pro Wortmeldung — lieber zu kurz als zu lang. KEINE Aufzählungen, KEINE Bulletpoints, KEINE Fettschrift, keine Zwischenüberschriften. Sparsam ein dezentes Emoji (😊) ist ok, aber nur wenn es natürlich passt.
+- Wiederhole NIEMALS eine Frage oder einen Satz, den du bereits geschrieben hast — auch nicht sinngemäß. Wenn die Antwort schon vorliegt, geh weiter.
+- Keine Textbausteine, keine auswendig wirkenden Info-Blöcke: Konditionen (Gehalt, Modelle, Aufgaben) nur häppchenweise nennen, genau so viel, wie gerade gefragt wurde.
+- Schreib so, wie Menschen tippen: unterschiedliche Satzlängen, gelegentlich eine kurze Rückmeldung („Verstehe." / „Alles klar.") vor der nächsten Frage.
+- Erkläre niemals deine Vorgehensweise („ich stelle Ihnen jetzt Fragen zu …") und kündige keine Gesprächsstruktur an.
 - Bezieh dich konkret auf das, was die Person zuletzt gesagt hat, bevor du weiterfragst.
 - Streu gelegentlich (max. 1–2× im ganzen Gespräch) eine kurze, authentische Team-Anekdote ein, z. B. „Unser Team trifft sich einmal im Monat virtuell zum Feierabend-Talk — das kommt richtig gut an." So wirkt das Gespräch menschlicher und weniger wie ein Fragebogen.
 - EINE Frage pro Sprechakt. Niemals mehrere Fragen auf einmal.
@@ -46,7 +50,8 @@ Regeln:
 - Rückfragen des Bewerbers sind zentral — nimm dir dafür Zeit, beantworte sie ehrlich und ausführlich, und frag danach aktiv, ob noch etwas offen ist.
 - KEINE Countdown- oder Timer-Hinweise, kein starres Runden-Limit.
 - Beende das Gespräch erst, wenn Situation, Motivation, Modell und Verfügbarkeit geklärt sind UND der Bewerber Gelegenheit hatte, alle eigenen Fragen zu stellen. Frag vor dem Abschluss explizit: „Bevor wir zum Abschluss kommen — haben Sie noch Fragen an mich?"
-- Abschluss dann sachlich: „Vielen Dank für das offene und ausführliche Gespräch — damit habe ich alles, was ich für den ersten Schritt benötige. Wir melden uns zeitnah mit dem nächsten Schritt bei Ihnen."`;
+- Abschluss dann sachlich: „Vielen Dank für das offene und ausführliche Gespräch — damit habe ich alles, was ich brauche. Meine Rückmeldung erhalten Sie direkt im Anschluss hier im Fenster und zusätzlich per E-Mail."
+- Nenne NIEMALS Wartezeiten wie „innerhalb von 48 Stunden", „in den nächsten Tagen" oder „wir melden uns die Woche" — die Entscheidung steht unmittelbar nach dem Gespräch fest.`;
 
 
 const SUMMARY_PROMPT = `Du bist ein erfahrener Personalleiter. Bewerte das folgende Bewerbungsgespräch und triff eine klare Entscheidung.
@@ -428,13 +433,31 @@ export async function recordInviteAttempt(
       .eq("id", app.id)
       .then(() => {}, (e: any) => console.warn("[interview-engine] invite status update:", e?.message ?? e));
   }
-  if (status !== "sent") {
+  const recipient = (app.email ?? "").toLowerCase().trim();
+  // Erfolgreiche Versände protokolliert normalerweise die Mailfunktion selbst.
+  // Fehlt dieser Eintrag (z. B. weil das Log dort nicht geschrieben wurde),
+  // ergänzen wir ihn hier — sonst fehlt die Zusage-Mail im E-Mail-Center und
+  // die Mail-Kette behauptet fälschlich „nie ausgelöst".
+  let needsLog = true;
+  if (status === "sent" && recipient) {
+    const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { data: existing } = await supabaseAdmin
+      .from("email_send_log")
+      .select("id")
+      .eq("recipient_email", recipient)
+      .in("template_name", ["invitation", "registration_invitation", "welcome_invitation"])
+      .eq("status", "sent")
+      .gte("created_at", since)
+      .limit(1);
+    if ((existing as any[] | null)?.length) needsLog = false;
+  }
+  if (needsLog) {
     await supabaseAdmin
       .from("email_send_log")
       .insert({
         tenant_id: app.tenant_id ?? null,
         template_name: "registration_invitation",
-        recipient_email: (app.email ?? "").toLowerCase().trim(),
+        recipient_email: recipient,
         status,
         error_message: error,
         metadata: { application_id: app.id, source },
@@ -508,6 +531,8 @@ async function sendInviteInternal(
       lastName,
       registrationLink,
       tenantId: app.tenant_id,
+      // Ohne applicationId landet die Zusage-Mail ohne Bewerbungsbezug im Log.
+      applicationId: app.id,
     },
   });
   // Manche Funktionen antworten mit HTTP 200 und { error: ... } — das ist ebenfalls ein Fehlschlag.
