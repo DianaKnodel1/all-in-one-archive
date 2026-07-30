@@ -13,6 +13,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { guardSend } from "../_shared/send-guard.ts";
 import { logMailAbort } from "../_shared/log-abort.ts";
+import { actionBucketEventKey, claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -238,11 +239,20 @@ serve(async (req) => {
     if (!allowance.allowed) {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    const claim = await claimEmailEvent(admin, {
+      eventKey: actionBucketEventKey("password_reset", email),
+      templateName: "password_reset", recipient: email,
+      tenantId: tenant.id, senderEmail, subject, html,
+      metadata: { source: "send-password-reset", user_initiated: true },
+    });
+    if (!claim) {
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     try {
       const verifyRes = await verifyOrPause(admin, tenant, transporter);
       if (!verifyRes.ok) {
-        await logEmail(admin, tenant, email, subject, html, "failed", `verify_failed: ${verifyRes.reason}${verifyRes.paused ? " (tenant auto-paused)" : ""}`);
+        await finishEmailClaim(admin, claim, { status: "failed", error: `verify_failed: ${verifyRes.reason}${verifyRes.paused ? " (tenant auto-paused)" : ""}`, metadata: { source: "send-password-reset", user_initiated: true } });
       } else {
         await transporter.sendMail({
           from: `"${senderName}" <${senderEmail}>`,
@@ -251,11 +261,11 @@ serve(async (req) => {
           subject,
           html,
         });
-        await logEmail(admin, tenant, email, subject, html, "sent");
+        await finishEmailClaim(admin, claim, { status: "sent", metadata: { source: "send-password-reset", user_initiated: true } });
       }
     } catch (err: any) {
       console.error("send-password-reset SMTP failed", err);
-      await logEmail(admin, tenant, email, subject, html, "failed", String(err?.message ?? err));
+      await finishEmailClaim(admin, claim, { status: "failed", error: String(err?.message ?? err), metadata: { source: "send-password-reset", user_initiated: true } });
       // dennoch ok zurückgeben, um keine Enumeration zu ermöglichen
     }
 
