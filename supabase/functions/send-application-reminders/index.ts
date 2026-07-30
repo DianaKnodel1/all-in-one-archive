@@ -19,6 +19,7 @@ import {
   MAX_PER_RUN_PER_TENANT as LIMIT_RUN,
 } from "../_shared/limits.ts";
 import { formatAppointmentDate, formatAppointmentTime } from "../_shared/format-datetime.ts";
+import { claimEmailEvent, finishEmailClaim, type EmailClaim } from "../_shared/send-claim.ts";
 
 const FUNCTION_VERSION = "2026-07-15-rebook-after-cancel-v9-smtp-rate-limit-safe";
 
@@ -815,25 +816,20 @@ serve(async (req) => {
       // Der eindeutige Index (template_name + Empfänger + Vorgang + Tag) lässt
       // nur eine 'sent'-Zeile zu. Schlägt der Insert fehl, hat ein paralleler
       // Lauf diese Mail bereits übernommen → hier nicht nochmal senden.
-      let claimId: string | null = null;
+      let claim: EmailClaim | null = null;
       if (!forceKind) {
-        const { data: claimRow, error: claimErr } = await admin
-          .from("email_send_log")
-          .insert({
-            message_id: messageId, tenant_id: tenant.id,
-            template_name: templateName, recipient_email: app.email,
-            status: "sent", rendered_subject: subject, rendered_html: html,
-            sender_email: tenant.sender_email ?? tenant.smtp_username,
-            metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id, claim: true },
-          } as any)
-          .select("id")
-          .maybeSingle();
-        if (claimErr) {
+        claim = await claimEmailEvent(admin, {
+          eventKey: `application_reminder:${app.id}:${kind}`,
+          templateName, recipient: app.email, tenantId: tenant.id,
+          senderEmail: tenant.sender_email ?? tenant.smtp_username,
+          subject, html,
+          metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+        });
+        if (!claim) {
           skipped++;
           results.push({ app: app.id, kind, status: "skipped", reason: "duplicate_blocked_by_db" });
           continue;
         }
-        claimId = (claimRow as any)?.id ?? null;
       }
 
       try {
@@ -854,10 +850,8 @@ serve(async (req) => {
             .eq("template_name", templateName)
             .eq("recipient_email", app.email)
             .eq("status", "pending");
-          if (claimId) {
-            await admin.from("email_send_log")
-              .update({ metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id } })
-              .eq("id", claimId);
+          if (claim) {
+            await finishEmailClaim(admin, claim, { status: "sent", metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
           } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
@@ -881,10 +875,8 @@ serve(async (req) => {
             sent_at: new Date().toISOString(),
           }, { onConflict: "application_id,reminder_kind" });
           try {
-            if (claimId) {
-              await admin.from("email_send_log")
-                .update({ status: "pending", error_message: `SMTP-Stundenlimit erreicht, wird später erneut versucht: ${errMsg}` })
-                .eq("id", claimId);
+            if (claim) {
+              await finishEmailClaim(admin, claim, { status: "failed", error: `SMTP-Stundenlimit erreicht: ${errMsg}`, metadata: { application_id: app.id, kind, source: "send-application-reminders", retry_reason: "smtp_hourly_rate_limit", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
             } else await admin.from("email_send_log").insert({
               message_id: messageId, tenant_id: tenant.id,
               template_name: templateName, recipient_email: app.email,
@@ -909,10 +901,8 @@ serve(async (req) => {
             .eq("template_name", templateName)
             .eq("recipient_email", app.email)
             .eq("status", "pending");
-          if (claimId) {
-            await admin.from("email_send_log")
-              .update({ status: "failed", error_message: errMsg })
-              .eq("id", claimId);
+          if (claim) {
+            await finishEmailClaim(admin, claim, { status: "failed", error: errMsg, metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
           } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
