@@ -587,6 +587,28 @@ serve(async (req) => {
       if (app) todo.push({ app, kind: forceKind as ReminderKind, inviteToken: tokensByAppId.get(app.id)?.token });
     }
 
+    // ─── Sendefenster 06–22 Uhr (Europe/Berlin) ───
+    // Erinnerungen sind Marketing-nahe Mails: nachts nicht zustellen (SMTP-
+    // Reputation + Empfängererlebnis). Manueller Sofort-Versand (forceKind)
+    // und Trockenlauf bleiben davon unberührt.
+    if (!forceKind && !dryRun) {
+      const berlinHour = Number.parseInt(
+        new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", hour12: false }).format(new Date()),
+        10,
+      );
+      if (berlinHour < 6 || berlinHour >= 22) {
+        return json({
+          success: true,
+          skipped_reason: "outside_send_window",
+          berlin_hour: berlinHour,
+          candidates: todo.length,
+          sent: 0,
+          skipped: todo.length,
+          failed: 0,
+        });
+      }
+    }
+
     // ─── Rate-Limits (SMTP-Reputationsschutz) ───
     // Neuer SMTP-Vertrag: 150 Mails/h pro Tenant/Sender, Sendefenster 6–22 Uhr.
     // 12h-Cap = 12 × 150 = 1800. Cron läuft alle 5 Min → RUN-Cap 10 (max. 120/h).
