@@ -73,8 +73,38 @@ function cleanLandingDomain(d: string): string {
   return String(d ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 }
 
-function applyPlaceholders(
+/**
+ * Repariert kaputte Slot-Werte:
+ *  1) Direkt wiederholte, identische Textblöcke ("STEP · 02STEP · 02…") werden
+ *     auf eine Ausgabe reduziert — betrifft bereits gespeicherte Seiten.
+ *  2) step_num_N bekommt garantiert die fortlaufende Nummer N.
+ */
+function collapseRepeatedText(value: string): string {
+  const v = String(value ?? "");
+  if (v.length < 4 || v.length > 400) return v;
+  for (let unit = 1; unit <= v.length / 2; unit++) {
+    if (v.length % unit !== 0) continue;
+    const head = v.slice(0, unit);
+    if (head.repeat(v.length / unit) === v) return head;
+  }
+  return v;
+}
 
+function normalizeSlotValues(slotValues: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(slotValues ?? {})) {
+    let value = collapseRepeatedText(String(raw ?? ""));
+    const stepMatch = /^step_num_(\d+)$/.exec(key);
+    if (stepMatch && /\d/.test(value)) {
+      const n = Number(stepMatch[1]);
+      value = value.replace(/\d+(?!.*\d)/, String(n).padStart(2, "0"));
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+function applyPlaceholders(
   src: string,
   branding: z.infer<typeof BrandingSchema>,
   slotValues: Record<string, string> = {},
