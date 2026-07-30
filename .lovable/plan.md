@@ -1,44 +1,37 @@
-# Sporadische „Keine Landing für … konfiguriert.“
+## Was ich geprüft habe (live)
 
-## Was ich geprüft habe
+- **gtm-strategies.de** (theme-tts-beratung): Das Bewerbungs-Modal öffnet sich, Formular + DSGVO-Checkbox sind da, keine JS-Fehler. Der Portal-Endpunkt `.../api/public/applications` antwortet korrekt (CORS ok, Validierung greift). Auffällig: Das Status-Feld im Formular heißt `ttsb-form-status`, das Skript setzt beim Absenden aber `lv-form-status` — Erfolgs- und Fehlermeldungen (z. B. „Bitte Datenschutz bestätigen“) sind dadurch praktisch unsichtbar. Für den Bewerber sieht es aus, als „passiere nichts“.
+- **mus-marketing.de** (theme-nebula-flux):
+  - Projekt-Karten laufen über den Rand: die Meta-Kacheln (Vergütung/Dauer/Plattform/Level) sind breiter als die Karte, Text wird abgeschnitten („Fortgeschritte…“); Karten unterschiedlich hoch, Titel umbrechen unsauber.
+  - Prozess-Schritte enthalten mehrfach denselben Text: `STEP · 02STEP · 02STEP · 02STEP · 02` (Schritte 2–6), und Schritt 6 zeigt fälschlich „STEP · 05“. Das steckt so in den gespeicherten Inhalten der Seite, nicht im Theme-HTML.
+- **Die 4 Domains** (bv-agentur.com, mm-personalvermittlung.de, cac-vermittlung.de, personalservice-gmbh.de) liefern alle die Fehlerseite „Diese Seite ist nicht verfügbar“ (404 vom Landing-Server) — die Seiten kommen also beim Server nicht mehr an. Ursache noch nicht bestätigt (die Produktionsdaten liegen auf eurem eigenen Backend, nicht hier).
+- **Doppelte Mails**: Im Code ist die Sperre vorhanden (Vorgangsprotokoll + 20-Stunden-Fenster direkt vor dem Versand). Ob sie auf eurem Backend aktiv ist, hängt am Edge-Function-Deploy — beim letzten Deploy lief nur Portal/DB, das Backend-Deploy nicht durch.
 
-Die Meldung kommt aus dem Landing-Renderer auf Server 1 (`landing-server/server.js`, Zeile 402). Sie wird ausgegeben, sobald die Domain-Abfrage keine Zeile liefert — und zwar **auch dann, wenn die Abfrage gar nicht beantwortet wurde**.
+## Plan
 
-In `loadLanding(domain)` passiert aktuell Folgendes:
+### 1. Nebula-Flux Projekt-Karten reparieren
+- Meta-Kacheln: Umbruch erlauben und Überlauf verhindern (schmalere Mindestbreite, `min-width:0`, Silbentrennung), Karten auf gleiche Höhe, Button unten bündig.
+- Raster auf max. 3 Spalten begrenzen, damit Karten nicht gequetscht werden; mobil sauber einspaltig.
+- Schritt-Nummer (`nf-tl-num`) sichtbar als Badge stylen.
 
-```text
-Datenbank-Abfrage
-   ├── Antwort ok        → Zeile merken (60 s)
-   ├── HTTP-Fehler       → Fehler loggen, row = null  ──┐
-   └── Timeout / Netz    → Fehler loggen, row = null  ──┤
-                                                        ▼
-                              null wird 60 s lang gecacht → jede Anfrage
-                              in dieser Minute bekommt 404 „Keine Landing …"
-```
+### 2. Doppelte Step-Texte entschärfen
+- Beim Rendern jeden Slot-Wert normalisieren: identische, direkt wiederholte Textblöcke werden auf eine Ausgabe reduziert (behebt „STEP · 02STEP · 02…“ auch für bereits gespeicherte Seiten, ohne dass ihr neu generieren müsst).
+- Zusätzlich beim Generieren: fortlaufende Schrittnummern erzwingen, damit Schritt 6 nicht wieder „05“ zeigt.
 
-Das erklärt genau das beobachtete Verhalten: es trifft **eine** Domain, **nur manchmal**, für **kurze Zeit**, während andere Landings normal laufen — weil deren Zeile noch im Cache liegt. Ein einzelner Aussetzer der Backend-Verbindung (Timeout, kurzer 5xx, Ratelimit) reicht, um eine Landing eine Minute lang offline zu nehmen. Bewerber sehen in dieser Zeit nur den Fehlertext.
+### 3. Bewerbungsformular TTS-Beratung
+- Statusmeldungen theme-übergreifend sichtbar machen: das Skript setzt die vorhandene Theme-Klasse nicht mehr zurück, sondern ergänzt nur den Zustand (Erfolg/Fehler) — inkl. Styling für die TTS-Beratung-Variante.
+- Fehler vom Server konkret anzeigen (statt pauschal „etwas schiefgelaufen“), damit erkennbar ist, ob z. B. Pflichtfelder oder die Domain-Zuordnung das Problem sind.
+- Danach eine echte Testbewerbung über die Live-Seite abschicken und im Mail-Center gegenprüfen.
 
-Zusätzlich: dieselbe Funktion beantwortet Caddys `on_demand_tls`-Nachfrage (`/_internal/ask`). Fällt sie in ein solches Fehlerfenster, kann auch die Zertifikatsausstellung für eine neue Domain scheitern.
+### 4. Doppelversand endgültig absichern
+- Prüfen, ob auf dem Backend-Server die aktuelle Version der Mail-Funktionen läuft (Versionskennung der Funktionen abfragen) — die Sperre wirkt nur, wenn sie deployed ist.
+- Zusätzliche, nicht umgehbare Sperre auf Datenbankebene: eindeutiger Index auf „gleiche Vorlage + gleicher Empfänger + gleiche Bewerbung“ im Versandprotokoll, plus Sperrvermerk vor dem Versand statt danach.
+- Auswertung „mögliche Doppelversendungen“ so anpassen, dass Alt-Fälle (vor der Sperre) und übersprungene Einträge nicht mehr als aktueller Doppelversand gezählt werden.
 
-Die Ursache ist damit hinreichend eingegrenzt, ohne dass sie „Landing fehlt in der Datenbank" wäre — eine dauerhaft fehlende Zeile würde permanent 404 liefern, nicht sporadisch.
+### 5. Die 4 offline Landing Pages
+- Diagnose-Ablauf: Auslieferung der Seiten-Dateien vom Portal an den Landing-Server für genau diese vier Domains prüfen (existiert der Eintrag, ist er veröffentlicht, hängt ein Server dran, liefert die Datei-Schnittstelle Inhalte).
+- Je nach Befund: erneute Veröffentlichung anstoßen bzw. die Zuordnung Domain → Server wiederherstellen; falls die Auslieferung stillschweigend leer bleibt, protokollieren wir das künftig sichtbar statt eine 404-Seite zu zeigen.
 
-## Was geändert wird
-
-Alles in `landing-server/server.js` (plus dieselbe Logik in `landing-server/server.ts`, damit beide Varianten gleich bleiben):
-
-1. **Fehler nie als „nicht vorhanden" cachen.** Nur ein erfolgreicher Abruf schreibt in den Cache. Fehlerfälle werden klar von „Domain existiert wirklich nicht" getrennt.
-2. **Letzten bekannten Stand weiterliefern (stale-while-error).** Eine einmal erfolgreich geladene Landing wird im Speicher behalten und bei Backend-Störung weiter ausgeliefert, statt einen 404 zu zeigen. Erst wenn nie eine Zeile geladen wurde, gibt es eine Fehlerseite.
-3. **Kurzer Retry.** Fehlgeschlagene Abfragen werden einmal nach ~300 ms wiederholt, Timeout von 10 s auf 6 s gesenkt, damit ein Retry innerhalb einer normalen Ladezeit passt.
-4. **Negativ-Cache getrennt und kurz.** Ein echtes „Domain nicht in der Tabelle" wird nur ~15 s gemerkt (statt 60 s), damit eine frisch angelegte Landing schneller live geht.
-5. **Hintergrund-Refresh.** Abgelaufene Einträge werden asynchron erneuert; die Anfrage wird sofort mit dem vorhandenen Stand beantwortet, statt auf die Datenbank zu warten.
-6. **Bessere Fehlerseite statt Rohtext.** Wenn wirklich keine Landing existiert: eine schlichte, freundliche Seite mit Hinweis („Diese Seite ist gerade nicht verfügbar") statt der technischen Meldung. Bei Backend-Störung ohne bekannten Stand: HTTP 503 mit `Retry-After`, damit Suchmaschinen die Seite nicht als dauerhaft weg werten.
-7. **`/_internal/ask` unverändert streng**, aber ebenfalls ohne Fehler-Caching, damit Zertifikate nicht an einem Aussetzer scheitern.
-8. **Diagnose:** Zähler für Fehlversuche pro Domain im vorhandenen `/_internal`-Bereich abrufbar, damit sich künftig belegen lässt, ob es wieder auftritt.
-
-## Danach
-
-Deploy auf Server 1 (Renderer neu starten), dann `personalservice-gmbh.de` und zwei weitere Landings prüfen. Falls die Fehler weiter auftauchen, zeigen die neuen Log-Zeilen dann direkt, ob es Timeouts, HTTP-Fehler oder tatsächlich fehlende Datensätze sind.
-
-## Offene Frage (kann parallel laufen)
-
-Falls du im Journal von Server 1 nachsehen kannst: `journalctl -u landing-server --since "2 days ago" | grep "DB-Error"` — die Zeilen dort bestätigen, welcher Fehlertyp es ist. Für die Umsetzung ist das nicht nötig, es macht die Bestätigung nur schneller.
+### Technische Details
+- Dateien: `src/landing-themes/theme-nebula-flux/style.css` (Karten/Meta/Timeline), `src/lib/landing-generator.functions.ts` (Slot-Normalisierung, Schrittnummern), `src/landing-themes/_shared/*` bzw. die geteilte Formular-JS in `src/lib/landing-themes.ts` (Statusklassen, Fehlertexte), Mail-Funktionen `supabase/functions/send-application-reminders` / `_shared/dedupe.ts` plus eine Migration für den eindeutigen Index.
+- Nach Umsetzung: betroffene Landing Pages neu veröffentlichen, Edge Functions auf das Backend deployen.
