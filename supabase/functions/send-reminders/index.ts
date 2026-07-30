@@ -26,6 +26,7 @@ import {
   MAX_PER_24H_PER_TENANT as LIMIT_24H,
   MAX_SENDS_PER_RUN_PER_TENANT as LIMIT_RUN_TYPE,
 } from "../_shared/limits.ts";
+import { claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
 
 
 const corsHeaders = {
@@ -34,13 +35,18 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Welle 1 tuning (Juni 2026): weniger Druck auf Empfänger.
-//   - 3 statt 5 Versuche pro Empfänger+Typ
-//   - 4 statt 3 Tage Mindestabstand
-const MAX_ATTEMPTS = 3;
-// Abstand vom letzten Reminder zum nächsten (Attempt-Index → Stunden).
-// Reminder 1: 24h nach Trigger, Reminder 2: 48h nach R1, Reminder 3: 72h nach R2.
-const ATTEMPT_HOURS = [24, 48, 72];
+// Feste fachliche Grenzen statt einer allgemeinen Drip-Logik:
+// - E-Mail unbestätigt: genau einmal nach 24h
+// - Onboarding unvollständig: nach 24h und 72h, danach Ende
+// Andere Reminder-Typen behalten höchstens einen Lauf, sofern sie nicht separat
+// ereignisbezogen gesteuert werden.
+const REMINDER_SCHEDULE_HOURS: Record<ReminderType, readonly number[]> = {
+  invite: [], // Legacy-Automatik deaktiviert
+  confirm_email: [24],
+  complete_registration: [24, 72],
+  no_recent_booking: [7 * 24],
+  domain_recovery: [0],
+};
 const MIN_DAYS_BETWEEN = 1; // Legacy: nur noch für Cutoff-Queries (>=24h alt).
 const NO_BOOKING_DAYS = 7;
 
@@ -346,15 +352,8 @@ async function canSend(
   if (error) return { ok: false, nextAttempt: 0, reason: error.message };
 
   const sentLogs = (data ?? []).filter((r: any) => r.status === "sent");
-  if (sentLogs.length >= MAX_ATTEMPTS) return { ok: false, nextAttempt: 0, reason: "max_attempts" };
-
-  if (sentLogs.length > 0) {
-    const lastAt = new Date(sentLogs[0].sent_at).getTime();
-    const ageHours = (Date.now() - lastAt) / (1000 * 60 * 60);
-    // Nächster Attempt = sentLogs.length (0-basiert): [0]=24h, [1]=48h, [2]=72h.
-    const needHours = ATTEMPT_HOURS[sentLogs.length] ?? 72;
-    if (ageHours < needHours) return { ok: false, nextAttempt: 0, reason: "too_soon" };
-  }
+  const schedule = REMINDER_SCHEDULE_HOURS[type];
+  if (sentLogs.length >= schedule.length) return { ok: false, nextAttempt: 0, reason: "max_attempts" };
   return { ok: true, nextAttempt: sentLogs.length + 1 };
 }
 
