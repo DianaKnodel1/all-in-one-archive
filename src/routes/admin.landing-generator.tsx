@@ -254,6 +254,23 @@ function LandingGeneratorPage() {
     listPartnersFn({} as any).then((r: any) => setPartners(r?.rows ?? [])).catch(() => {});
   }, [listPartnersFn]);
 
+  // Terminzeiten (Verfügbarkeiten) je Landing — für den Setup-Check in der Liste.
+  const listSchedulesFn = useServerFn(adminListSchedules);
+  const [scheduleLandingIds, setScheduleLandingIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    listSchedulesFn({} as any)
+      .then((r: any) =>
+        setScheduleLandingIds(
+          new Set(
+            ((r?.rows ?? []) as any[])
+              .filter((s) => s.active && s.landing_page_id)
+              .map((s) => String(s.landing_page_id)),
+          ),
+        ),
+      )
+      .catch(() => {});
+  }, [listSchedulesFn]);
+
   const reloadLandings = useCallback(async () => {
     setLandingsLoading(true);
     try {
