@@ -879,7 +879,11 @@ serve(async (req) => {
             sent_at: new Date().toISOString(),
           }, { onConflict: "application_id,reminder_kind" });
           try {
-            await admin.from("email_send_log").insert({
+            if (claimId) {
+              await admin.from("email_send_log")
+                .update({ status: "pending", error_message: `SMTP-Stundenlimit erreicht, wird später erneut versucht: ${errMsg}` })
+                .eq("id", claimId);
+            } else await admin.from("email_send_log").insert({
               message_id: messageId, tenant_id: tenant.id,
               template_name: templateName, recipient_email: app.email,
               status: "pending", error_message: `SMTP-Stundenlimit erreicht, wird später erneut versucht: ${errMsg}`,
@@ -903,7 +907,11 @@ serve(async (req) => {
             .eq("template_name", templateName)
             .eq("recipient_email", app.email)
             .eq("status", "pending");
-          await admin.from("email_send_log").insert({
+          if (claimId) {
+            await admin.from("email_send_log")
+              .update({ status: "failed", error_message: errMsg })
+              .eq("id", claimId);
+          } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
             status: "failed", error_message: errMsg,
