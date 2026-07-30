@@ -85,16 +85,21 @@ export async function sendMailWithRetry(
   tenant: SmtpTenantLike,
   message: Record<string, unknown>,
   opts?: { label?: string },
-): Promise<{ attempts: number }> {
+): Promise<{ attempts: number; messageId?: string; accepted?: unknown; response?: string }> {
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
     const transporter = createSmtpTransport(tenant);
     try {
-      await transporter.sendMail(message as any);
+      const info: any = await transporter.sendMail(message as any);
       if (attempt > 0) {
         console.log(`[smtp] erfolgreich nach Wiederholung${opts?.label ? ` (${opts.label})` : ""}`, { attempt: attempt + 1 });
       }
-      return { attempts: attempt + 1 };
+      return {
+        attempts: attempt + 1,
+        messageId: info?.messageId,
+        accepted: info?.accepted,
+        response: info?.response,
+      };
     } catch (err) {
       lastErr = err;
       const retryable = isTransientSmtpError(err) && attempt < RETRY_DELAYS_MS.length;
