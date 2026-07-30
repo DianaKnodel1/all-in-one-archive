@@ -499,17 +499,28 @@ function AdminEmailCenterPage() {
         <CardContent className="p-0">
           <div className="px-4 py-3 border-b flex items-center gap-2">
             <div className="text-sm font-semibold flex-1">Verlauf</div>
+            <select
+              value={tenantFilter}
+              onChange={e => setTenantFilter(e.target.value)}
+              className="h-8 rounded-md border bg-background px-2 text-xs"
+            >
+              <option value="">Alle Mandanten</option>
+              {Object.entries(tenantNames).map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
             <div className="relative w-64">
               <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={e => setQ(e.target.value)} placeholder="E-Mail oder Template…" className="h-8 pl-8 text-xs" />
+              <Input value={q} onChange={e => setQ(e.target.value)} placeholder="E-Mail, Vorlage oder Mandant…" className="h-8 pl-8 text-xs" />
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/30">
                 <tr>
-                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Template</th>
+                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Vorlage</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Empfänger</th>
+                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Mandant</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Status</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Wann</th>
                   <th className="w-20"></th>
@@ -518,8 +529,9 @@ function AdminEmailCenterPage() {
               <tbody className="divide-y">
                 {shown.map((r, i) => (
                   <tr key={i} className="hover:bg-muted/20">
-                    <td className="px-4 py-1.5 font-mono text-[11px]">{r.template_name}</td>
+                    <td className="px-4 py-1.5" title={r.template_name}>{EMAIL_TYPE_LABELS[r.template_name] ?? r.template_name}</td>
                     <td className="px-4 py-1.5 text-muted-foreground">{r.recipient_email}</td>
+                    <td className="px-4 py-1.5 text-muted-foreground">{tenantNames[r.tenant_id ?? ""] ?? "—"}</td>
                     <td className="px-4 py-1.5"><StatusBadge status={r.status} /></td>
                     <td className="px-4 py-1.5 text-[10px] text-muted-foreground tabular-nums">{new Date(r.created_at).toLocaleString("de-DE")}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
@@ -537,7 +549,7 @@ function AdminEmailCenterPage() {
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">Nichts zu sehen.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">Nichts zu sehen.</td></tr>
                 )}
               </tbody>
             </table>
