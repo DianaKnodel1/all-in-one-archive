@@ -23,13 +23,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { WebIdStationFrame } from "@/components/WebIdStationFrame";
 import {
   buildWebIdStartUrl, WEBID_APP_LINKS, WEBID_STATUS_LABEL, type WebIdStatus,
 } from "@/lib/webid";
 import {
-  ArrowLeft, CheckCircle2, Copy, ExternalLink, Loader2, PlayCircle,
-  ShieldCheck, Smartphone, Upload,
+  ArrowLeft, ArrowRight, CheckCircle2, Copy, ExternalLink, Loader2,
+  RotateCcw, ShieldCheck, Smartphone, Upload,
 } from "lucide-react";
 
 interface WebIdAssignmentRow {
@@ -63,7 +62,6 @@ function WebIdStationPage() {
   const [loading, setLoading] = useState(true);
   const [row, setRow] = useState<WebIdAssignmentRow | null>(null);
   const [status, setStatus] = useState<WebIdStatus>("offen");
-  const [started, setStarted] = useState(false);
   const [saving, setSaving] = useState<WebIdStatus | null>(null);
   const [checked, setChecked] = useState<boolean[]>(CHECKLIST.map(() => false));
   const [uploading, setUploading] = useState(false);
@@ -82,7 +80,6 @@ function WebIdStationPage() {
       setRow(rec);
       const s = (rec?.webid_status as WebIdStatus | null) ?? "offen";
       setStatus(s);
-      if (s !== "offen") setStarted(true);
       setLoading(false);
     })();
     return () => { active = false; };
@@ -94,7 +91,7 @@ function WebIdStationPage() {
   };
 
   const setWebIdStatus = async (next: WebIdStatus) => {
-    if (!assignmentId) return;
+    if (!assignmentId) return false;
     setSaving(next);
     const payload: Record<string, unknown> = { webid_status: next };
     if (next === "gestartet") payload.webid_started_at = new Date().toISOString();
@@ -103,15 +100,19 @@ function WebIdStationPage() {
     setSaving(null);
     if (error) {
       toast({ title: "Fehler", description: error.message, variant: "destructive" });
-      return;
+      return false;
     }
     setStatus(next);
     if (next === "bestaetigt") toast({ title: "Danke! Abschluss wurde gemeldet." });
+    return true;
   };
 
-  const start = async () => {
-    setStarted(true);
+  // Übergabe an WebID im selben Tab: kein iFrame, kein Popup, kein Umschalten.
+  // Der Mitarbeiter kommt über den Zurück-/Rückkehr-Weg direkt wieder auf dieser
+  // Station an und sieht dann die Abschluss-Ansicht.
+  const goToWebId = async () => {
     if (status === "offen") await setWebIdStatus("gestartet");
+    window.location.assign(targetUrl);
   };
 
   const uploadProof = async (file: File) => {
@@ -191,24 +192,53 @@ function WebIdStationPage() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-h-[520px]">
-          {started ? (
-            <WebIdStationFrame url={targetUrl} onOpenedExternally={() => { if (status === "offen") void setWebIdStatus("gestartet"); }} />
-          ) : (
+          {status === "offen" ? (
             <div className="flex h-full min-h-[520px] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
               <ShieldCheck className="h-10 w-10 text-primary" />
-              <div className="max-w-md space-y-1.5">
+              <div className="max-w-md space-y-2">
                 <p className="font-medium">Bereit für die Identifikation?</p>
                 <p className="text-sm text-muted-foreground">
-                  Gehe rechts die Checkliste durch und starte dann. Es öffnet sich die offizielle
-                  WebID-Oberfläche mit den Original-Hinweisen von WebID.
+                  Gehe zuerst die Checkliste rechts durch. Mit dem Klick auf „Weiter zu WebID“
+                  wechselt dieses Fenster direkt zur offiziellen WebID-Oberfläche — dort läuft die
+                  Identifikation mit den Original-Hinweisen von WebID.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Danach kommst du über „Zurück zum Portal“ wieder hierher und meldest den Abschluss.
                 </p>
               </div>
-              <Button size="lg" disabled={!allChecked} onClick={start}>
-                <PlayCircle className="mr-2 h-5 w-5" /> Identifikation starten
+              <Button size="lg" disabled={!allChecked || saving !== null} onClick={() => void goToWebId()}>
+                {saving === "gestartet"
+                  ? <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  : <ArrowRight className="mr-2 h-5 w-5" />}
+                Weiter zu WebID
               </Button>
               {!allChecked && (
                 <p className="text-xs text-muted-foreground">Bitte zuerst alle Punkte der Checkliste bestätigen.</p>
               )}
+            </div>
+          ) : (
+            <div className="flex h-full min-h-[520px] flex-col items-center justify-center gap-4 rounded-xl border border-border bg-muted/20 p-8 text-center">
+              {done
+                ? <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                : <ShieldCheck className="h-10 w-10 text-primary" />}
+              <div className="max-w-md space-y-2">
+                <p className="font-medium">
+                  {done ? "Identifikation abgeschlossen" : "Identifikation läuft bei WebID"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {done
+                    ? "Danke — dein Abschluss ist gemeldet. Wir prüfen den Auftrag und melden uns, falls etwas fehlt."
+                    : "Du hast die Identifikation gestartet. Sobald WebID dir die Bestätigung angezeigt hat, melde den Abschluss rechts zurück. Falls du zwischendurch abgebrochen hast, kannst du jederzeit erneut zu WebID wechseln."}
+                </p>
+              </div>
+              {!done && (
+                <Button variant="outline" onClick={() => void goToWebId()}>
+                  <RotateCcw className="mr-2 h-4 w-4" /> Erneut zu WebID
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => navigate(`/tasks/${assignmentId}`)}>
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Zurück zum Auftrag
+              </Button>
             </div>
           )}
         </div>
