@@ -531,6 +531,8 @@ async function sendInviteInternal(
       lastName,
       registrationLink,
       tenantId: app.tenant_id,
+      // Ohne applicationId landet die Zusage-Mail ohne Bewerbungsbezug im Log.
+      applicationId: app.id,
     },
   });
   // Manche Funktionen antworten mit HTTP 200 und { error: ... } — das ist ebenfalls ein Fehlschlag.
