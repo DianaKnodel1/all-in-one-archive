@@ -433,13 +433,31 @@ export async function recordInviteAttempt(
       .eq("id", app.id)
       .then(() => {}, (e: any) => console.warn("[interview-engine] invite status update:", e?.message ?? e));
   }
-  if (status !== "sent") {
+  const recipient = (app.email ?? "").toLowerCase().trim();
+  // Erfolgreiche Versände protokolliert normalerweise die Mailfunktion selbst.
+  // Fehlt dieser Eintrag (z. B. weil das Log dort nicht geschrieben wurde),
+  // ergänzen wir ihn hier — sonst fehlt die Zusage-Mail im E-Mail-Center und
+  // die Mail-Kette behauptet fälschlich „nie ausgelöst".
+  let needsLog = true;
+  if (status === "sent" && recipient) {
+    const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { data: existing } = await supabaseAdmin
+      .from("email_send_log")
+      .select("id")
+      .eq("recipient_email", recipient)
+      .in("template_name", ["invitation", "registration_invitation", "welcome_invitation"])
+      .eq("status", "sent")
+      .gte("created_at", since)
+      .limit(1);
+    if ((existing as any[] | null)?.length) needsLog = false;
+  }
+  if (needsLog) {
     await supabaseAdmin
       .from("email_send_log")
       .insert({
         tenant_id: app.tenant_id ?? null,
         template_name: "registration_invitation",
-        recipient_email: (app.email ?? "").toLowerCase().trim(),
+        recipient_email: recipient,
         status,
         error_message: error,
         metadata: { application_id: app.id, source },
