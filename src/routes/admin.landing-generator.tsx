@@ -877,6 +877,7 @@ document.addEventListener('submit', function(e){
                     <th className="text-left py-1.5 px-2 font-medium">Theme</th>
                     <th className="text-left py-1.5 px-2 font-medium">Flow</th>
                     <th className="text-left py-1.5 px-2 font-medium">Verknüpfung</th>
+                    <th className="text-left py-1.5 px-2 font-medium">Setup</th>
                     <th className="text-left py-1.5 px-2 font-medium">Status</th>
                     <th className="text-right py-1.5 px-2 font-medium">Aktionen</th>
                   </tr>
