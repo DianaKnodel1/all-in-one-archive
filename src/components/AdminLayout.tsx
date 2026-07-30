@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutGrid, FileText, Users, ClipboardList, CheckSquare, CalendarDays, Wallet, LogOut, MessageCircle, RotateCcw, History, Settings, Phone, Mail, Mailbox, Search, ShieldCheck, LayoutDashboard, Globe, Upload, Server, CalendarClock, Handshake, BarChart3 } from "lucide-react";
+import { LayoutGrid, Users, ClipboardList, CheckSquare, CalendarDays, Wallet, LogOut, MessageCircle, RotateCcw, History, Settings, Phone, Mail, Mailbox, Search, ShieldCheck, LayoutDashboard, Upload, Server, Handshake, BarChart3 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AdminCommandPalette } from "@/components/AdminCommandPalette";
 import { useAdminBadges } from "@/hooks/use-admin-badges";
