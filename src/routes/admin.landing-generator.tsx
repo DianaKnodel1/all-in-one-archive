@@ -11,6 +11,7 @@ import {
   toggleLandingPublished,
 } from "@/lib/landing-pages.functions";
 import { listPartnerCompanies } from "@/lib/partner-companies.functions";
+import { adminListSchedules } from "@/lib/appointments.functions";
 import { THEME_LIST, THEMES } from "@/lib/landing-themes";
 import { THEME_ASSETS } from "@/lib/theme-assets.generated";
 import { PORTAL_THEMES, type PortalThemeId } from "@/lib/portal-themes";
