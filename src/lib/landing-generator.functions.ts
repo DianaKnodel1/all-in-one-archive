@@ -74,6 +74,7 @@ function cleanLandingDomain(d: string): string {
 }
 
 function applyPlaceholders(
+
   src: string,
   branding: z.infer<typeof BrandingSchema>,
   slotValues: Record<string, string> = {},
