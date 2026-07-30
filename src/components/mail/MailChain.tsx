@@ -114,16 +114,31 @@ export function MailChain({ applicationId, applicantName, events, expected, next
           className="text-left"
           aria-label={`Mail-Historie von ${applicantName} öffnen`}
         >
-          <span className="flex flex-wrap items-center gap-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {steps.map((s) => {
               const st = STEP_STATE_STYLE[s.state];
+              // Ruhige Darstellung: erledigte / nicht vorgesehene Schritte ohne
+              // farbige Fläche — nur Probleme werden hervorgehoben.
+              const quiet = s.state === "sent" || s.state === "na" || s.state === "duplicate";
               const title = s.event
                 ? `${mailLabel(s.event.key)} · ${st.text} · ${formatWhen(s.event.at)}${s.event.error ? ` · ${s.event.error}` : ""}`
                 : s.state === "na"
                   ? `${s.label}: nicht vorgesehen — ${nextStep.detail}`
                   : `${s.label}: ${st.text}`;
               return (
-                <span key={s.id} className={`inline-block px-1.5 py-0.5 rounded ${st.cls}`} title={title}>
+                <span
+                  key={s.id}
+                  className={
+                    quiet
+                      ? `inline-block text-[11px] ${
+                          s.state === "sent"
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-muted-foreground/60"
+                        }`
+                      : `inline-block px-1.5 py-0.5 rounded text-[11px] ${st.cls}`
+                  }
+                  title={title}
+                >
                   {st.icon} {s.label}
                 </span>
               );
