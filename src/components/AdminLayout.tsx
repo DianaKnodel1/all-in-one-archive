@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from "@/lib/router-compat";
+import { Outlet, useLocation, useNavigate } from "@/lib/router-compat";
 import { useAuth } from "@/contexts/AuthContext";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -18,7 +18,9 @@ import { LayoutGrid, Users, ClipboardList, CheckSquare, CalendarDays, Wallet, Lo
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AdminCommandPalette } from "@/components/AdminCommandPalette";
 import { useAdminBadges } from "@/hooks/use-admin-badges";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 type BadgeKey = "unreadChat" | "pendingKyc" | "newApplications";
 type NavItem = {
@@ -74,19 +76,27 @@ const navGroups: NavGroup[] = [
       { title: "Statistiken", url: "/admin/statistiken", icon: BarChart3 },
     ],
   },
-  {
-    label: "Einstellungen",
-    items: [
-      { title: "Einstellungen", url: "/admin/settings", icon: Settings, end: true },
-    ],
-  },
 ];
+
+// Einstellungen liegen fest am unteren Rand – nicht in den aufklappbaren Gruppen.
+const settingsItem: NavItem = { title: "Einstellungen", url: "/admin/settings", icon: Settings, end: true };
 
 function AdminSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { signOut } = useAuth();
   const badges = useAdminBadges();
+  const { pathname } = useLocation();
+
+  // Nur die Gruppe der aktuellen Seite ist offen — das hält die Sidebar ruhig.
+  const activeGroup =
+    navGroups.find((g) => g.items.some((i) => pathname === i.url || pathname.startsWith(i.url + "/")))?.label ?? navGroups[0].label;
+  const [openGroups, setOpenGroups] = useState<string[]>([activeGroup]);
+  useEffect(() => {
+    setOpenGroups((prev) => (prev.includes(activeGroup) ? prev : [...prev, activeGroup]));
+  }, [activeGroup]);
+  const toggleGroup = (label: string) =>
+    setOpenGroups((prev) => (prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]));
 
   const renderItem = (item: NavItem) => {
     const count = item.badgeKey ? badges[item.badgeKey] : 0;
@@ -140,25 +150,49 @@ function AdminSidebar() {
           </SidebarGroup>
         </div>
 
-        {/* Gruppierte Navigation */}
+        {/* Gruppierte Navigation – einklappbar */}
         <div className="flex-1 overflow-y-auto px-2 pb-2">
-          {navGroups.map((grp) => (
-            <SidebarGroup key={grp.label} className="py-1">
-              {!collapsed && (
-                <SidebarGroupLabel className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 px-2.5 mb-1">
-                  {grp.label}
-                </SidebarGroupLabel>
-              )}
-              <SidebarGroupContent>
-                <SidebarMenu className="gap-0.5">{grp.items.map(renderItem)}</SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ))}
+          {navGroups.map((grp) => {
+            const groupBadge = grp.items.reduce((sum, i) => sum + (i.badgeKey ? badges[i.badgeKey] : 0), 0);
+            if (collapsed) {
+              return (
+                <SidebarGroup key={grp.label} className="py-1">
+                  <SidebarGroupContent>
+                    <SidebarMenu className="gap-0.5">{grp.items.map(renderItem)}</SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              );
+            }
+            const open = openGroups.includes(grp.label);
+            return (
+              <Collapsible key={grp.label} open={open} onOpenChange={() => toggleGroup(grp.label)}>
+                <SidebarGroup className="py-1">
+                  <CollapsibleTrigger className="w-full">
+                    <SidebarGroupLabel className="w-full flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 px-2.5 mb-1 cursor-pointer hover:text-sidebar-foreground/70">
+                      <span className="truncate">{grp.label}</span>
+                      {!open && groupBadge > 0 && (
+                        <span className="ml-1 inline-flex h-[15px] min-w-[15px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-semibold items-center justify-center leading-none">
+                          {groupBadge > 99 ? "99+" : groupBadge}
+                        </span>
+                      )}
+                      <ChevronDown className={`ml-auto h-3.5 w-3.5 transition-transform ${open ? "" : "-rotate-90"}`} />
+                    </SidebarGroupLabel>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarGroupContent>
+                      <SidebarMenu className="gap-0.5">{grp.items.map(renderItem)}</SidebarMenu>
+                    </SidebarGroupContent>
+                  </CollapsibleContent>
+                </SidebarGroup>
+              </Collapsible>
+            );
+          })}
         </div>
 
-        {/* Logout */}
+        {/* Einstellungen + Logout */}
         <div className="border-t border-sidebar-border p-2">
-          <SidebarMenu>
+          <SidebarMenu className="gap-0.5">
+            {renderItem(settingsItem)}
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={signOut}
