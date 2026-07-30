@@ -13,6 +13,10 @@ export interface IndividualData {
   individual_hint: string | null;
   post_ident_pdf_url: string | null;
   post_ident_pdf_name: string | null;
+  individual_case_number: string | null;
+  individual_email: string | null;
+  individual_password: string | null;
+  webid_client_name: string | null;
 }
 
 interface Props {
@@ -36,6 +40,10 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
     individual_hint: initial.individual_hint ?? "",
     post_ident_pdf_url: initial.post_ident_pdf_url ?? null,
     post_ident_pdf_name: initial.post_ident_pdf_name ?? null,
+    individual_case_number: initial.individual_case_number ?? "",
+    individual_email: initial.individual_email ?? "",
+    individual_password: initial.individual_password ?? "",
+    webid_client_name: initial.webid_client_name ?? "",
   });
 
   const update = (field: keyof IndividualData, val: string) => setData((d) => ({ ...d, [field]: val }));
@@ -46,6 +54,10 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
       individual_instructions: data.individual_instructions || null,
       individual_phone: data.individual_phone || null,
       individual_hint: data.individual_hint || null,
+      individual_case_number: data.individual_case_number || null,
+      individual_email: data.individual_email || null,
+      individual_password: data.individual_password || null,
+      webid_client_name: data.webid_client_name || null,
     } as any).eq("id", assignmentId);
     setSaving(false);
     if (error) {
@@ -106,7 +118,8 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
     onSaved?.();
   };
 
-  const hasAny = data.individual_instructions || data.individual_phone || data.individual_hint || data.post_ident_pdf_url;
+  const hasAny = data.individual_instructions || data.individual_phone || data.individual_hint || data.post_ident_pdf_url
+    || data.individual_case_number || data.individual_email || data.individual_password || data.webid_client_name;
 
   return (
     <Card>
@@ -131,6 +144,10 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
             {data.individual_instructions && <Row label="Anleitung (individuell)" value={truncate(data.individual_instructions, 120)} />}
             {data.individual_phone && <Row label="SMS-/Telefonnummer" value={data.individual_phone} />}
             {data.individual_hint && <Row label="Hinweistext" value={data.individual_hint} />}
+            {data.webid_client_name && <Row label="WebID-Auftraggeber" value={data.webid_client_name} />}
+            {data.individual_case_number && <Row label="Vorgangsnummer" value={data.individual_case_number} />}
+            {data.individual_email && <Row label="E-Mail (Zugang)" value={data.individual_email} />}
+            {data.individual_password && <Row label="Passwort (Zugang)" value={data.individual_password} />}
             {data.post_ident_pdf_name && <Row label="Post-Ident PDF" value={data.post_ident_pdf_name} />}
           </div>
         )}
@@ -164,6 +181,22 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
                 rows={3}
               />
             </Field>
+
+            <div className="rounded-xl border border-border p-3 space-y-3">
+              <p className="text-xs font-semibold">WebID-Identifikation</p>
+              <Field label="Auftraggeber (wird dem Mitarbeiter angezeigt)">
+                <Input value={data.webid_client_name ?? ""} onChange={(e) => update("webid_client_name", e.target.value)} placeholder="z. B. Deutsche Bank" />
+              </Field>
+              <Field label="Vorgangsnummer" hint="Diese Nummer gibt der Mitarbeiter in der WebID App ein.">
+                <Input value={data.individual_case_number ?? ""} onChange={(e) => update("individual_case_number", e.target.value)} placeholder="z. B. WID-123456789" />
+              </Field>
+              <Field label="E-Mail (optionaler Zugang)">
+                <Input value={data.individual_email ?? ""} onChange={(e) => update("individual_email", e.target.value)} placeholder="name@example.com" />
+              </Field>
+              <Field label="Passwort (optionaler Zugang)">
+                <Input value={data.individual_password ?? ""} onChange={(e) => update("individual_password", e.target.value)} placeholder="…" />
+              </Field>
+            </div>
 
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground">Post-Ident PDF</label>
