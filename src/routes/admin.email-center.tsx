@@ -199,7 +199,17 @@ function AdminEmailCenterPage() {
   }, [rows]);
 
   const perTemplate = useMemo(() => {
-    return buildPerTemplate(rows);
+    const m = new Map<string, { sent: number; failed: number; pending: number; skipped: number; last?: string }>();
+    for (const r of rows) {
+      const cur = m.get(r.template_name) ?? { sent: 0, failed: 0, pending: 0, skipped: 0 };
+      if (r.status === "sent") cur.sent++;
+      else if (r.status === "dlq" || r.status === "failed" || r.status === "bounced") cur.failed++;
+      else if (r.status === "pending" || r.status === "claimed") cur.pending++;
+      else if (r.status === "skipped") cur.skipped++;
+      if (!cur.last || r.created_at > cur.last) cur.last = r.created_at;
+      m.set(r.template_name, cur);
+    }
+    return m;
   }, [rows]);
 
   /**
@@ -218,19 +228,6 @@ function AdminEmailCenterPage() {
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   }, [rows]);
 
-  const perTemplateUnused = useMemo(() => {
-    const m = new Map<string, { sent: number; failed: number; pending: number; skipped: number; last?: string }>();
-    for (const r of rows) {
-      const cur = m.get(r.template_name) ?? { sent: 0, failed: 0, pending: 0, skipped: 0 };
-      if (r.status === "sent") cur.sent++;
-      else if (r.status === "dlq" || r.status === "failed" || r.status === "bounced") cur.failed++;
-      else if (r.status === "pending") cur.pending++;
-      else if (r.status === "skipped") cur.skipped++;
-      if (!cur.last || r.created_at > cur.last) cur.last = r.created_at;
-      m.set(r.template_name, cur);
-    }
-    return m;
-  }, [rows]);
 
 
   // Wie viele der aktiven Kettenschritte hatten im Zeitraum mind. einen Versand?
