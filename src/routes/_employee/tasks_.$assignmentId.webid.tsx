@@ -327,11 +327,3 @@ function CredRow({ label, value, onCopy }: { label: string; value: string; onCop
   );
 }
 import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/_employee/tasks_/$assignmentId/webid')({
-  component: RouteComponent,
-})
-
-function RouteComponent() {
-  return <div>Hello "/_employee/tasks_/$assignmentId/webid"!</div>
-}
