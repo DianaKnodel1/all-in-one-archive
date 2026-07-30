@@ -445,6 +445,11 @@ function AdminEmailCenterPage() {
                     {r.error_message && <div className="text-rose-600 truncate">{r.error_message}</div>}
                   </div>
                   <div className="text-[10px] text-muted-foreground shrink-0">{new Date(r.created_at).toLocaleString("de-DE")}</div>
+                  {r.rendered_html && (
+                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title="E-Mail ansehen" onClick={() => setPreviewRow(r)}>
+                      <Eye className="h-3 w-3" />
+                    </Button>
+                  )}
                   {canResendRow(r) && (
                     <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title="Erneut senden" onClick={() => setConfirmResend(r)}>
                       <RotateCcw className="h-3 w-3" />
@@ -475,7 +480,7 @@ function AdminEmailCenterPage() {
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Empfänger</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Status</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Wann</th>
-                  <th className="w-10"></th>
+                  <th className="w-20"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -485,7 +490,12 @@ function AdminEmailCenterPage() {
                     <td className="px-4 py-1.5 text-muted-foreground">{r.recipient_email}</td>
                     <td className="px-4 py-1.5"><StatusBadge status={r.status} /></td>
                     <td className="px-4 py-1.5 text-[10px] text-muted-foreground tabular-nums">{new Date(r.created_at).toLocaleString("de-DE")}</td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {r.rendered_html && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6" title="E-Mail ansehen" onClick={() => setPreviewRow(r)}>
+                          <Eye className="h-3 w-3" />
+                        </Button>
+                      )}
                       {canResendRow(r) && (
                         <Button variant="ghost" size="icon" className="h-6 w-6" title="Erneut senden" onClick={() => setConfirmResend(r)}>
                           <RotateCcw className="h-3 w-3" />
@@ -512,6 +522,40 @@ function AdminEmailCenterPage() {
       </Card>
 
       {/* Bestätigung: generischer Resend */}
+      <Dialog open={!!previewRow} onOpenChange={(open) => !open && setPreviewRow(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {previewRow?.rendered_subject
+                || EMAIL_TYPE_LABELS[previewRow?.template_name ?? ""]
+                || previewRow?.template_name}
+            </DialogTitle>
+            <DialogDescription>
+              An {previewRow?.recipient_email} ·{" "}
+              {previewRow && new Date(previewRow.created_at).toLocaleString("de-DE")}
+            </DialogDescription>
+          </DialogHeader>
+          {previewRow?.rendered_html ? (
+            <iframe
+              srcDoc={previewRow.rendered_html}
+              sandbox=""
+              title="E-Mail-Vorschau"
+              className="w-full h-[60vh] border rounded-lg bg-white"
+            />
+          ) : (
+            <div className="text-sm text-muted-foreground">Für diese Mail wurde kein HTML gespeichert.</div>
+          )}
+          <DialogFooter className="gap-2">
+            {previewRow && canResendRow(previewRow) && (
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setConfirmResend(previewRow); setPreviewRow(null); }}>
+                <RotateCcw className="h-3.5 w-3.5" /> Erneut senden
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setPreviewRow(null)}>Schließen</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!confirmResend} onOpenChange={(open) => !open && setConfirmResend(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
