@@ -326,4 +326,3 @@ function CredRow({ label, value, onCopy }: { label: string; value: string; onCop
     </div>
   );
 }
-import { createFileRoute } from '@tanstack/react-router'
