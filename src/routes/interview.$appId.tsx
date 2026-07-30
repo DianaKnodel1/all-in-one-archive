@@ -368,7 +368,24 @@ function InterviewPage() {
         </div>
       </header>
 
-
+      {/* Zusage-Hinweis direkt unter dem Header — sichtbar ohne Scrollen. */}
+      {ended && appStatus === "akzeptiert" && (
+        <div className="sticky top-[64px] z-10 border-b border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/60">
+          <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+              🎉 Zusage erhalten — jetzt im Mitarbeiterportal registrieren
+            </span>
+            <Button
+              size="sm"
+              style={{ background: primary }}
+              className="text-white shrink-0"
+              onClick={() => zusageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+            >
+              Zur Registrierung
+            </Button>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 pb-4 flex flex-col">
         {error && (
