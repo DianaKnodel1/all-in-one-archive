@@ -12,7 +12,6 @@ import { EMAIL_TYPE_LABELS, HIDDEN_EMAIL_STATUS, type EmailLog } from "@/lib/ema
 import { resendEmailLog, isTokenTemplate } from "@/lib/email-resend";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { SmtpTroubleNotice } from "@/components/admin/SmtpTroubleNotice";
 
 
 
@@ -88,7 +87,7 @@ function AdminEmailCenterPage() {
     setExactTotal(count ?? null);
     setTenantNames(Object.fromEntries(((tenants as { id: string; name: string }[] | null) ?? []).map(t => [t.id, t.name])));
 
-    // SMTP-/Pausen-Probleme werden zentral in <SmtpTroubleNotice /> geladen.
+    // SMTP-/Pausen-Probleme werden ausschließlich auf dem Dashboard angezeigt.
     setVisible(100);
     setLoading(false);
   };
@@ -284,7 +283,6 @@ function AdminEmailCenterPage() {
 
 
       {/* Versand-Blocker: nur schmaler Hinweis — Details stehen auf dem Dashboard */}
-      <SmtpTroubleNotice variant="inline" />
 
       {/* Doppelversand-Warnung */}
       {duplicates.length > 0 && (
