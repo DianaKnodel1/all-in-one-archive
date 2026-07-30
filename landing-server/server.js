@@ -67,7 +67,7 @@ function requestJson(url, headers) {
         });
       });
     });
-    req.setTimeout(10_000, () => req.destroy(new Error("request timeout")));
+    req.setTimeout(6_000, () => req.destroy(new Error("request timeout")));
     req.on("error", reject);
     req.end();
   });
