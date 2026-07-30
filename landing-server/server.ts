@@ -27,6 +27,7 @@ const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process
 const PORTAL_API_ENDPOINT = process.env.PORTAL_API_ENDPOINT ?? "";
 const PORT = Number(process.env.PORT ?? 3001);
 const CACHE_TTL_MS = 60_000;
+const NEGATIVE_CACHE_TTL_MS = 15_000;
 const ASSET_VERSION = process.env.LANDING_ASSET_VERSION || process.env.RELEASE_VERSION || String(Date.now());
 
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
@@ -71,21 +72,15 @@ type LandingRow = {
   source_slug: string | null;
   is_published: boolean;
 };
-const cache = new Map<string, { row: LandingRow | null; expiresAt: number }>();
+const cache = new Map<string, { row: LandingRow | null; expiresAt: number; stale?: boolean }>();
+const inFlight = new Map<string, Promise<{ row: LandingRow | null; degraded: boolean }>>();
 
-async function loadLanding(domain: string): Promise<LandingRow | null> {
-  // www.example.com und example.com auf denselben Datensatz mappen —
-  // Caddy on_demand_tls fragt sonst für www.* nach und bekommt 404.
-  const key = domain.toLowerCase().replace(/^www\./, "");
-  const cached = cache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.row;
+async function fetchLandingOnce(key: string): Promise<{ ok: boolean; row?: LandingRow | null; error?: string }> {
   const apiUrl = new URL("/rest/v1/landing_pages", SUPABASE_URL);
   apiUrl.searchParams.set("select", LANDING_SELECT);
   apiUrl.searchParams.set("domain", `eq.${key}`);
   apiUrl.searchParams.set("is_published", "eq.true");
   apiUrl.searchParams.set("limit", "1");
-
-  let row: LandingRow | null = null;
   try {
     const res = await fetch(apiUrl, {
       headers: {
@@ -93,18 +88,68 @@ async function loadLanding(domain: string): Promise<LandingRow | null> {
         authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
         accept: "application/json",
       },
+      signal: AbortSignal.timeout(6_000),
     });
-    if (!res.ok) {
-      console.error(`[landing-server] DB-Error für ${key}: HTTP ${res.status} ${await res.text()}`);
-    } else {
-      const rows = (await res.json()) as LandingRow[];
-      row = rows[0] ?? null;
-    }
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status} ${(await res.text()).slice(0, 300)}` };
+    const rows = (await res.json()) as LandingRow[];
+    if (!Array.isArray(rows)) return { ok: false, error: "unexpected response shape" };
+    return { ok: true, row: rows[0] ?? null };
   } catch (e) {
-    console.error(`[landing-server] DB-Error für ${key}:`, (e as Error).message);
+    return { ok: false, error: (e as Error).message };
   }
-  cache.set(key, { row, expiresAt: Date.now() + CACHE_TTL_MS });
-  return row;
+}
+
+async function refreshLanding(key: string): Promise<{ row: LandingRow | null; degraded: boolean }> {
+  let result = await fetchLandingOnce(key);
+  if (!result.ok) {
+    await new Promise((r) => setTimeout(r, 300));
+    result = await fetchLandingOnce(key);
+  }
+  if (!result.ok) {
+    console.error(`[landing-server] DB-Error für ${key}: ${result.error}`);
+    const prev = cache.get(key);
+    if (prev?.row) {
+      // Backend gestört → letzten bekannten Stand weiterliefern statt 404.
+      prev.expiresAt = Date.now() + CACHE_TTL_MS;
+      prev.stale = true;
+      return { row: prev.row, degraded: true };
+    }
+    // Fehler NIE als "Domain unbekannt" cachen.
+    return { row: null, degraded: true };
+  }
+  const row = result.row ?? null;
+  cache.set(key, { row, stale: false, expiresAt: Date.now() + (row ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS) });
+  return { row, degraded: false };
+}
+
+async function loadLandingState(domain: string): Promise<{ row: LandingRow | null; degraded: boolean }> {
+  // www.example.com und example.com auf denselben Datensatz mappen —
+  // Caddy on_demand_tls fragt sonst für www.* nach und bekommt 404.
+  const key = domain.toLowerCase().replace(/^www\./, "");
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return { row: cached.row, degraded: false };
+
+  if (cached?.row) {
+    // Abgelaufen, aber bekannt: sofort ausliefern, im Hintergrund erneuern.
+    cached.expiresAt = Date.now() + CACHE_TTL_MS;
+    if (!inFlight.has(key)) {
+      const p = refreshLanding(key).finally(() => inFlight.delete(key));
+      inFlight.set(key, p);
+      p.catch(() => {});
+    }
+    return { row: cached.row, degraded: false };
+  }
+
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = refreshLanding(key).finally(() => inFlight.delete(key));
+    inFlight.set(key, pending);
+  }
+  return pending;
+}
+
+async function loadLanding(domain: string): Promise<LandingRow | null> {
+  return (await loadLandingState(domain)).row;
 }
 
 // ── Template-Rendering (Platzhalter ersetzen) ────────────────────────────
