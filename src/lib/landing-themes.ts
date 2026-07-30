@@ -237,9 +237,13 @@ function withSharedForm(t: ThemeFiles): ThemeFiles {
   if (HAS_OWN_FORM.has(t.id)) return t;
   const { html: formHtml, css: formCss } = pickFormAssets(t.id);
   const modalHtml = `\n<div id="lov-apply-modal" role="dialog" aria-modal="true" aria-label="Bewerbungsformular">\n  <div class="lov-apply-dialog">\n    <button type="button" class="lov-apply-close" aria-label="Schließen">×</button>\n    <div class="lov-apply-body">${formHtml}</div>\n  </div>\n</div>\n`;
+  // Manche Themes haben kein <script src="script.js"> im Template — ohne das
+  // läuft weder das Bewerbungs-Modal noch das Mobile-Menü. Immer sicherstellen.
+  const scriptTag = t.html.includes('script.js') ? "" : `\n<script src="script.js"></script>\n`;
+  const tail = `${modalHtml}${scriptTag}`;
   const injectedHtml = t.html.includes("</body>")
-    ? t.html.replace("</body>", `${modalHtml}\n</body>`)
-    : t.html + modalHtml;
+    ? t.html.replace("</body>", `${tail}\n</body>`)
+    : t.html + tail;
   const injectedCss = `${t.css}\n\n/* ===== Inline Bewerbungs-Sektion ===== */\n${formCss}\n${MODAL_CSS}`;
   const baseJs = t.js.includes("application-form") ? t.js : `${t.js}\n\n${sharedFormJs}`;
   const injectedJs = `${baseJs}\n${MODAL_JS}`;
