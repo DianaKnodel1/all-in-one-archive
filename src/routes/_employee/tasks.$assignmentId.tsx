@@ -27,6 +27,7 @@ import { type TaskStep, type ContentBlock } from "@/lib/task-blocks";
 import { TaskSmsMessages } from "@/components/TaskSmsMessages";
 import { AssignmentIndividualDataView } from "@/components/AssignmentIndividualDataView";
 import { WebIdTaskCard, type WebIdStatus } from "@/components/WebIdTaskCard";
+import { WEBID_ENABLED } from "@/lib/webid";
 
 interface TaskTemplate {
   id: string; title: string; description: string;
@@ -100,6 +101,7 @@ function DynamicBlockRenderer({
     case "checkpoint":
       return <InfoBox variant="success" title="Kontrollpunkt erreicht"><p>{block.content}</p></InfoBox>;
     case "webid":
+      if (!WEBID_ENABLED) return null;
       return (
         <InfoBox variant="info" title="WebID-Identifikation">
           <p className="whitespace-pre-wrap">
@@ -517,7 +519,7 @@ function TaskWizardPage() {
               }} />
 
               {/* WebID-Identifikation */}
-              {assignmentId && (
+              {WEBID_ENABLED && assignmentId && (
                 <WebIdTaskCard
                   assignmentId={assignmentId}
                   data={{
