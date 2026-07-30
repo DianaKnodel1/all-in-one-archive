@@ -2524,6 +2524,7 @@ export type Database = {
           user_id: string
           webid_client_name: string | null
           webid_confirmed_at: string | null
+          webid_start_url: string | null
           webid_started_at: string | null
           webid_status: string
         }
@@ -2547,6 +2548,7 @@ export type Database = {
           user_id: string
           webid_client_name?: string | null
           webid_confirmed_at?: string | null
+          webid_start_url?: string | null
           webid_started_at?: string | null
           webid_status?: string
         }
@@ -2570,6 +2572,7 @@ export type Database = {
           user_id?: string
           webid_client_name?: string | null
           webid_confirmed_at?: string | null
+          webid_start_url?: string | null
           webid_started_at?: string | null
           webid_status?: string
         }
