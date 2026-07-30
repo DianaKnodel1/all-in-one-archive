@@ -1,67 +1,52 @@
-# E-Mail-Kette und Anti-Spam absichern
+## 1. SMTP-Warnung aufs Dashboard verlegen
 
-## Zielbild
+Aktuell steht das rote Panel „X Domain(s) können aktuell keine Mails versenden“ mitten im E-Mail-Center (`admin.email-center.tsx`).
 
-Jede Mail erhält einen eindeutigen Auslöser und eine feste maximale Anzahl:
+- Logik in eine eigene Komponente `SmtpTroubleNotice` auslösen (Tenants mit Pause / SMTP-Fehler / fehlenden Zugangsdaten).
+- Auf dem Dashboard (`/admin`) als kompakte Meldung anzeigen: eine Zeile „2 Domains können keine Mails versenden“ + aufklappbare Details + Button „Zu Domains“.
+- Im E-Mail-Center nur noch ein schmaler einzeiliger Hinweis statt des großen roten Blocks.
 
-| E-Mail | Auslöser | Maximum |
-|---|---|---:|
-| Bewerbung eingegangen | Formular erfolgreich gespeichert | 1 je Bewerbung |
-| Terminbestätigung | Termin erfolgreich gebucht | 1 je konkretem Termin; nach Absage und echter Neubuchung erneut 1 |
-| Interview-Einladung | 30 Minuten vor dem aktuellen Termin | 1 je Termin |
-| Noch keinen Termin gebucht | 24 h und 72 h nach Bewerbung | je 1 |
-| Termin nicht wahrgenommen | 24 h nach verstrichenem Termin | 1 |
-| Neuer Termin nach Absage | 24 h und 72 h nach Absage, sofern nicht neu gebucht | je 1; vorhandener Text „Wir würden Sie trotzdem sehr gerne kennenlernen …“ bleibt erhalten |
-| Zusage / Willkommen | Erst nach positiv abgeschlossenem Interview bzw. bewusster Recruiter-Zusage | 1 je Zusage |
-| Einladung noch nicht genutzt | 24 h und 72 h nach Einladung | je 1 |
-| Onboarding unvollständig | Registrierung vorhanden, Ausweis/Vertrag fehlen; 24 h und 72 h | je 1 |
-| E-Mail bestätigen | Direkt bei Registrierung | 1 initiale Mail |
-| E-Mail unbestätigt | 24 h nach Registrierung | genau 1 automatische Erinnerung |
-| Bestätigung erneut senden | Nur durch aktiven Nutzerklick | mit kurzer Klick-/Parallelitätssperre |
-| Passwort zurücksetzen | Nur durch aktiven Nutzerwunsch | mit kurzer Klick-/Parallelitätssperre |
+## 2. Fehler „task_assignments.webid_client_name“ beim Mitarbeiter
 
-## Umsetzung
+Ursache (verifiziert): Die Spalten `webid_client_name`, `webid_status`, `webid_start_url` existieren nur in den manuellen Migrationen `20260805000000_webid_assignment.sql` und `20260806000000_webid_start_url.sql`. Auf dem selbst gehosteten Backend sind diese offenbar nicht angewendet — die Auftragsseite fragt sie aber fest ab, daher bricht das Laden komplett ab.
 
-1. **Automatische Erinnerungstaktung korrigieren**
-   - Die derzeit allgemeine 3-Stufen-Logik mit 24/48/72 Stunden auf getrennte Regeln umstellen.
-   - E-Mail-Bestätigung auf genau eine automatische 24-h-Erinnerung begrenzen.
-   - Einladung offen und Onboarding unvollständig separat auf 24 h und 72 h begrenzen.
-   - Legacy-Auto-Einladungen und alte Queue-Pfade deaktiviert lassen.
+Zwei Maßnahmen:
+- **Robust machen:** WebID-Spalten in `_employee/tasks.$assignmentId.tsx` (und Admin-Detailseite) nicht mehr fest abfragen. Da WebID ohnehin deaktiviert ist, wird die Abfrage ohne diese Felder ausgeführt bzw. bei Fehler auf eine Variante ohne WebID-Felder zurückgefallen. Damit funktioniert die Seite unabhängig vom Datenbankstand.
+- **Nachziehen:** Die beiden WebID-Migrationen zusätzlich in die Auto-Apply-Liste des Deploy-Skripts aufnehmen, damit das Backend beim nächsten Deploy denselben Stand hat.
 
-2. **Eindeutige Versandidentität je Ereignis**
-   - Für jede automatische Mail einen stabilen Schlüssel aus Bewerbung, Mailtyp und Ereignis verwenden.
-   - Terminmails zusätzlich an die konkrete Termin-ID binden, damit eine echte Neubuchung eine neue Bestätigung erlaubt, derselbe Termin aber nie doppelt versendet wird.
-   - Zusage-, Bewerbungs- und Registrierungs-Mails an Bewerbung beziehungsweise Einladung binden.
+## 3. „Post“ ausblenden
 
-3. **Atomare Sperre vor dem SMTP-Versand**
-   - Vor jedem automatischen Versand eine eindeutige Reservierung anlegen.
-   - Parallele Cron-Läufe dürfen dieselbe Reservierung nicht gleichzeitig erhalten.
-   - Bei Erfolg dauerhaft als versendet markieren; bei technischem Fehler kontrolliert für einen späteren Retry freigeben, ohne zwei parallele Sends zu ermöglichen.
-   - Bestehende Datenbank-Sperren idempotent ergänzen und über beide Selfhosting-Deploy-Skripte sicher ausrollen.
+Eintrag „Post“ aus der Sidebar-Gruppe *Kommunikation* (`AdminLayout.tsx`) und aus der Befehlspalette entfernen. Route und Code bleiben bestehen, nur nicht mehr verlinkt.
 
-4. **Manuelle und nutzergetriebene Mails schützen**
-   - „Bestätigung erneut senden“ und „Passwort zurücksetzen“ gegen Doppelklicks und parallele Requests absichern.
-   - Bewusste Admin-Resends weiterhin ermöglichen, aber als manuellen Neuversand mit eigener Nonce protokollieren.
-   - SMTP-Testmails und Vorschauen strikt von produktiven Automatik-Mails getrennt halten.
+## 4. Einstellungen übersichtlicher
 
-5. **Abbruchbedingungen vollständig prüfen**
-   - Sobald ein Termin gebucht wurde, keine No-Booking-Mail mehr.
-   - Sobald nach einer Absage neu gebucht wurde, keine Rebook-Mail mehr.
-   - Sobald registriert wurde, keine Einladung-offen-Mail mehr.
-   - Sobald die E-Mail bestätigt wurde, keine Bestätigungs-Erinnerung mehr.
-   - Sobald Onboarding vollständig ist, keine Abschluss-Erinnerung mehr.
-   - Bounce-, Complaint-, Pause- und Empfängersperren bleiben vorgeschaltet.
+`/admin/settings` ist aktuell eine lange Kachel-Liste ohne Ordnung. Neu:
 
-6. **Mail-Center nachvollziehbar machen**
-   - Jede tatsächliche, blockierte und fehlgeschlagene Mail weiterhin protokollieren.
-   - Technische Doppelversand-Sperren als „Duplikat verhindert“ statt als gesendete Mail darstellen.
-   - Bei Terminmails die Termin-ID und bei manuellen Resends den manuellen Ursprung sichtbar hinterlegen.
+```text
+Einstellungen
+├─ Tabs / Abschnitte
+│   ├─ Marke & Domains   → Domains/Tenants, Landing-Generator, Infrastruktur
+│   ├─ Bewerbung         → Verfügbarkeit, Buchungslimits, KI-Assistent
+│   ├─ Kommunikation     → E-Mail-Vorlagen, Erinnerungen, SMS
+│   ├─ Aufträge          → Standard-Aufträge, Verträge
+│   └─ Konto & Team      → Teamleiter, Passwort, Design/Theme
+```
 
-7. **End-to-End-Testmatrix ausführen**
-   - Die vorhandene Testkette für Bewerbung, Buchung, 30-Minuten-Einladung, 24/72-h-Reminder, No-Show, Absage/Neubuchung, Zusage, Registrierung und Onboarding erweitern.
-   - Jede Stufe zweimal und zusätzlich parallel auslösen: Beim zweiten beziehungsweise parallelen Lauf darf kein weiterer SMTP-Send entstehen.
-   - Danach Cron-Konfiguration, Datenbank-Sperren und Mail-Center-Einträge prüfen und einen klaren Deploy-/Prüfbefehl für Frontend und Backend liefern.
+- Klare Überschriften pro Abschnitt, gleiche Kachelgröße, kurze Beschreibungen.
+- Breitere Seite (aktuell auf schmale Spalte begrenzt), damit die Kacheln nicht untereinander kleben.
 
-## Bereits bestätigte Abweichung
+## 5. E-Mail-System – vollständiger Nachweis
 
-Die allgemeine Reminder-Funktion erlaubt aktuell bis zu drei Sends mit einer 24/48/72-h-Logik. Das passt nicht zu den festgelegten Regeln und wird in getrennte, ausdrücklich begrenzte Abläufe aufgeteilt. Die gewünschte Absage-Logik mit 24 h und 72 h existiert bereits einschließlich des Textes „Wir würden Sie trotzdem sehr gerne kennenlernen …“ und wird beibehalten sowie technisch gegen Doppelversand abgesichert.
+Prüfbericht statt Bauchgefühl. Ich prüfe und dokumentiere pro Mail-Typ:
+
+- Auslöser, Zeitpunkt, maximale Anzahl, Sperr-Schlüssel (Claim), Cron-Intervall.
+- Ob die Duplikat-Sperren (eindeutiger Index + Vorab-Reservierung) im Repo **und** auf dem Backend aktiv sind (Migrationen `20260807…`, `20260808000000_email_event_claims.sql`).
+- Ob alle Cron-Jobs registriert sind und ohne Platzhalter laufen.
+- Ergebnis als Tabelle im Chat plus Skript `scripts/mail-final-audit.sh`, das den Status jederzeit gegen das Live-Backend prüft.
+
+Gefundene Lücken werden im selben Zug behoben.
+
+## Technische Hinweise
+
+- Betroffene Dateien: `src/routes/admin.index.tsx`, `src/routes/admin.email-center.tsx`, neue `src/components/admin/SmtpTroubleNotice.tsx`, `src/components/AdminLayout.tsx`, `src/components/AdminCommandPalette.tsx`, `src/routes/admin.settings.tsx`, `src/routes/_employee/tasks.$assignmentId.tsx`, `src/routes/admin.assignments.$assignmentId.tsx`, `scripts/deploy.sh`.
+- Keine Änderung an der Mail-Logik selbst, außer es zeigt eine Lücke im Audit.

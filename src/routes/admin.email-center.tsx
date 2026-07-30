@@ -12,6 +12,7 @@ import { EMAIL_TYPE_LABELS, HIDDEN_EMAIL_STATUS, type EmailLog } from "@/lib/ema
 import { resendEmailLog, isTokenTemplate } from "@/lib/email-resend";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { SmtpTroubleNotice } from "@/components/admin/SmtpTroubleNotice";
 
 
 
@@ -59,9 +60,6 @@ function AdminEmailCenterPage() {
   /** Exakte Gesamtzahl aus der DB — unabhängig vom 5.000-Zeilen-Fenster der Liste. */
   const [exactTotal, setExactTotal] = useState<number | null>(null);
   const [tenantNames, setTenantNames] = useState<Record<string, string>>({});
-  const [smtpTrouble, setSmtpTrouble] = useState<
-    { id: string; name: string; reason: string }[]
-  >([]);
   const [visible, setVisible] = useState(100);
   const [resending, setResending] = useState(false);
   const { toast } = useToast();
@@ -90,25 +88,7 @@ function AdminEmailCenterPage() {
     setExactTotal(count ?? null);
     setTenantNames(Object.fromEntries(((tenants as { id: string; name: string }[] | null) ?? []).map(t => [t.id, t.name])));
 
-    // SMTP-/Pausen-Probleme sammeln: das sind die Fälle, in denen Mails
-    // still liegen bleiben, ohne dass es jemandem auffällt.
-    const { data: health } = await supabase
-      .from("tenant_smtp_health" as any)
-      .select("tenant_id,last_verify_ok,last_fail_error");
-    const healthMap = new Map<string, any>(((health as any[]) ?? []).map(h => [String(h.tenant_id), h]));
-    const trouble: { id: string; name: string; reason: string }[] = [];
-    for (const t of ((tenants as any[]) ?? [])) {
-      const configured = Boolean(t.smtp_host && t.smtp_username && t.smtp_password && t.sender_email);
-      const h = healthMap.get(String(t.id));
-      if (t.emails_paused) {
-        trouble.push({ id: t.id, name: t.name, reason: t.emails_paused_reason || "Mail-Versand pausiert" });
-      } else if (!configured) {
-        trouble.push({ id: t.id, name: t.name, reason: "Keine SMTP-Zugangsdaten hinterlegt" });
-      } else if (h?.last_verify_ok === false) {
-        trouble.push({ id: t.id, name: t.name, reason: h.last_fail_error || "Letzter SMTP-Check fehlgeschlagen" });
-      }
-    }
-    setSmtpTrouble(trouble);
+    // SMTP-/Pausen-Probleme werden zentral in <SmtpTroubleNotice /> geladen.
     setVisible(100);
     setLoading(false);
   };
@@ -303,28 +283,8 @@ function AdminEmailCenterPage() {
       </div>
 
 
-      {/* Versand-Blocker: pausiert / SMTP kaputt / keine Zugangsdaten */}
-      {smtpTrouble.length > 0 && (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardContent className="p-4">
-            <div className="text-sm font-semibold text-destructive">
-              {smtpTrouble.length} Domain(s) können aktuell keine Mails versenden
-            </div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">
-              Bewerbungs- und Reminder-Mails dieser Domains gehen nicht raus. Unter „Domains / Tenants“ prüfen,
-              SMTP-Daten korrigieren und dort „SMTP testen“ klicken — bei Erfolg wird eine automatische Pause sofort aufgehoben.
-            </div>
-            <div className="mt-3 space-y-1">
-              {smtpTrouble.map(t => (
-                <div key={t.id} className="flex items-center gap-3 text-xs">
-                  <span className="font-medium truncate max-w-[14rem]">{t.name}</span>
-                  <span className="flex-1 truncate text-muted-foreground">{t.reason}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Versand-Blocker: nur schmaler Hinweis — Details stehen auf dem Dashboard */}
+      <SmtpTroubleNotice variant="inline" />
 
       {/* Doppelversand-Warnung */}
       {duplicates.length > 0 && (

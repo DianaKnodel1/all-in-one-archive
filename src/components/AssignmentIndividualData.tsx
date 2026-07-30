@@ -60,8 +60,10 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
       individual_case_number: data.individual_case_number || null,
       individual_email: data.individual_email || null,
       individual_password: data.individual_password || null,
-      webid_client_name: data.webid_client_name || null,
-      webid_start_url: data.webid_start_url || null,
+      // WebID-Felder nur schreiben, wenn das Modul aktiv ist (Spalten können fehlen).
+      ...(WEBID_ENABLED
+        ? { webid_client_name: data.webid_client_name || null, webid_start_url: data.webid_start_url || null }
+        : {}),
     } as any).eq("id", assignmentId);
     setSaving(false);
     if (error) {

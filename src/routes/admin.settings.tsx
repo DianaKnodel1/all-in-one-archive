@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { translateAuthError } from "@/lib/auth-errors";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Lock, Save, Palette, Bot, ArrowRight, Globe, Users as UsersIcon, Mail, History, Handshake, CalendarClock, Server, FileText, AlertTriangle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookingLimitsCard } from "@/components/admin/BookingLimitsCard";
 import { StandardTasksCard } from "@/components/admin/StandardTasksCard";
 import { Link } from "@tanstack/react-router";
@@ -46,183 +47,144 @@ function AdminSettingsPage() {
   };
 
   return (
-    <div className="p-6 lg:p-8 max-w-2xl mx-auto space-y-6">
+    <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-xl font-heading font-bold text-foreground">Admin-Einstellungen</h1>
-        <p className="text-sm text-muted-foreground mt-1">Zentrale Konfiguration: Domains, Standard-Aufträge, KI, Teamleiter, E-Mails, Sicherheit.</p>
+        <h1 className="text-xl font-heading font-bold text-foreground">Einstellungen</h1>
+        <p className="text-sm text-muted-foreground mt-1">Nach Themen sortiert — wähle oben einen Bereich.</p>
       </div>
 
-      {/* Quick-Links zu größeren Setup-Bereichen */}
-      <div className="grid sm:grid-cols-2 gap-3">
-        <Link to="/admin/tenants" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Globe className="h-4 w-4" /> Domains</CardTitle>
-              <CardDescription className="text-xs">Rebranding, Hero, Logo, SMTP, Unternehmensdaten</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/team-leader-settings" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><UsersIcon className="h-4 w-4" /> Teamleiter</CardTitle>
-              <CardDescription className="text-xs">Profil, Avatar, Online-Status</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/ai-settings" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Bot className="h-4 w-4" /> KI-Assistent</CardTitle>
-              <CardDescription className="text-xs">An/Aus, FAQ, System-Prompt, Modell</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/email-templates" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Mail className="h-4 w-4" /> E-Mail-Vorlagen</CardTitle>
-              <CardDescription className="text-xs">Willkommen, Reset, Signatur</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/contracts" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4" /> Verträge</CardTitle>
-              <CardDescription className="text-xs">Vertragsvorlagen anlegen und bearbeiten</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/verfuegbarkeit" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Verfügbarkeit</CardTitle>
-              <CardDescription className="text-xs">Buchbare Zeiten für Bewerbungstermine</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/landing-generator" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Globe className="h-4 w-4" /> Landing Pages</CardTitle>
-              <CardDescription className="text-xs">Themes, WhatsApp-Button, Generator</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/vermittlung" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Handshake className="h-4 w-4" /> Vermittlung</CardTitle>
-              <CardDescription className="text-xs">Broker-Flow, Übergabe an Fast-Track</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/partner-companies" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Handshake className="h-4 w-4" /> Fast-Track-Firmen</CardTitle>
-              <CardDescription className="text-xs">Partner-Unternehmen verwalten</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/calendly" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Calendly</CardTitle>
-              <CardDescription className="text-xs">Webhooks, Event-Types, Signing-Keys</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/infrastructure" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Server className="h-4 w-4" /> Infrastruktur</CardTitle>
-              <CardDescription className="text-xs">Landing-Server, Heartbeat, Deploys</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/domains" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Globe className="h-4 w-4" /> Domains (Cloudflare)</CardTitle>
-              <CardDescription className="text-xs">DNS, SSL, Health-Checks</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/activity" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><History className="h-4 w-4" /> Protokoll</CardTitle>
-              <CardDescription className="text-xs">Aktivitäts-Log aller Admin-Aktionen</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        <Link to="/admin/recovery" className="group">
-          <Card className="hover:border-primary/40 transition-colors h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Domain-Wechsel</CardTitle>
-              <CardDescription className="text-xs">Recovery-Mails an Mitarbeiter nach Domain-Umstellung</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0"><span className="text-xs text-primary inline-flex items-center gap-1">Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" /></span></CardContent>
-          </Card>
-        </Link>
-        </div>
+      <Tabs defaultValue="marke">
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="marke">Marke &amp; Domains</TabsTrigger>
+          <TabsTrigger value="bewerbung">Bewerbung</TabsTrigger>
+          <TabsTrigger value="kommunikation">Kommunikation</TabsTrigger>
+          <TabsTrigger value="auftraege">Aufträge</TabsTrigger>
+          <TabsTrigger value="konto">Konto &amp; Team</TabsTrigger>
+        </TabsList>
 
-      <StandardTasksCard />
+        {SECTIONS.map((section) => (
+          <TabsContent key={section.value} value={section.value} className="mt-5 space-y-5">
+            <p className="text-xs text-muted-foreground">{section.hint}</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {section.tiles.map((tile) => (
+                <Tile key={tile.to} {...tile} />
+              ))}
+            </div>
+            {section.value === "bewerbung" && <BookingLimitsCard />}
+            {section.value === "auftraege" && <StandardTasksCard />}
+            {section.value === "konto" && (
+              <>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Palette className="h-4 w-4" /> Erscheinungsbild
+                    </CardTitle>
+                    <CardDescription>Wähle zwischen hellem und dunklem Modus.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ThemeToggle variant="outline" />
+                  </CardContent>
+                </Card>
 
-      <BookingLimitsCard />
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Palette className="h-4 w-4" /> Erscheinungsbild
-          </CardTitle>
-          <CardDescription>Wähle zwischen hellem und dunklem Modus.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ThemeToggle variant="outline" />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Lock className="h-4 w-4" /> Passwort ändern
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Neues Passwort</Label>
-            <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Mindestens 6 Zeichen" />
-          </div>
-          <div className="space-y-2">
-            <Label>Passwort bestätigen</Label>
-            <Input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} placeholder="Nochmal eingeben" />
-          </div>
-          <Button onClick={changePassword} disabled={saving || !newPw} className="w-full gap-2">
-            <Save className="h-4 w-4" />
-            {saving ? "Speichern…" : "Passwort ändern"}
-          </Button>
-        </CardContent>
-      </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Lock className="h-4 w-4" /> Passwort ändern
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 max-w-md">
+                    <div className="space-y-2">
+                      <Label>Neues Passwort</Label>
+                      <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Mindestens 6 Zeichen" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Passwort bestätigen</Label>
+                      <Input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} placeholder="Nochmal eingeben" />
+                    </div>
+                    <Button onClick={changePassword} disabled={saving || !newPw} className="w-full gap-2">
+                      <Save className="h-4 w-4" />
+                      {saving ? "Speichern…" : "Passwort ändern"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
 
       <p className="text-xs text-muted-foreground">
-        SMS API Keys werden im Bereich <strong>SMS</strong> verwaltet.
+        SMS-API-Keys werden im Bereich <strong>SMS</strong> verwaltet.
       </p>
     </div>
   );
 }
+
+type TileDef = { to: string; title: string; desc: string; icon: any };
+
+function Tile({ to, title, desc, icon: Icon }: TileDef) {
+  return (
+    <Link to={to} className="group">
+      <Card className="hover:border-primary/40 transition-colors h-full">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2"><Icon className="h-4 w-4" /> {title}</CardTitle>
+          <CardDescription className="text-xs">{desc}</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <span className="text-xs text-primary inline-flex items-center gap-1">
+            Öffnen <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+          </span>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+const SECTIONS: { value: string; hint: string; tiles: TileDef[] }[] = [
+  {
+    value: "marke",
+    hint: "Alles rund um Auftritt, Domains und Server.",
+    tiles: [
+      { to: "/admin/tenants", title: "Domains / Tenants", desc: "Rebranding, Hero, Logo, SMTP, Unternehmensdaten", icon: Globe },
+      { to: "/admin/landing-generator", title: "Landing Pages", desc: "Themes, WhatsApp-Button, Generator", icon: Globe },
+      { to: "/admin/domains", title: "Domains (Cloudflare)", desc: "DNS, SSL, Health-Checks", icon: Globe },
+      { to: "/admin/infrastructure", title: "Infrastruktur", desc: "Landing-Server, Heartbeat, Deploys", icon: Server },
+    ],
+  },
+  {
+    value: "bewerbung",
+    hint: "Bewerbungsstrecke: Termine, KI-Interview, Partner.",
+    tiles: [
+      { to: "/admin/verfuegbarkeit", title: "Verfügbarkeit", desc: "Buchbare Zeiten für Bewerbungstermine", icon: CalendarClock },
+      { to: "/admin/calendly", title: "Calendly", desc: "Webhooks, Event-Types, Signing-Keys", icon: CalendarClock },
+      { to: "/admin/ai-settings", title: "KI-Assistent", desc: "An/Aus, FAQ, System-Prompt, Modell", icon: Bot },
+      { to: "/admin/vermittlung", title: "Vermittlung", desc: "Broker-Flow, Übergabe an Fast-Track", icon: Handshake },
+      { to: "/admin/partner-companies", title: "Fast-Track-Firmen", desc: "Partner-Unternehmen verwalten", icon: Handshake },
+    ],
+  },
+  {
+    value: "kommunikation",
+    hint: "E-Mail-Vorlagen und Versand-Werkzeuge.",
+    tiles: [
+      { to: "/admin/email-templates", title: "E-Mail-Vorlagen", desc: "Willkommen, Reset, Reminder, Signatur", icon: Mail },
+      { to: "/admin/email-center", title: "E-Mail-Center", desc: "Versand-Status, Doppelversand, Protokoll", icon: Mail },
+      { to: "/admin/recovery", title: "Domain-Wechsel", desc: "Recovery-Mails nach Domain-Umstellung", icon: AlertTriangle },
+    ],
+  },
+  {
+    value: "auftraege",
+    hint: "Standard-Aufträge und Vertragsvorlagen.",
+    tiles: [
+      { to: "/admin/contracts", title: "Verträge", desc: "Vertragsvorlagen anlegen und bearbeiten", icon: FileText },
+      { to: "/admin/tasks", title: "Auftrags-Vorlagen", desc: "Aufgaben und Schritte pflegen", icon: FileText },
+    ],
+  },
+  {
+    value: "konto",
+    hint: "Eigenes Konto, Team und Protokoll.",
+    tiles: [
+      { to: "/admin/team-leader-settings", title: "Teamleiter", desc: "Profil, Avatar, Online-Status", icon: UsersIcon },
+      { to: "/admin/activity", title: "Protokoll", desc: "Aktivitäts-Log aller Admin-Aktionen", icon: History },
+    ],
+  },
+];

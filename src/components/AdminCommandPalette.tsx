@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/command";
 import { useNavigate } from "@/lib/router-compat";
 import { useAdminData } from "@/contexts/AdminDataContext";
-import { Users, FileText, ClipboardList, Mailbox, LayoutGrid, Settings, CalendarDays, Wallet, MessageCircle, Phone } from "lucide-react";
+import { Users, FileText, ClipboardList, LayoutGrid, Settings, CalendarDays, Wallet, MessageCircle, Phone } from "lucide-react";
 
 const PAGES: { label: string; path: string; icon: any }[] = [
   { label: "Dashboard", path: "/admin", icon: LayoutGrid },
@@ -19,7 +19,6 @@ const PAGES: { label: string; path: string; icon: any }[] = [
   { label: "Termine", path: "/admin/appointments", icon: CalendarDays },
   { label: "Chat", path: "/admin/chat", icon: MessageCircle },
   { label: "SMS", path: "/admin/sms", icon: Phone },
-  { label: "Post", path: "/admin/post", icon: Mailbox },
   { label: "Transaktionen", path: "/admin/transactions", icon: Wallet },
   { label: "Einstellungen", path: "/admin/settings", icon: Settings },
 ];
