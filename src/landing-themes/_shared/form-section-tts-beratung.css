@@ -19,4 +19,6 @@
 .ttsb-form-status{margin:8px 0 0;font-size:14px;color:#52596b;min-height:1.4em}
 .ttsb-form-status.is-error{color:#dc2626}
 .ttsb-form-status.is-success{color:#16a34a}
+.ttsb-form-status.error{color:#dc2626}
+.ttsb-form-status.success{color:#16a34a}
 @media(max-width:860px){.ttsb-form-wrap{grid-template-columns:1fr;gap:36px}.ttsb-form-row{grid-template-columns:1fr}}

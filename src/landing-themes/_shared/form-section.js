@@ -332,16 +332,25 @@
   document.addEventListener('DOMContentLoaded',function(){
     var form=document.getElementById('application-form');var status=document.getElementById('form-status');if(!form)return;
     injectPrivacyBlock(form);
+    // Theme-eigene Status-Klasse behalten (z. B. ttsb-form-status) und nur den
+    // Zustand ergänzen — sonst sind Meldungen im Theme unsichtbar.
+    var baseStatusClass=(status&&status.className?status.className:'lv-form-status');
+    if(baseStatusClass.indexOf('lv-form-status')===-1)baseStatusClass=(baseStatusClass+' lv-form-status').trim();
+    function setStatus(state,text){
+      if(!status)return;
+      status.className=baseStatusClass+(state?' '+state:'');
+      status.style.display='';
+      status.textContent=text;
+    }
     form.addEventListener('submit',function(e){
       e.preventDefault();
       var consent=form.querySelector('#lv-dsgvo-consent');
       if(consent && !consent.checked){
-        status.className='lv-form-status error';
-        status.textContent='Bitte bestätigen Sie die Datenschutz-Einwilligung, um fortzufahren.';
+        setStatus('error','Bitte bestätigen Sie die Datenschutz-Einwilligung, um fortzufahren.');
         try{consent.focus();}catch(_){}
         return;
       }
-      status.className='lv-form-status';status.textContent='Wird gesendet…';
+      setStatus('','Wird gesendet…');
       var raw=Object.fromEntries(new FormData(form).entries());
       var first=(raw.first_name||'').toString().trim();var last=(raw.last_name||'').toString().trim();var street=(raw.street||'').toString().trim();
       var data={first_name:first||null,last_name:last||null,full_name:(first+' '+last).trim(),email:raw.email,phone:raw.phone||null,
@@ -354,10 +363,30 @@
       data.dsgvo_consent=true;
       data.consent_timestamp=new Date().toISOString();
       fetch(window.PORTAL_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-        .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-        .then(function(res){form.reset();status.className='lv-form-status success';status.textContent='Bewerbung erfolgreich gesendet.';
+        .then(function(r){
+          return r.text().then(function(txt){
+            var body=null;try{body=txt?JSON.parse(txt):null;}catch(_){}
+            if(!r.ok){
+              var msg='';
+              if(body&&body.details&&body.details.fieldErrors){
+                var fe=body.details.fieldErrors;var parts=[];
+                for(var k in fe){if(Object.prototype.hasOwnProperty.call(fe,k))parts.push(k);}
+                if(parts.length)msg='Bitte prüfen Sie diese Felder: '+parts.join(', ')+'.';
+              }
+              if(!msg&&body&&body.error)msg=String(body.error);
+              var err=new Error(msg||('HTTP '+r.status));
+              err.userMessage=msg;
+              throw err;
+            }
+            return body||{};
+          });
+        })
+        .then(function(res){form.reset();setStatus('success','Bewerbung erfolgreich gesendet.');
           showModal({fast:(window.FLOW_TYPE||'classic')==='fast',whatsapp:window.WHATSAPP_NUMBER||'',redirectUrl:(res&&res.redirect_url)||'',broker:(res&&res.broker)||null,emailStatus:(res&&res.email_status)||null});})
-        .catch(function(){status.className='lv-form-status error';status.textContent='Da ist etwas schiefgelaufen. Bitte später erneut versuchen.';});
+        .catch(function(err){
+          setStatus('error',(err&&err.userMessage)?err.userMessage:'Da ist etwas schiefgelaufen. Bitte später erneut versuchen.');
+          try{status.scrollIntoView({behavior:'smooth',block:'center'});}catch(_){}
+        });
     });
   });
 })();

@@ -809,6 +809,31 @@ serve(async (req) => {
         }
       } catch { /* Prüfung darf den Lauf nicht abbrechen */ }
 
+      // ── Platzhalter-Zeile VOR dem Versand ──────────────────────────────────
+      // Der eindeutige Index (template_name + Empfänger + Vorgang + Tag) lässt
+      // nur eine 'sent'-Zeile zu. Schlägt der Insert fehl, hat ein paralleler
+      // Lauf diese Mail bereits übernommen → hier nicht nochmal senden.
+      let claimId: string | null = null;
+      if (!forceKind) {
+        const { data: claimRow, error: claimErr } = await admin
+          .from("email_send_log")
+          .insert({
+            message_id: messageId, tenant_id: tenant.id,
+            template_name: templateName, recipient_email: app.email,
+            status: "sent", rendered_subject: subject, rendered_html: html,
+            sender_email: tenant.sender_email ?? tenant.smtp_username,
+            metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id, claim: true },
+          } as any)
+          .select("id")
+          .maybeSingle();
+        if (claimErr) {
+          skipped++;
+          results.push({ app: app.id, kind, status: "skipped", reason: "duplicate_blocked_by_db" });
+          continue;
+        }
+        claimId = (claimRow as any)?.id ?? null;
+      }
+
       try {
         await sendMail(tenant, app.email, subject, html);
         // Throttle: 4s Pause zwischen Sends, um SMTP-Rate-Limit (554) zu vermeiden
@@ -827,7 +852,11 @@ serve(async (req) => {
             .eq("template_name", templateName)
             .eq("recipient_email", app.email)
             .eq("status", "pending");
-          await admin.from("email_send_log").insert({
+          if (claimId) {
+            await admin.from("email_send_log")
+              .update({ metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id } })
+              .eq("id", claimId);
+          } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
             status: "sent", rendered_subject: subject, rendered_html: html,
@@ -850,7 +879,11 @@ serve(async (req) => {
             sent_at: new Date().toISOString(),
           }, { onConflict: "application_id,reminder_kind" });
           try {
-            await admin.from("email_send_log").insert({
+            if (claimId) {
+              await admin.from("email_send_log")
+                .update({ status: "pending", error_message: `SMTP-Stundenlimit erreicht, wird später erneut versucht: ${errMsg}` })
+                .eq("id", claimId);
+            } else await admin.from("email_send_log").insert({
               message_id: messageId, tenant_id: tenant.id,
               template_name: templateName, recipient_email: app.email,
               status: "pending", error_message: `SMTP-Stundenlimit erreicht, wird später erneut versucht: ${errMsg}`,
@@ -874,7 +907,11 @@ serve(async (req) => {
             .eq("template_name", templateName)
             .eq("recipient_email", app.email)
             .eq("status", "pending");
-          await admin.from("email_send_log").insert({
+          if (claimId) {
+            await admin.from("email_send_log")
+              .update({ status: "failed", error_message: errMsg })
+              .eq("id", claimId);
+          } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
             status: "failed", error_message: errMsg,

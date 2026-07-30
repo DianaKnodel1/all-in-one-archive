@@ -237,6 +237,8 @@ serve(async (req) => {
         resent_from: log.id,
         resent_by: actorId,
         is_test: isTest,
+        // Manuelle Wiederholungen dürfen die DB-Doppelsperre passieren.
+        resend_nonce: `${log.id}-${Date.now()}`,
       },
     });
 
