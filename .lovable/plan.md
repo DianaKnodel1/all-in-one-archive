@@ -1,52 +1,49 @@
-## 1. SMTP-Warnung aufs Dashboard verlegen
+## 1. Texte im Bewerbungsgespräch (Screenshot)
 
-Aktuell steht das rote Panel „X Domain(s) können aktuell keine Mails versenden“ mitten im E-Mail-Center (`admin.email-center.tsx`).
+`src/routes/interview.$appId.tsx` und `src/routes/interview.voice.$appId.tsx`:
 
-- Logik in eine eigene Komponente `SmtpTroubleNotice` auslösen (Tenants mit Pause / SMTP-Fehler / fehlenden Zugangsdaten).
-- Auf dem Dashboard (`/admin`) als kompakte Meldung anzeigen: eine Zeile „2 Domains können keine Mails versenden“ + aufklappbare Details + Button „Zu Domains“.
-- Im E-Mail-Center nur noch ein schmaler einzeiliger Hinweis statt des großen roten Blocks.
+- Satz „Ihre Antworten werden zur Bewerbungsauswertung gespeichert und für maximal 6 Monate aufbewahrt. Es findet keine Audio-Aufnahme statt." wird entfernt.
+- „Das Gespräch wird digital geführt und automatisiert ausgewertet." → „**Das Gespräch findet digital statt** – Ihre Antworten gehen anschließend direkt an Ihre Ansprechpartnerin bzw. Ihren Ansprechpartner." (Voice-Variante analog: „Das Gespräch findet als Sprachgespräch statt …")
+- Rest (Dauer, Themen, Button) bleibt unverändert.
 
-## 2. Fehler „task_assignments.webid_client_name“ beim Mitarbeiter
+## 2. Terminauswahl: einheitliche Texte + einheitliche Zeitzone
 
-Ursache (verifiziert): Die Spalten `webid_client_name`, `webid_status`, `webid_start_url` existieren nur in den manuellen Migrationen `20260805000000_webid_assignment.sql` und `20260806000000_webid_start_url.sql`. Auf dem selbst gehosteten Backend sind diese offenbar nicht angewendet — die Auftragsseite fragt sie aber fest ab, daher bricht das Laden komplett ab.
+Alle Themes nutzen bereits denselben Renderer `src/landing-themes/_shared/form-section.js` – der Text steht also nur an einer Stelle und gilt automatisch für jedes Theme. Ich prüfe zusätzlich alle Theme-Ordner auf eigene, abweichende Buchungstexte und entferne Duplikate.
 
-Zwei Maßnahmen:
-- **Robust machen:** WebID-Spalten in `_employee/tasks.$assignmentId.tsx` (und Admin-Detailseite) nicht mehr fest abfragen. Da WebID ohnehin deaktiviert ist, wird die Abfrage ohne diese Felder ausgeführt bzw. bei Fehler auf eine Variante ohne WebID-Felder zurückgefallen. Damit funktioniert die Seite unabhängig vom Datenbankstand.
-- **Nachziehen:** Die beiden WebID-Migrationen zusätzlich in die Auto-Apply-Liste des Deploy-Skripts aufnehmen, damit das Backend beim nächsten Deploy denselben Stand hat.
+Neue, einheitliche Formulierung:
+- Überschrift „Wunschtermin wählen"
+- „Wählen Sie einen freien Termin für Ihr Gespräch."
+- „Sie erhalten sofort eine Bestätigung per E-Mail – mit Kalendereintrag und allen Infos zum Gespräch."
+- „Freie Termine in den nächsten 4 Wochen"
+- Neue Zeile: „Alle Zeiten in deutscher Zeit (Europe/Berlin)."
 
-## 3. „Post“ ausblenden
+Zeitzone vereinheitlichen: Die Slot-Anzeige nutzt derzeit die Zeitzone des Bewerber-Browsers (`Intl` ohne feste Zone). Sitzt jemand im Ausland, sieht er andere Uhrzeiten als in der Mail steht. Künftig werden Tages- und Uhrzeit-Formatter fest auf `Europe/Berlin` gesetzt – damit stimmen Landing Page, Bestätigungsseite und E-Mail immer überein.
 
-Eintrag „Post“ aus der Sidebar-Gruppe *Kommunikation* (`AdminLayout.tsx`) und aus der Befehlspalette entfernen. Route und Code bleiben bestehen, nur nicht mehr verlinkt.
+Ergänzend serverseitig: `_shared/format-datetime.ts` wird auf die feste Berlin-Berechnung umgestellt (die bisherige „ICU-Erkennung" kann auf dem selbst gehosteten Server in UTC kippen – das erklärt die 22:30 statt 00:30 in der Bestätigungsmail). Zur Kontrolle schreibt die Bestätigungsfunktion UTC-Zeit + gerenderte Ortszeit in die Log-Metadaten.
 
-## 4. Einstellungen übersichtlicher
+## 3. „Greeting never received" – Ursache und automatischer Nachversand
 
-`/admin/settings` ist aktuell eine lange Kachel-Liste ohne Ordnung. Neu:
+Ursache: Das ist kein Bewerbungs- oder Vorlagenfehler, sondern die SMTP-Verbindung. Nodemailer wartet nach dem Verbindungsaufbau auf die Begrüßungszeile (`220`) des Mailservers; kommt sie nicht innerhalb von 10 Sekunden, bricht er ab. Typisch bei überlastetem/gedrosseltem Mailserver, kurzer Netzstörung oder blockiertem Port. Ja – das kann jede Mailart treffen, weil alle denselben SMTP-Weg nutzen.
 
-```text
-Einstellungen
-├─ Tabs / Abschnitte
-│   ├─ Marke & Domains   → Domains/Tenants, Landing-Generator, Infrastruktur
-│   ├─ Bewerbung         → Verfügbarkeit, Buchungslimits, KI-Assistent
-│   ├─ Kommunikation     → E-Mail-Vorlagen, Erinnerungen, SMS
-│   ├─ Aufträge          → Standard-Aufträge, Verträge
-│   └─ Konto & Team      → Teamleiter, Passwort, Design/Theme
-```
+Umsetzung (neuer gemeinsamer Helfer `supabase/functions/_shared/smtp.ts`, genutzt von allen 13 Versandstellen):
 
-- Klare Überschriften pro Abschnitt, gleiche Kachelgröße, kurze Beschreibungen.
-- Breitere Seite (aktuell auf schmale Spalte begrenzt), damit die Kacheln nicht untereinander kleben.
+- Timeouts hochsetzen: Verbindung/Begrüßung 20 s, Socket 30 s; bei Port 587 `requireTLS`, `tls.servername` = SMTP-Host.
+- **Sofort-Wiederholung innerhalb desselben Versandvorgangs**: bis zu 2 zusätzliche Versuche (nach 5 s und 15 s), aber **nur** bei reinen Verbindungsfehlern (`Greeting never received`, `ETIMEDOUT`, `ECONNECTION`, `ESOCKET`). Bei Auth-Fehlern (535), abgelehnter Empfängeradresse oder Vorlagenfehlern wird **nicht** wiederholt.
+- **Kein Spam-Risiko**: Die Wiederholung passiert innerhalb der bereits gesetzten Sperre (Claim + Unique-Index). Ein Versuch gilt erst als „gesendet", wenn der Server ihn angenommen hat; Verbindungsabbrüche vor der Annahme bedeuten, dass keine Mail zugestellt wurde. Es entsteht also kein zweiter Versand derselben Mail.
+- Fehlertexte werden übersetzt, bevor sie im E-Mail-Center landen: „SMTP-Server hat nicht geantwortet – Verbindung/Port prüfen" statt „Greeting never received".
+- Verbleibende Fehlschläge bleiben wie bisher im E-Mail-Center sichtbar und lassen sich dort manuell erneut senden.
 
-## 5. E-Mail-System – vollständiger Nachweis
+## 4. Bewerbung-eingegangen-Mail: 502 vom Gateway (Screenshot 4 der letzten Runde)
 
-Prüfbericht statt Bauchgefühl. Ich prüfe und dokumentiere pro Mail-Typ:
+Der rote Block war eine komplette Cloudflare-Fehlerseite: Das Portal rief die Mailfunktion per HTTP auf und bekam einen 502 zurück.
 
-- Auslöser, Zeitpunkt, maximale Anzahl, Sperr-Schlüssel (Claim), Cron-Intervall.
-- Ob die Duplikat-Sperren (eindeutiger Index + Vorab-Reservierung) im Repo **und** auf dem Backend aktiv sind (Migrationen `20260807…`, `20260808000000_email_event_claims.sql`).
-- Ob alle Cron-Jobs registriert sind und ohne Platzhalter laufen.
-- Ergebnis als Tabelle im Chat plus Skript `scripts/mail-final-audit.sh`, das den Status jederzeit gegen das Live-Backend prüft.
+- `src/routes/api/public/applications.ts`: bei 502/503/504 oder Netzwerkfehler bis zu 3 Versuche (0,5 s / 2 s Abstand), bevor „fehlgeschlagen" protokolliert wird. Auch hier keine Doppelmail, weil die Function bei einem 502 gar nicht bis zum Versand kam und die Sperre pro Ereignis greift.
+- HTML-Antworten werden erkannt und nicht mehr roh gespeichert → Klartext „Mailfunktion nicht erreichbar (HTTP 502)", Rohtext gekürzt in den Metadaten.
+- E-Mail-Center: Fehlertext auf 2 Zeilen begrenzt mit vollem Text im Tooltip; im Vorschau-Iframe wird `<meta charset="utf-8">` ergänzt, damit keine „Ã¤"-Zeichen mehr erscheinen.
 
-Gefundene Lücken werden im selben Zug behoben.
+## Technische Details
 
-## Technische Hinweise
-
-- Betroffene Dateien: `src/routes/admin.index.tsx`, `src/routes/admin.email-center.tsx`, neue `src/components/admin/SmtpTroubleNotice.tsx`, `src/components/AdminLayout.tsx`, `src/components/AdminCommandPalette.tsx`, `src/routes/admin.settings.tsx`, `src/routes/_employee/tasks.$assignmentId.tsx`, `src/routes/admin.assignments.$assignmentId.tsx`, `scripts/deploy.sh`.
-- Keine Änderung an der Mail-Logik selbst, außer es zeigt eine Lücke im Audit.
+- Neu: `supabase/functions/_shared/smtp.ts` (Transport + gezielter Retry + Fehlerübersetzung); alle `createTransport`-Aufrufe stellen darauf um.
+- Geändert: `_shared/format-datetime.ts`, `src/routes/api/public/applications.ts`, `src/routes/admin.email-center.tsx`, `src/landing-themes/_shared/form-section.js` (+ Theme-Assets-Build), `src/routes/interview.$appId.tsx`, `src/routes/interview.voice.$appId.tsx`.
+- Keine Datenbankmigration nötig; alle bestehenden Anti-Spam-Sperren bleiben unverändert.
+- Danach: Edge Functions neu deployen (`scripts/deploy-backend-local.sh`), Portal `git pull && sudo scripts/deploy.sh`.

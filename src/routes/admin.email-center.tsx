@@ -152,6 +152,14 @@ function AdminEmailCenterPage() {
       .sort((a, b) => b.sent - a.sent);
   }, [rows, tenantNames]);
 
+  /** Vorschau-HTML immer als UTF-8 rendern (sonst "Ã¤" statt "ä"). */
+  const withUtf8Charset = (html: string) => {
+    if (/<meta[^>]+charset/i.test(html)) return html;
+    const meta = '<meta charset="utf-8">';
+    if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => `${m}${meta}`);
+    return `${meta}${html}`;
+  };
+
   /** CSV-Export des aktuellen Zeitraums (alle geladenen Zeilen). */
   const exportCsv = () => {
     const head = ["Zeitpunkt", "Mandant", "Template", "Empfaenger", "Status", "Fehler"];
@@ -581,7 +589,7 @@ function AdminEmailCenterPage() {
           </DialogHeader>
           {previewRow?.rendered_html ? (
             <iframe
-              srcDoc={previewRow.rendered_html}
+              srcDoc={withUtf8Charset(previewRow.rendered_html)}
               sandbox=""
               title="E-Mail-Vorschau"
               className="w-full h-[60vh] border rounded-lg bg-white"

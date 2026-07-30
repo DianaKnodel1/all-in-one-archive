@@ -5,6 +5,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
+import { createSmtpTransport } from "../_shared/smtp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,19 +104,11 @@ serve(async (req) => {
     debug.smtp_username = tenant.smtp_username;
     debug.sender_email = tenant.sender_email;
 
-    const transporter = nodemailer.createTransport({
-      host: tenant.smtp_host,
-      port: tenant.smtp_port,
-      secure: tenant.smtp_port === 465,
-      auth: { user: tenant.smtp_username, pass: tenant.smtp_password },
-      connectionTimeout: 8000,
-      greetingTimeout: 8000,
-      socketTimeout: 12000,
-    });
+    const transporter = createSmtpTransport(tenant as any);
 
     await Promise.race([
       transporter.verify(),
-      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("verify timeout 8s")), 8000)),
+      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("verify timeout 25s")), 25000)),
     ]);
 
     debug.last_successful_stage = "VERIFY";

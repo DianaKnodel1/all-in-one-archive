@@ -18,6 +18,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
+import { createSmtpTransport, sendMailWithRetry } from "../_shared/smtp.ts";
 import {
   SEND_WINDOW_START_HOUR as WINDOW_START,
   SEND_WINDOW_END_HOUR as WINDOW_END,
@@ -1013,15 +1014,11 @@ async function maybeMarkBounced(admin: any, email: string, err: any) {
 const _verifyCache = new Map<string, { ok: boolean; reason?: string }>();
 
 async function sendMail(tenant: TenantRow, to: string, subject: string, html: string) {
-  const transporter = nodemailer.createTransport({
-    host: tenant.smtp_host!,
-    port: tenant.smtp_port!,
-    secure: tenant.smtp_port === 465,
-    auth: { user: tenant.smtp_username!, pass: tenant.smtp_password! },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
-  });
+  // Versand mit gezielter Wiederholung bei Verbindungsfehlern (kein Doppelversand).
+  const transporter = {
+      sendMail: (message: Record<string, unknown>) => sendMailWithRetry(tenant as any, message, { label: "send-reminders" }),
+      verify: () => createSmtpTransport(tenant as any).verify(),
+    };
 
   let cached = _verifyCache.get(tenant.id);
   if (!cached) {

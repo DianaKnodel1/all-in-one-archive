@@ -433,6 +433,15 @@ export const Route = createFileRoute("/api/public/applications")({
             ? `send-invitation-email ${status}`
             : message;
         };
+        // Rohes Gateway-HTML (Cloudflare-Fehlerseite) nie ins Mail-Protokoll schreiben.
+        const normalizeGatewayError = (message: string, status: number | null): string => {
+          const raw = String(message ?? "").trim();
+          const looksHtml = /^<|<!doctype|<html|cf-error|cloudflare/i.test(raw);
+          if (looksHtml || (status !== null && status >= 502 && status <= 524)) {
+            return `Mail-Dienst vorübergehend nicht erreichbar${status ? ` (Gateway ${status})` : ""} – Versand kann erneut angestoßen werden`;
+          }
+          return raw.length > 500 ? `${raw.slice(0, 500)}…` : raw;
+        };
         const invokeMailFunction = async (body: Record<string, unknown>) => {
           const supabaseUrl = (process.env.SUPABASE_URL ?? process.env.API_EXTERNAL_URL ?? "").replace(/\/+$/, "");
           const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SERVICE_ROLE_KEY ?? "";
@@ -442,38 +451,59 @@ export const Route = createFileRoute("/api/public/applications")({
           // requestId wandert mit → die Function schreibt sie in metadata.request_id,
           // damit wir hier keine zweite Zeile für dieselbe Mail anlegen.
           body = { ...body, requestId };
-          try {
-            const headers: Record<string, string> = {
-              "Content-Type": "application/json",
-              apikey: serviceKey,
-            };
-            if (!isOpaqueSupabaseKey(serviceKey)) headers.Authorization = `Bearer ${serviceKey}`;
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+            apikey: serviceKey,
+          };
+          if (!isOpaqueSupabaseKey(serviceKey)) headers.Authorization = `Bearer ${serviceKey}`;
 
-            const response = await fetch(`${supabaseUrl}/functions/v1/send-invitation-email`, {
-              method: "POST",
-              headers,
-              body: JSON.stringify(body),
-            });
-            const text = await response.clone().text();
-            let data: any = null;
-            if (text) {
-              try { data = JSON.parse(text); } catch { data = text; }
+          // Gateway-Aussetzer (502/503/504 von Cloudflare o.ä.) sind keine Mailfehler.
+          // Die Mailfunktion selbst sperrt jedes Ereignis atomar – ein erneuter
+          // Versuch kann daher keine zweite Mail auslösen.
+          const GATEWAY_STATUSES = new Set([502, 503, 504, 520, 521, 522, 524]);
+          const RETRY_DELAYS = [1500, 4000];
+          let lastResult: { data: any; error: string | null; response: Response | null } = {
+            data: null, error: "mail_function_unreachable", response: null,
+          };
+          for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+            try {
+              const response = await fetch(`${supabaseUrl}/functions/v1/send-invitation-email`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(body),
+              });
+              const text = await response.clone().text();
+              let data: any = null;
+              if (text) {
+                try { data = JSON.parse(text); } catch { data = text; }
+              }
+              if (!response.ok) {
+                const error = normalizeGatewayError(await mailErrorMessage(null, data, response), response.status);
+                console.warn("[applications] mail_function_non_2xx " + JSON.stringify({
+                  requestId,
+                  attempt: attempt + 1,
+                  function_status: response.status,
+                  function_status_text: response.statusText || null,
+                  function_reason: error,
+                  function_body: typeof data === "string" ? data.slice(0, 500) : data ? JSON.stringify(data).slice(0, 500) : null,
+                }));
+                lastResult = { data, error, response };
+                if (GATEWAY_STATUSES.has(response.status) && attempt < RETRY_DELAYS.length) {
+                  await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+                  continue;
+                }
+                return lastResult;
+              }
+              return { data, error: data?.error ? String(data.error) : null, response };
+            } catch (err) {
+              lastResult = { data: null, error: normalizeGatewayError(await mailErrorMessage(err), null), response: null };
+              if (attempt < RETRY_DELAYS.length) {
+                await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+                continue;
+              }
             }
-            if (!response.ok) {
-              const error = await mailErrorMessage(null, data, response);
-              console.warn("[applications] mail_function_non_2xx " + JSON.stringify({
-                requestId,
-                function_status: response.status,
-                function_status_text: response.statusText || null,
-                function_reason: error,
-                function_body: typeof data === "string" ? data : data ? JSON.stringify(data) : text || null,
-              }));
-              return { data, error, response };
-            }
-            return { data, error: data?.error ? String(data.error) : null, response };
-          } catch (err) {
-            return { data: null as any, error: await mailErrorMessage(err), response: null as Response | null };
           }
+          return lastResult;
         };
         let mailTenantLoaded = false;
         let mailTenant: any | null = null;

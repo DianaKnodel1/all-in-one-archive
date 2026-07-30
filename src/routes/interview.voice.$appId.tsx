@@ -268,9 +268,9 @@ function VoiceInterviewPage() {
           {branding?.logo_url && <img src={branding.logo_url} alt={company} className="h-10 object-contain" />}
           <h1 className="text-xl font-semibold">Telefonisches Bewerbungsgespräch mit {company}</h1>
           <div className="text-sm text-muted-foreground space-y-2">
-            <p><strong>Das Gespräch wird als Sprachgespräch geführt</strong> und automatisiert ausgewertet.</p>
+            <p><strong>Das Gespräch findet als Sprachgespräch statt</strong> – Ihre Antworten gehen anschließend direkt an Ihre Ansprechpartnerin bzw. Ihren Ansprechpartner.</p>
             <p>Sie sprechen direkt mit unserem digitalen Personalreferenten. Das Gespräch dauert <strong>maximal 10 Minuten</strong>.</p>
-            <p>Für die Auswertung wird ein Text-Transkript Ihrer Antworten gespeichert (max. 6 Monate). Bitte sorgen Sie für eine ruhige Umgebung und erlauben Sie den Zugriff auf Ihr Mikrofon.</p>
+            <p>Bitte sorgen Sie für eine ruhige Umgebung und erlauben Sie den Zugriff auf Ihr Mikrofon.</p>
           </div>
           <Button size="lg" className="w-full" style={{ background: primary }} onClick={() => setConsent(true)}>
             Verstanden, Gespräch starten

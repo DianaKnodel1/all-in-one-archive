@@ -27,12 +27,25 @@
     return apiBase()+'/api/public/booking?'+qs;
   }
 
-  // ── Datum-/Zeit-Formatter ───────────────────────────────────────────────
-  var TZ = (function(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin';}catch(_){return 'Europe/Berlin';}})();
-  var fmtDay = new Intl.DateTimeFormat('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});
-  var fmtDayLong = new Intl.DateTimeFormat('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-  var fmtTime = new Intl.DateTimeFormat('de-DE',{hour:'2-digit',minute:'2-digit'});
-  function toYMD(d){var y=d.getFullYear();var m=String(d.getMonth()+1).padStart(2,'0');var dd=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
+  // ── Datum-/Zeit-Formatter (IMMER deutsche Zeit) ─────────────────────────
+  // Feste Zeitzone: Bewerber im Ausland sehen sonst andere Uhrzeiten als in
+  // der Bestätigungsmail steht.
+  var TZ = 'Europe/Berlin';
+  function dtf(opts){
+    try { return new Intl.DateTimeFormat('de-DE', Object.assign({timeZone:TZ}, opts)); }
+    catch(_){ return new Intl.DateTimeFormat('de-DE', opts); }
+  }
+  var fmtDay = dtf({weekday:'short',day:'2-digit',month:'2-digit'});
+  var fmtDayLong = dtf({weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  var fmtTime = dtf({hour:'2-digit',minute:'2-digit',hour12:false});
+  var fmtYMD = (function(){
+    try { return new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}); }
+    catch(_){ return null; }
+  })();
+  function toYMD(d){
+    if(fmtYMD){ try { return fmtYMD.format(d); } catch(_){} }
+    var y=d.getFullYear();var m=String(d.getMonth()+1).padStart(2,'0');var dd=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;
+  }
   function addDays(d,n){var x=new Date(d);x.setDate(x.getDate()+n);return x;}
   function startOfDay(d){var x=new Date(d);x.setHours(0,0,0,0);return x;}
 
@@ -46,11 +59,11 @@
     var state={schedule:null, rangeStart:startOfDay(new Date()), selectedDay:null, slotsByDay:{}, loadingSlots:false};
 
     var header=document.createElement('div');
-    var h=document.createElement('h3');h.style.cssText='margin:0 0 6px;font-size:20px;font-weight:700;';h.textContent='Termin auswählen';
+    var h=document.createElement('h3');h.style.cssText='margin:0 0 6px;font-size:20px;font-weight:700;';h.textContent='Wunschtermin wählen';
     var sub=document.createElement('p');sub.style.cssText='margin:0 0 4px;color:#475569;font-size:14px;line-height:1.5;';
     sub.textContent='Wir laden Ihren Kalender …';
     var hint=document.createElement('p');hint.style.cssText='margin:0 0 6px;color:#64748b;font-size:12.5px;';
-    hint.textContent='Die Zugangsdaten für das Gespräch erhalten Sie im Anschluss per E-Mail.';
+    hint.textContent='Sie erhalten sofort eine Bestätigung per E-Mail – mit Kalendereintrag und allen Infos zum Gespräch. Alle Zeiten in deutscher Zeit (Europe/Berlin).';
     var priv=document.createElement('p');priv.style.cssText='margin:0 0 14px;color:#94a3b8;font-size:11.5px;line-height:1.5;';
     var dsUrl=window.LANDING_DATENSCHUTZ_URL||'datenschutz.html';
     priv.innerHTML='Ihre Daten werden ausschließlich zur Terminvereinbarung verwendet. Details in unserer <a href="'+dsUrl+'" target="_blank" rel="noopener" style="color:#64748b;text-decoration:underline;">Datenschutzerklärung</a>.';
@@ -70,7 +83,7 @@
 
       var title=document.createElement('div');
       title.style.cssText='font-size:13.5px;color:#475569;font-weight:500;margin:4px 0 10px;';
-      title.textContent='Freie Termine – nächste 4 Wochen ('+fmtDay.format(state.rangeStart)+' – '+fmtDay.format(addDays(state.rangeStart,RANGE_DAYS-1))+')';
+      title.textContent='Freie Termine in den nächsten 4 Wochen ('+fmtDay.format(state.rangeStart)+' – '+fmtDay.format(addDays(state.rangeStart,RANGE_DAYS-1))+')';
       body.appendChild(title);
 
       // 28 Tage: 4 Reihen × 7 Spalten
@@ -84,8 +97,9 @@
           var b=document.createElement('button');b.type='button';
           var active = state.selectedDay===ymd;
           b.style.cssText='padding:8px 2px;border-radius:10px;border:1.5px solid '+(active?'#0f172a':'#e2e8f0')+';background:'+(active?'#0f172a':disabled?'#f8fafc':'#fff')+';color:'+(active?'#fff':disabled?'#cbd5e1':'#0f172a')+';cursor:'+(disabled?'not-allowed':'pointer')+';font-size:12px;font-weight:600;text-align:center;line-height:1.25;';
-          var wd=d.toLocaleDateString('de-DE',{weekday:'short'});
-          b.innerHTML='<div style="font-size:10.5px;opacity:.7;">'+wd+'</div><div style="font-size:14px;margin-top:2px;">'+String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'</div><div style="font-size:10px;margin-top:2px;opacity:.75;">'+(slots.length?'frei':state.loadingSlots?'…':'—')+'</div>';
+          var parts=ymd.split('-');
+          var wd=fmtDay.format(d).split(',')[0];
+          b.innerHTML='<div style="font-size:10.5px;opacity:.7;">'+wd+'</div><div style="font-size:14px;margin-top:2px;">'+parts[2]+'.'+parts[1]+'</div><div style="font-size:10px;margin-top:2px;opacity:.75;">'+(slots.length?'frei':state.loadingSlots?'…':'—')+'</div>';
           if(!disabled){b.onclick=function(){state.selectedDay=ymd;renderRange();};}
           grid.appendChild(b);
         })(i);
@@ -179,7 +193,7 @@
       var h2=document.createElement('h3');h2.style.cssText='margin:0 0 8px;font-size:22px;font-weight:700;';h2.textContent='Termin bestätigt';
       var start=new Date(bk.starts_at), end=new Date(bk.ends_at);
       var when=document.createElement('p');when.style.cssText='margin:0 0 6px;font-size:16px;color:#0f172a;font-weight:600;';
-      when.textContent=fmtDayLong.format(start)+' · '+fmtTime.format(start)+'–'+fmtTime.format(end)+' Uhr';
+      when.textContent=fmtDayLong.format(start)+' · '+fmtTime.format(start)+'–'+fmtTime.format(end)+' Uhr (deutsche Zeit)';
       var mail=document.createElement('p');mail.style.cssText='margin:6px 0 14px;color:#475569;font-size:13.5px;';
       mail.textContent='Sie erhalten in Kürze eine Bestätigungs-E-Mail mit allen Details.';
       wrap.appendChild(chk);wrap.appendChild(h2);wrap.appendChild(when);wrap.appendChild(mail);
@@ -205,10 +219,9 @@
           return;
         }
         state.schedule=res.body;
-        var greet='Wählen Sie Ihren Wunschtermin für das kurze Erstgespräch.';
-        var rec=res.body.recruiter_name||'unserem Recruiting-Team';
+        var greet='Wählen Sie einen freien Termin für Ihr Gespräch.';
         if(res.body.applicant_first_name){
-          greet='Hallo '+res.body.applicant_first_name+', wählen Sie Ihren Wunschtermin mit '+rec+'.';
+          greet='Hallo '+res.body.applicant_first_name+', wählen Sie einen freien Termin für Ihr Gespräch.';
         }
         sub.textContent=greet;
         loadRange();
