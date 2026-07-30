@@ -27,6 +27,7 @@ const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process
 const PORTAL_API_ENDPOINT = process.env.PORTAL_API_ENDPOINT ?? "";
 const PORT = Number(process.env.PORT ?? 3001);
 const CACHE_TTL_MS = 60_000;
+const NEGATIVE_CACHE_TTL_MS = 15_000;
 const ASSET_VERSION = process.env.LANDING_ASSET_VERSION || process.env.RELEASE_VERSION || String(Date.now());
 
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
@@ -71,21 +72,15 @@ type LandingRow = {
   source_slug: string | null;
   is_published: boolean;
 };
-const cache = new Map<string, { row: LandingRow | null; expiresAt: number }>();
+const cache = new Map<string, { row: LandingRow | null; expiresAt: number; stale?: boolean }>();
+const inFlight = new Map<string, Promise<{ row: LandingRow | null; degraded: boolean }>>();
 
-async function loadLanding(domain: string): Promise<LandingRow | null> {
-  // www.example.com und example.com auf denselben Datensatz mappen —
-  // Caddy on_demand_tls fragt sonst für www.* nach und bekommt 404.
-  const key = domain.toLowerCase().replace(/^www\./, "");
-  const cached = cache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.row;
+async function fetchLandingOnce(key: string): Promise<{ ok: boolean; row?: LandingRow | null; error?: string }> {
   const apiUrl = new URL("/rest/v1/landing_pages", SUPABASE_URL);
   apiUrl.searchParams.set("select", LANDING_SELECT);
   apiUrl.searchParams.set("domain", `eq.${key}`);
   apiUrl.searchParams.set("is_published", "eq.true");
   apiUrl.searchParams.set("limit", "1");
-
-  let row: LandingRow | null = null;
   try {
     const res = await fetch(apiUrl, {
       headers: {
@@ -93,18 +88,68 @@ async function loadLanding(domain: string): Promise<LandingRow | null> {
         authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
         accept: "application/json",
       },
+      signal: AbortSignal.timeout(6_000),
     });
-    if (!res.ok) {
-      console.error(`[landing-server] DB-Error für ${key}: HTTP ${res.status} ${await res.text()}`);
-    } else {
-      const rows = (await res.json()) as LandingRow[];
-      row = rows[0] ?? null;
-    }
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status} ${(await res.text()).slice(0, 300)}` };
+    const rows = (await res.json()) as LandingRow[];
+    if (!Array.isArray(rows)) return { ok: false, error: "unexpected response shape" };
+    return { ok: true, row: rows[0] ?? null };
   } catch (e) {
-    console.error(`[landing-server] DB-Error für ${key}:`, (e as Error).message);
+    return { ok: false, error: (e as Error).message };
   }
-  cache.set(key, { row, expiresAt: Date.now() + CACHE_TTL_MS });
-  return row;
+}
+
+async function refreshLanding(key: string): Promise<{ row: LandingRow | null; degraded: boolean }> {
+  let result = await fetchLandingOnce(key);
+  if (!result.ok) {
+    await new Promise((r) => setTimeout(r, 300));
+    result = await fetchLandingOnce(key);
+  }
+  if (!result.ok) {
+    console.error(`[landing-server] DB-Error für ${key}: ${result.error}`);
+    const prev = cache.get(key);
+    if (prev?.row) {
+      // Backend gestört → letzten bekannten Stand weiterliefern statt 404.
+      prev.expiresAt = Date.now() + CACHE_TTL_MS;
+      prev.stale = true;
+      return { row: prev.row, degraded: true };
+    }
+    // Fehler NIE als "Domain unbekannt" cachen.
+    return { row: null, degraded: true };
+  }
+  const row = result.row ?? null;
+  cache.set(key, { row, stale: false, expiresAt: Date.now() + (row ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS) });
+  return { row, degraded: false };
+}
+
+async function loadLandingState(domain: string): Promise<{ row: LandingRow | null; degraded: boolean }> {
+  // www.example.com und example.com auf denselben Datensatz mappen —
+  // Caddy on_demand_tls fragt sonst für www.* nach und bekommt 404.
+  const key = domain.toLowerCase().replace(/^www\./, "");
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return { row: cached.row, degraded: false };
+
+  if (cached?.row) {
+    // Abgelaufen, aber bekannt: sofort ausliefern, im Hintergrund erneuern.
+    cached.expiresAt = Date.now() + CACHE_TTL_MS;
+    if (!inFlight.has(key)) {
+      const p = refreshLanding(key).finally(() => inFlight.delete(key));
+      inFlight.set(key, p);
+      p.catch(() => {});
+    }
+    return { row: cached.row, degraded: false };
+  }
+
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = refreshLanding(key).finally(() => inFlight.delete(key));
+    inFlight.set(key, pending);
+  }
+  return pending;
+}
+
+async function loadLanding(domain: string): Promise<LandingRow | null> {
+  return (await loadLandingState(domain)).row;
 }
 
 // ── Template-Rendering (Platzhalter ersetzen) ────────────────────────────
@@ -261,6 +306,23 @@ function renderJs(row: LandingRow): string {
   return t ? applyPlaceholders(t.js, row.branding, row.slots) : "// theme missing";
 }
 
+function statusPage(title: string, text: string): string {
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${title}</title>
+<style>
+  :root{color-scheme:light}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#f6f7f9;color:#1c2430;
+       font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:32rem;padding:2.5rem 1.5rem;text-align:center}
+  h1{font-size:1.4rem;margin:0 0 .75rem;font-weight:650}
+  p{margin:0;color:#5b6674}
+</style></head>
+<body><main><h1>${title}</h1><p>${text}</p></main></body></html>`;
+}
+
 // ── HTTP-Handler ─────────────────────────────────────────────────────────
 const server = Bun.serve({
   port: PORT,
@@ -275,14 +337,25 @@ const server = Bun.serve({
     if (path === "/_internal/ask") {
       const domain = (url.searchParams.get("domain") || "").toLowerCase();
       if (!domain) return new Response("missing domain", { status: 400 });
-      const row = await loadLanding(domain);
+      const { row } = await loadLandingState(domain);
       return row ? new Response("ok") : new Response("not found", { status: 404 });
     }
 
     const host = (req.headers.get("host") || "").toLowerCase().split(":")[0];
     if (!host) return new Response("no host", { status: 400 });
-    const row = await loadLanding(host);
-    if (!row) return new Response(`Keine Landing für ${host} konfiguriert.`, { status: 404 });
+    const { row, degraded } = await loadLandingState(host);
+    if (!row) {
+      console.warn(`[landing-server] keine Landing für ${host} (${degraded ? "Backend-Störung" : "kein Datensatz"})`);
+      return degraded
+        ? new Response(
+            statusPage("Die Seite ist gerade nicht erreichbar", "Wir haben ein kurzes technisches Problem. Bitte lade die Seite in einem Moment neu."),
+            { status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "retry-after": "30" } },
+          )
+        : new Response(
+            statusPage("Diese Seite ist nicht verfügbar", "Unter dieser Adresse ist derzeit keine Seite hinterlegt."),
+            { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+          );
+    }
 
     if (path === "/style.css") {
       return new Response(renderCss(row), { headers: { "content-type": "text/css; charset=utf-8", "cache-control": "public,max-age=300" } });
