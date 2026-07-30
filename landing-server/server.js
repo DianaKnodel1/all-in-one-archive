@@ -446,6 +446,40 @@ function send(res, status, body, headers = {}) {
   res.end(body);
 }
 
+function statusPage(title, text) {
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${title}</title>
+<style>
+  :root{color-scheme:light}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#f6f7f9;color:#1c2430;
+       font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:32rem;padding:2.5rem 1.5rem;text-align:center}
+  h1{font-size:1.4rem;margin:0 0 .75rem;font-weight:650}
+  p{margin:0;color:#5b6674}
+</style></head>
+<body><main><h1>${title}</h1><p>${text}</p></main></body></html>`;
+}
+
+const HTML_HEADERS = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" };
+
+function sendUnavailable(res, degraded) {
+  if (degraded) {
+    // Backend-Störung: 503 statt 404, damit Suchmaschinen die Seite nicht
+    // als dauerhaft entfernt werten.
+    return send(res, 503, statusPage(
+      "Die Seite ist gerade nicht erreichbar",
+      "Wir haben ein kurzes technisches Problem. Bitte lade die Seite in einem Moment neu.",
+    ), { ...HTML_HEADERS, "retry-after": "30" });
+  }
+  return send(res, 404, statusPage(
+    "Diese Seite ist nicht verfügbar",
+    "Unter dieser Adresse ist derzeit keine Seite hinterlegt.",
+  ), HTML_HEADERS);
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
@@ -464,17 +498,35 @@ const server = createServer(async (req, res) => {
       return send(res, 200, JSON.stringify({ ok: true, flushed: n }), { "content-type": "application/json" });
     }
 
+    // Diagnose: wie oft schlug die Domain-Abfrage fehl, und was liegt im Cache?
+    if (path === "/_internal/stats") {
+      const payload = {
+        ok: true,
+        cached: Array.from(cache.entries()).map(([domain, v]) => ({
+          domain,
+          found: Boolean(v.row),
+          stale: Boolean(v.stale),
+          expires_in_ms: Math.max(0, v.expiresAt - Date.now()),
+        })),
+        lookup_errors: Array.from(lookupErrors.entries()).map(([domain, v]) => ({ domain, ...v })),
+      };
+      return send(res, 200, JSON.stringify(payload, null, 2), { "content-type": "application/json" });
+    }
+
     if (path === "/_internal/ask") {
       const domain = (url.searchParams.get("domain") || "").toLowerCase();
       if (!domain) return send(res, 400, "missing domain");
-      const row = await loadLanding(domain);
+      const { row } = await loadLandingState(domain);
       return row ? send(res, 200, "ok") : send(res, 404, "not found");
     }
 
     const host = String(req.headers.host || "").toLowerCase().split(":")[0];
     if (!host) return send(res, 400, "no host");
-    const row = await loadLanding(host);
-    if (!row) return send(res, 404, `Keine Landing für ${host} konfiguriert.`);
+    const { row, degraded } = await loadLandingState(host);
+    if (!row) {
+      console.warn(`[landing-server] keine Landing für ${host} (${degraded ? "Backend-Störung" : "kein Datensatz"})`);
+      return sendUnavailable(res, degraded);
+    }
 
     if (path === "/style.css") {
       return send(res, 200, await renderCss(row), { "content-type": "text/css; charset=utf-8", "cache-control": "public,max-age=300" });
