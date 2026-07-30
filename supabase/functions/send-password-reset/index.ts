@@ -11,7 +11,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
-import { sendMailWithRetry } from "../_shared/smtp.ts";
+import { createSmtpTransport, sendMailWithRetry } from "../_shared/smtp.ts";
 import { guardSend } from "../_shared/send-guard.ts";
 import { logMailAbort } from "../_shared/log-abort.ts";
 import { actionBucketEventKey, claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
@@ -221,7 +221,10 @@ serve(async (req) => {
     const html = await shellHtml(tenant, inner, email);
 
     // Versand mit gezielter Wiederholung bei Verbindungsfehlern (kein Doppelversand).
-    const transporter = { sendMail: (message: Record<string, unknown>) => sendMailWithRetry(tenant as any, message, { label: "send-password-reset" }) };
+    const transporter = {
+      sendMail: (message: Record<string, unknown>) => sendMailWithRetry(tenant as any, message, { label: "send-password-reset" }),
+      verify: () => createSmtpTransport(tenant as any).verify(),
+    };
     const senderName = tenant.sender_name ?? tenant.name;
     const senderEmail = tenant.sender_email;
     // Kontingent-Schutz (150/h, 2.400/Tag) + Log der Blockade als "skipped".

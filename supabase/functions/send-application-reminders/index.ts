@@ -10,7 +10,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import nodemailer from "https://esm.sh/nodemailer@6.9.14";
-import { sendMailWithRetry } from "../_shared/smtp.ts";
+import { createSmtpTransport, sendMailWithRetry } from "../_shared/smtp.ts";
 import { resolveSender, type EmailKind } from "../_shared/sender-resolver.ts";
 import { renderEmail } from "../_shared/email-wrapper.ts";
 import {
@@ -267,7 +267,10 @@ function buildHtml(subject: string, body: string, signature: string, tenant: Ten
 
 async function sendMail(tenant: TenantRow, to: string, subject: string, html: string) {
   // Versand mit gezielter Wiederholung bei Verbindungsfehlern (kein Doppelversand).
-  const transporter = { sendMail: (message: Record<string, unknown>) => sendMailWithRetry(tenant as any, message, { label: "send-application-reminders" }) };
+  const transporter = {
+      sendMail: (message: Record<string, unknown>) => sendMailWithRetry(tenant as any, message, { label: "send-application-reminders" }),
+      verify: () => createSmtpTransport(tenant as any).verify(),
+    };
   const senderName = tenant.sender_name ?? tenant.name;
   const senderEmail = tenant.sender_email ?? tenant.smtp_username!;
   await transporter.sendMail({
