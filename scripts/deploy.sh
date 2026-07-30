@@ -360,23 +360,6 @@ if [ -d "$MIG_DIR" ] && [ "$db_reachable" = "1" ]; then
     ok "Atomare E-Mail-Ereignissperre in der Datenbank aktiv"
   fi
 
-  # WebID-Spalten nachziehen: fehlen sie, lassen sich Aufträge im Mitarbeiter-
-  # Portal nicht öffnen (Fehler "task_assignments.webid_client_name").
-  webid_col="$(psql "$TARGET_DB_URL" -tAc "select count(*) from information_schema.columns where table_schema='public' and table_name='task_assignments' and column_name='webid_client_name'" | tr -d '[:space:]')"
-  if [ "$webid_col" != "1" ]; then
-    warn "WebID-Spalten fehlen — Migrationen werden nachgezogen"
-    for wmig in "$MIG_DIR/20260805000000_webid_assignment.sql" "$MIG_DIR/20260806000000_webid_start_url.sql"; do
-      [ -f "$wmig" ] || continue
-      if psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -f "$wmig"; then
-        grep -qxF "$(basename "$wmig")" "$STATE_FILE" || basename "$wmig" >> "$STATE_FILE"
-        ok "$(basename "$wmig") angewendet"
-      else
-        warn "$(basename "$wmig") fehlgeschlagen — bitte manuell prüfen"
-      fi
-    done
-  else
-    ok "WebID-Spalten vorhanden"
-  fi
 else
   echo "  (keine Manual-Migrations, TARGET_DB_URL nicht gesetzt oder DB unreachable — übersprungen)"
 fi
