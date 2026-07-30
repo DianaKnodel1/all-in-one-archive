@@ -326,6 +326,24 @@ if [ -d "$MIG_DIR" ] && [ "$db_reachable" = "1" ]; then
       fi
     fi
   done
+
+  # Kritische Doppelversand-Sperre unabhängig vom historischen State prüfen.
+  # Alte Installationen haben beim ersten Bootstrap alle vorhandenen Dateien als
+  # erledigt markiert; dadurch könnte genau diese Migration übersprungen worden sein.
+  DEDUPE_MIG="$MIG_DIR/20260807010000_email_dedupe_repair.sql"
+  dedupe_index="$(psql "$TARGET_DB_URL" -tAc "select to_regclass('public.email_send_log_no_duplicate_sent') is not null" | tr -d '[:space:]')"
+  if [ "$dedupe_index" != "t" ] && [ -f "$DEDUPE_MIG" ]; then
+    warn "Doppelversand-Sperre fehlt — Reparaturmigration wird jetzt angewendet"
+    if psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -f "$DEDUPE_MIG"; then
+      grep -qxF "$(basename "$DEDUPE_MIG")" "$STATE_FILE" || basename "$DEDUPE_MIG" >> "$STATE_FILE"
+      ok "Doppelversand-Sperre aktiv"
+    else
+      echo "  ✗ Kritische Doppelversand-Sperre konnte nicht angelegt werden. Deploy abgebrochen." >&2
+      exit 1
+    fi
+  elif [ "$dedupe_index" = "t" ]; then
+    ok "Doppelversand-Sperre in der Datenbank aktiv"
+  fi
 else
   echo "  (keine Manual-Migrations, TARGET_DB_URL nicht gesetzt oder DB unreachable — übersprungen)"
 fi

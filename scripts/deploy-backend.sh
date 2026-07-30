@@ -125,6 +125,16 @@ echo "\$NEW" | while read sql; do
   echo "\$name" >> "\$STATE"
   echo "    ✓ \$name"
 done
+
+# Kritische Sperre unabhängig von einer evtl. vorbefüllten State-Datei prüfen.
+DEDUPE_MIG="\$MIG_DIR/20260807010000_email_dedupe_repair.sql"
+DEDUPE_INDEX=\$(docker exec "\$DB_CT" psql -U supabase_admin -d postgres -tAc "select to_regclass('public.email_send_log_no_duplicate_sent') is not null" | tr -d '[:space:]')
+if [ "\$DEDUPE_INDEX" != "t" ] && [ -f "\$DEDUPE_MIG" ]; then
+  echo "  · kritische Doppelversand-Sperre fehlt — wende Reparatur an"
+  docker exec -i "\$DB_CT" psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < "\$DEDUPE_MIG"
+  grep -qxF "\$(basename "\$DEDUPE_MIG")" "\$STATE" || basename "\$DEDUPE_MIG" >> "\$STATE"
+  echo "    ✓ Doppelversand-Sperre aktiv"
+fi
 REMOTE_MIG
   fi
   ok "Migrations aktuell"
