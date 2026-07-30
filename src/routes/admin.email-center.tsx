@@ -55,6 +55,8 @@ function AdminEmailCenterPage() {
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<"24h" | "7d" | "30d">("7d");
   const [q, setQ] = useState("");
+  /** Filter auf einen Tenant (Absender-Mandant) — "" = alle. */
+  const [tenantFilter, setTenantFilter] = useState("");
   const [confirmResend, setConfirmResend] = useState<Row | null>(null);
   /** Zeile, deren gerendertes HTML gerade angesehen wird. */
   const [previewRow, setPreviewRow] = useState<Row | null>(null);
@@ -202,13 +204,30 @@ function AdminEmailCenterPage() {
       const cur = m.get(r.template_name) ?? { sent: 0, failed: 0, pending: 0, skipped: 0 };
       if (r.status === "sent") cur.sent++;
       else if (r.status === "dlq" || r.status === "failed" || r.status === "bounced") cur.failed++;
-      else if (r.status === "pending") cur.pending++;
+      else if (r.status === "pending" || r.status === "claimed") cur.pending++;
       else if (r.status === "skipped") cur.skipped++;
       if (!cur.last || r.created_at > cur.last) cur.last = r.created_at;
       m.set(r.template_name, cur);
     }
     return m;
   }, [rows]);
+
+  /**
+   * Hängende & fehlgeschlagene Mails: alles, was Aufmerksamkeit braucht.
+   * "Hängend" = seit mehr als 15 Minuten im Status pending/claimed,
+   * also vom Versand beansprucht, aber nie als gesendet bestätigt.
+   */
+  const problems = useMemo(() => {
+    const cutoff = Date.now() - 15 * 60_000;
+    return rows
+      .filter(r => {
+        if (["failed", "dlq", "bounced"].includes(r.status)) return true;
+        if (["pending", "claimed"].includes(r.status)) return new Date(r.created_at).getTime() < cutoff;
+        return false;
+      })
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  }, [rows]);
+
 
 
   // Wie viele der aktiven Kettenschritte hatten im Zeitraum mind. einen Versand?
@@ -226,12 +245,17 @@ function AdminEmailCenterPage() {
 
   const filtered = useMemo(() => {
     const ql = q.trim().toLowerCase();
-    if (!ql) return rows;
-    return rows.filter(r =>
-      r.recipient_email?.toLowerCase().includes(ql) ||
-      r.template_name?.toLowerCase().includes(ql)
-    );
-  }, [rows, q]);
+    return rows.filter(r => {
+      if (tenantFilter && (r.tenant_id ?? "") !== tenantFilter) return false;
+      if (!ql) return true;
+      return (
+        r.recipient_email?.toLowerCase().includes(ql) ||
+        r.template_name?.toLowerCase().includes(ql) ||
+        (EMAIL_TYPE_LABELS[r.template_name] ?? "").toLowerCase().includes(ql) ||
+        (tenantNames[r.tenant_id ?? ""] ?? "").toLowerCase().includes(ql)
+      );
+    });
+  }, [rows, q, tenantFilter, tenantNames]);
   const shown = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
 
   return (
@@ -428,23 +452,31 @@ function AdminEmailCenterPage() {
       </Card>
 
 
-      {/* Fehler-Feed */}
-      {stats.failed > 0 && (
+      {/* Hängende & fehlgeschlagene Mails */}
+      {problems.length > 0 && (
         <Card>
           <CardContent className="p-0">
             <div className="px-4 py-3 border-b flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-rose-500" />
-              <div className="text-sm font-semibold">Probleme</div>
-              <Badge variant="destructive" className="text-[10px]">{stats.failed}</Badge>
+              <div className="text-sm font-semibold">Hängende &amp; fehlgeschlagene E-Mails</div>
+              <Badge variant="destructive" className="text-[10px]">{problems.length}</Badge>
+              <span className="text-[11px] text-muted-foreground ml-auto">
+                „Hängend“ = seit über 15 Minuten nicht bestätigt
+              </span>
             </div>
-            <div className="divide-y max-h-72 overflow-auto">
-              {rows.filter(r => r.status === "dlq" || r.status === "failed" || r.status === "bounced").slice(0, 30).map((r, i) => (
+            <div className="divide-y max-h-96 overflow-auto">
+              {problems.slice(0, 50).map((r, i) => (
                 <div key={i} className="px-4 py-2 text-xs flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{r.template_name} → {r.recipient_email}</div>
+                    <div className="font-medium truncate">
+                      {EMAIL_TYPE_LABELS[r.template_name] ?? r.template_name} → {r.recipient_email}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      Absender-Mandant: {tenantNames[r.tenant_id ?? ""] ?? "— kein Tenant —"} · {relativeTime(r.created_at)}
+                    </div>
                     {r.error_message && <div className="text-rose-600 truncate">{r.error_message}</div>}
                   </div>
-                  <div className="text-[10px] text-muted-foreground shrink-0">{new Date(r.created_at).toLocaleString("de-DE")}</div>
+                  <StatusBadge status={r.status} />
                   {r.rendered_html && (
                     <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title="E-Mail ansehen" onClick={() => setPreviewRow(r)}>
                       <Eye className="h-3 w-3" />
@@ -467,17 +499,28 @@ function AdminEmailCenterPage() {
         <CardContent className="p-0">
           <div className="px-4 py-3 border-b flex items-center gap-2">
             <div className="text-sm font-semibold flex-1">Verlauf</div>
+            <select
+              value={tenantFilter}
+              onChange={e => setTenantFilter(e.target.value)}
+              className="h-8 rounded-md border bg-background px-2 text-xs"
+            >
+              <option value="">Alle Mandanten</option>
+              {Object.entries(tenantNames).map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
             <div className="relative w-64">
               <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={e => setQ(e.target.value)} placeholder="E-Mail oder Template…" className="h-8 pl-8 text-xs" />
+              <Input value={q} onChange={e => setQ(e.target.value)} placeholder="E-Mail, Vorlage oder Mandant…" className="h-8 pl-8 text-xs" />
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/30">
                 <tr>
-                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Template</th>
+                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Vorlage</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Empfänger</th>
+                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Mandant</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Status</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Wann</th>
                   <th className="w-20"></th>
@@ -486,8 +529,9 @@ function AdminEmailCenterPage() {
               <tbody className="divide-y">
                 {shown.map((r, i) => (
                   <tr key={i} className="hover:bg-muted/20">
-                    <td className="px-4 py-1.5 font-mono text-[11px]">{r.template_name}</td>
+                    <td className="px-4 py-1.5" title={r.template_name}>{EMAIL_TYPE_LABELS[r.template_name] ?? r.template_name}</td>
                     <td className="px-4 py-1.5 text-muted-foreground">{r.recipient_email}</td>
+                    <td className="px-4 py-1.5 text-muted-foreground">{tenantNames[r.tenant_id ?? ""] ?? "—"}</td>
                     <td className="px-4 py-1.5"><StatusBadge status={r.status} /></td>
                     <td className="px-4 py-1.5 text-[10px] text-muted-foreground tabular-nums">{new Date(r.created_at).toLocaleString("de-DE")}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
@@ -505,7 +549,7 @@ function AdminEmailCenterPage() {
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">Nichts zu sehen.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">Nichts zu sehen.</td></tr>
                 )}
               </tbody>
             </table>
@@ -623,11 +667,29 @@ function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     sent:       "bg-emerald-100 text-emerald-700",
     pending:    "bg-amber-100 text-amber-800",
+    claimed:    "bg-amber-100 text-amber-800",
     dlq:        "bg-rose-100 text-rose-700",
     failed:     "bg-rose-100 text-rose-700",
     bounced:    "bg-rose-100 text-rose-700",
     suppressed: "bg-slate-200 text-slate-700",
     skipped:    "bg-muted text-muted-foreground",
   };
-  return <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${map[status] ?? "bg-muted text-muted-foreground"}`}>{status}</span>;
+  const label: Record<string, string> = {
+    sent: "Gesendet",
+    pending: "Hängend",
+    claimed: "Hängend",
+    dlq: "Endgültig fehlgeschlagen",
+    failed: "Fehlgeschlagen",
+    bounced: "Gebounced",
+    suppressed: "Unterdrückt",
+    skipped: "Übersprungen",
+  };
+  return (
+    <span
+      title={status}
+      className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${map[status] ?? "bg-muted text-muted-foreground"}`}
+    >
+      {label[status] ?? status}
+    </span>
+  );
 }
