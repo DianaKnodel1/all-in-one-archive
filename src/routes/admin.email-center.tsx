@@ -667,11 +667,29 @@ function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     sent:       "bg-emerald-100 text-emerald-700",
     pending:    "bg-amber-100 text-amber-800",
+    claimed:    "bg-amber-100 text-amber-800",
     dlq:        "bg-rose-100 text-rose-700",
     failed:     "bg-rose-100 text-rose-700",
     bounced:    "bg-rose-100 text-rose-700",
     suppressed: "bg-slate-200 text-slate-700",
     skipped:    "bg-muted text-muted-foreground",
   };
-  return <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${map[status] ?? "bg-muted text-muted-foreground"}`}>{status}</span>;
+  const label: Record<string, string> = {
+    sent: "Gesendet",
+    pending: "Hängend",
+    claimed: "Hängend",
+    dlq: "Endgültig fehlgeschlagen",
+    failed: "Fehlgeschlagen",
+    bounced: "Gebounced",
+    suppressed: "Unterdrückt",
+    skipped: "Übersprungen",
+  };
+  return (
+    <span
+      title={status}
+      className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${map[status] ?? "bg-muted text-muted-foreground"}`}
+    >
+      {label[status] ?? status}
+    </span>
+  );
 }
