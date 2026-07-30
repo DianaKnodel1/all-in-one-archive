@@ -27,12 +27,25 @@
     return apiBase()+'/api/public/booking?'+qs;
   }
 
-  // ── Datum-/Zeit-Formatter ───────────────────────────────────────────────
-  var TZ = (function(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin';}catch(_){return 'Europe/Berlin';}})();
-  var fmtDay = new Intl.DateTimeFormat('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});
-  var fmtDayLong = new Intl.DateTimeFormat('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-  var fmtTime = new Intl.DateTimeFormat('de-DE',{hour:'2-digit',minute:'2-digit'});
-  function toYMD(d){var y=d.getFullYear();var m=String(d.getMonth()+1).padStart(2,'0');var dd=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
+  // ── Datum-/Zeit-Formatter (IMMER deutsche Zeit) ─────────────────────────
+  // Feste Zeitzone: Bewerber im Ausland sehen sonst andere Uhrzeiten als in
+  // der Bestätigungsmail steht.
+  var TZ = 'Europe/Berlin';
+  function dtf(opts){
+    try { return new Intl.DateTimeFormat('de-DE', Object.assign({timeZone:TZ}, opts)); }
+    catch(_){ return new Intl.DateTimeFormat('de-DE', opts); }
+  }
+  var fmtDay = dtf({weekday:'short',day:'2-digit',month:'2-digit'});
+  var fmtDayLong = dtf({weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  var fmtTime = dtf({hour:'2-digit',minute:'2-digit',hour12:false});
+  var fmtYMD = (function(){
+    try { return new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}); }
+    catch(_){ return null; }
+  })();
+  function toYMD(d){
+    if(fmtYMD){ try { return fmtYMD.format(d); } catch(_){} }
+    var y=d.getFullYear();var m=String(d.getMonth()+1).padStart(2,'0');var dd=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;
+  }
   function addDays(d,n){var x=new Date(d);x.setDate(x.getDate()+n);return x;}
   function startOfDay(d){var x=new Date(d);x.setHours(0,0,0,0);return x;}
 
