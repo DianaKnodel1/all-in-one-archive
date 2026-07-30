@@ -238,7 +238,7 @@ function AdminTemplateBuilderPage() {
   }
 
   const currentStep = steps[activeStep];
-  const blockTypes: BlockType[] = ["text", "info", "hint", "warning", "success", "image", "qr", "input", "question", "yes_no", "upload", "checkpoint"];
+  const blockTypes: BlockType[] = ["text", "info", "hint", "warning", "success", "image", "qr", "input", "question", "yes_no", "upload", "checkpoint", "webid"];
 
   if (showPreview) {
     return (
@@ -452,7 +452,7 @@ function AdminTemplateBuilderPage() {
                     {isExpanded && (
                       <CardContent className="pt-0 pb-4 px-4 space-y-3 border-t border-border">
                         {/* Content field for text-based blocks */}
-                        {["text", "info", "hint", "warning", "success", "checkpoint"].includes(block.type) && (
+                        {["text", "info", "hint", "warning", "success", "checkpoint", "webid"].includes(block.type) && (
                           <div className="space-y-1.5 mt-3">
                             <label className="text-xs text-muted-foreground">Inhalt</label>
                             <Textarea

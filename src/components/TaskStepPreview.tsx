@@ -97,6 +97,15 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
           <p className="font-medium">{block.content || "Kontrollpunkt erreicht"}</p>
         </PreviewInfoBox>
       );
+    case "webid":
+      return (
+        <PreviewInfoBox variant="info">
+          <p className="font-medium">🪪 WebID-Identifikation</p>
+          <p className="mt-1 opacity-90">
+            {block.content || "Hier sieht der Mitarbeiter seine Vorgangsnummer, die App-Links und die Bestätigungs-Buttons."}
+          </p>
+        </PreviewInfoBox>
+      );
     default:
       return null;
   }
