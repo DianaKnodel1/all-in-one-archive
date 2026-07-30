@@ -103,7 +103,7 @@ function DynamicBlockRenderer({
       return (
         <InfoBox variant="info" title="WebID-Identifikation">
           <p className="whitespace-pre-wrap">
-            {block.content || "Deine Vorgangsnummer und die Bestätigung findest du oben in der Übersicht im Block „WebID-Identifikation“."}
+            {block.content || "Die Identifikation startest du oben in der Übersicht über den Block „WebID-Identifikation“ – direkt hier im Portal."}
           </p>
         </InfoBox>
       );
@@ -224,7 +224,7 @@ function TaskWizardPage() {
   const loadData = async () => {
     try {
       const assignRes = await supabase.from("task_assignments")
-        .select("id, task_template_id, status, admin_comment, individual_instructions, individual_phone, individual_hint, post_ident_pdf_url, post_ident_pdf_name, individual_case_number, individual_email, individual_password, webid_client_name, webid_status, task_templates(id, title, description, instructions, compensation, image_url)")
+        .select("id, task_template_id, status, admin_comment, individual_instructions, individual_phone, individual_hint, post_ident_pdf_url, post_ident_pdf_name, individual_case_number, individual_email, individual_password, webid_client_name, webid_status, webid_start_url, task_templates(id, title, description, instructions, compensation, image_url)")
         .eq("id", assignmentId!).eq("user_id", user!.id).single();
       if (assignRes.error) throw assignRes.error;
       const a = assignRes.data as any as TaskAssignment;
