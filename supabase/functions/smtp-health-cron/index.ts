@@ -14,7 +14,6 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import nodemailer from "https://esm.sh/nodemailer@6.9.14";
 import { createSmtpTransport } from "../_shared/smtp.ts";
 
 const corsHeaders = {
