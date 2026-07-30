@@ -24,26 +24,6 @@ export function berlinOffsetMinutes(date: Date): number {
   return t >= lastSundayUtc(y, 2) && t < lastSundayUtc(y, 9) ? 120 : 60;
 }
 
-/** Prüft, ob das Runtime `timeZone` wirklich anwendet. */
-let tzSupported: boolean | null = null;
-function timeZoneSupported(): boolean {
-  if (tzSupported !== null) return tzSupported;
-  try {
-    // 2026-07-01T00:00:00Z → in Berlin 02:00 (MESZ)
-    const probe = new Date(Date.UTC(2026, 6, 1, 0, 0, 0));
-    const hour = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", hour12: false, timeZone: APP_TZ })
-      .formatToParts(probe)
-      .find((p) => p.type === "hour")?.value;
-    tzSupported = hour === "02";
-  } catch {
-    tzSupported = false;
-  }
-  if (!tzSupported) {
-    console.warn("[format-datetime] Runtime ignoriert timeZone – nutze manuellen Europe/Berlin-Offset.");
-  }
-  return tzSupported;
-}
-
 /** Datum/Zeit-Teile in Berliner Ortszeit, ohne auf ICU angewiesen zu sein. */
 function berlinParts(date: Date) {
   const shifted = new Date(date.getTime() + berlinOffsetMinutes(date) * 60_000);
@@ -59,22 +39,12 @@ function berlinParts(date: Date) {
 
 /** z.B. "Dienstag, 28. Juli 2026" (withYear=false → ohne Jahr). */
 export function formatAppointmentDate(date: Date, withYear = true): string {
-  if (timeZoneSupported()) {
-    return date.toLocaleDateString("de-DE", {
-      weekday: "long", day: "numeric", month: "long",
-      ...(withYear ? { year: "numeric" as const } : {}),
-      timeZone: APP_TZ,
-    });
-  }
   const p = berlinParts(date);
   return `${p.weekday}, ${p.day}. ${p.month}${withYear ? ` ${p.year}` : ""}`;
 }
 
 /** z.B. "01:00" */
 export function formatAppointmentTime(date: Date): string {
-  if (timeZoneSupported()) {
-    return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: APP_TZ });
-  }
   const p = berlinParts(date);
   return `${p.hour}:${p.minute}`;
 }
