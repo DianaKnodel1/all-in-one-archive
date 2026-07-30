@@ -78,6 +78,7 @@ function applyPlaceholders(
   branding: z.infer<typeof BrandingSchema>,
   slotValues: Record<string, string> = {},
 ): string {
+  slotValues = normalizeSlotValues(slotValues);
   // Computed Aliase: address/contact_email/contact_phone aus Firmendaten ableiten,
   // damit Slot-Defaults (Impressum/Datenschutz) automatisch korrekt befüllt werden.
   const b: Record<string, unknown> = { ...branding };
