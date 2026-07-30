@@ -148,9 +148,9 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
             {data.individual_instructions && <Row label="Anleitung (individuell)" value={truncate(data.individual_instructions, 120)} />}
             {data.individual_phone && <Row label="SMS-/Telefonnummer" value={data.individual_phone} />}
             {data.individual_hint && <Row label="Hinweistext" value={data.individual_hint} />}
-            {data.webid_client_name && <Row label="WebID-Auftraggeber" value={data.webid_client_name} />}
+            {WEBID_ENABLED && data.webid_client_name && <Row label="WebID-Auftraggeber" value={data.webid_client_name} />}
             {data.individual_case_number && <Row label="Vorgangsnummer" value={data.individual_case_number} />}
-            {data.webid_start_url && <Row label="WebID-Start-Adresse" value={data.webid_start_url} />}
+            {WEBID_ENABLED && data.webid_start_url && <Row label="WebID-Start-Adresse" value={data.webid_start_url} />}
             {data.individual_email && <Row label="E-Mail (Zugang)" value={data.individual_email} />}
             {data.individual_password && <Row label="Passwort (Zugang)" value={data.individual_password} />}
             {data.post_ident_pdf_name && <Row label="Post-Ident PDF" value={data.post_ident_pdf_name} />}
@@ -188,19 +188,23 @@ export function AssignmentIndividualData({ assignmentId, userId, initial, templa
             </Field>
 
             <div className="rounded-xl border border-border p-3 space-y-3">
-              <p className="text-xs font-semibold">WebID-Identifikation</p>
+              <p className="text-xs font-semibold">{WEBID_ENABLED ? "WebID-Identifikation" : "Vorgangsdaten"}</p>
+              {WEBID_ENABLED && (
               <Field label="Auftraggeber (wird dem Mitarbeiter angezeigt)">
                 <Input value={data.webid_client_name ?? ""} onChange={(e) => update("webid_client_name", e.target.value)} placeholder="z. B. Deutsche Bank" />
               </Field>
-              <Field label="Vorgangsnummer" hint="Diese Nummer gibt der Mitarbeiter in der WebID App ein.">
+              )}
+              <Field label="Vorgangsnummer">
                 <Input value={data.individual_case_number ?? ""} onChange={(e) => update("individual_case_number", e.target.value)} placeholder="z. B. WID-123456789" />
               </Field>
+              {WEBID_ENABLED && (
               <Field
                 label="WebID-Start-Adresse (optional)"
                 hint="Die vom Auftraggeber vorgegebene WebID-Einstiegsseite. Leer lassen für die Standard-Seite von WebID. Enthält die Adresse den Platzhalter {vorgangsnummer}, wird die Nummer automatisch eingesetzt."
               >
                 <Input value={data.webid_start_url ?? ""} onChange={(e) => update("webid_start_url", e.target.value)} placeholder="https://…" />
               </Field>
+              )}
               <Field label="E-Mail (optionaler Zugang)">
                 <Input value={data.individual_email ?? ""} onChange={(e) => update("individual_email", e.target.value)} placeholder="name@example.com" />
               </Field>
