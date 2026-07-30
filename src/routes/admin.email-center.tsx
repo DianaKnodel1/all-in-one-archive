@@ -452,23 +452,31 @@ function AdminEmailCenterPage() {
       </Card>
 
 
-      {/* Fehler-Feed */}
-      {stats.failed > 0 && (
+      {/* Hängende & fehlgeschlagene Mails */}
+      {problems.length > 0 && (
         <Card>
           <CardContent className="p-0">
             <div className="px-4 py-3 border-b flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-rose-500" />
-              <div className="text-sm font-semibold">Probleme</div>
-              <Badge variant="destructive" className="text-[10px]">{stats.failed}</Badge>
+              <div className="text-sm font-semibold">Hängende &amp; fehlgeschlagene E-Mails</div>
+              <Badge variant="destructive" className="text-[10px]">{problems.length}</Badge>
+              <span className="text-[11px] text-muted-foreground ml-auto">
+                „Hängend“ = seit über 15 Minuten nicht bestätigt
+              </span>
             </div>
-            <div className="divide-y max-h-72 overflow-auto">
-              {rows.filter(r => r.status === "dlq" || r.status === "failed" || r.status === "bounced").slice(0, 30).map((r, i) => (
+            <div className="divide-y max-h-96 overflow-auto">
+              {problems.slice(0, 50).map((r, i) => (
                 <div key={i} className="px-4 py-2 text-xs flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{r.template_name} → {r.recipient_email}</div>
+                    <div className="font-medium truncate">
+                      {EMAIL_TYPE_LABELS[r.template_name] ?? r.template_name} → {r.recipient_email}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      Absender-Mandant: {tenantNames[r.tenant_id ?? ""] ?? "— kein Tenant —"} · {relativeTime(r.created_at)}
+                    </div>
                     {r.error_message && <div className="text-rose-600 truncate">{r.error_message}</div>}
                   </div>
-                  <div className="text-[10px] text-muted-foreground shrink-0">{new Date(r.created_at).toLocaleString("de-DE")}</div>
+                  <StatusBadge status={r.status} />
                   {r.rendered_html && (
                     <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title="E-Mail ansehen" onClick={() => setPreviewRow(r)}>
                       <Eye className="h-3 w-3" />
