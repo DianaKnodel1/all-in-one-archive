@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { translateAuthError } from "@/lib/auth-errors";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Lock, Save, Palette, Bot, ArrowRight, Globe, Users as UsersIcon, Mail, History, Handshake, CalendarClock, Server, FileText, AlertTriangle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookingLimitsCard } from "@/components/admin/BookingLimitsCard";
 import { StandardTasksCard } from "@/components/admin/StandardTasksCard";
 import { Link } from "@tanstack/react-router";
