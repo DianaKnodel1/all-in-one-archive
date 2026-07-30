@@ -179,40 +179,112 @@ async function loadTheme(id) {
 
 
 
-async function loadLanding(domain) {
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    console.error("[landing-server] SUPABASE_URL und SUPABASE_PUBLISHABLE_KEY müssen gesetzt sein.");
-    return null;
-  }
+// Fehlerzähler pro Domain (Diagnose via /_internal/stats).
+const lookupErrors = new Map();
+const inFlight = new Map();
 
-  const key = domain.toLowerCase().replace(/^www\./, "");
-  const cached = cache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.row;
+function noteLookupError(key, message) {
+  const prev = lookupErrors.get(key) || { count: 0, last: null, lastAt: null };
+  lookupErrors.set(key, { count: prev.count + 1, last: message, lastAt: new Date().toISOString() });
+}
 
+/**
+ * Fragt genau einmal die Datenbank.
+ * → { ok: true, row }   Antwort erhalten (row kann null sein = Domain unbekannt)
+ * → { ok: false, error } Abfrage fehlgeschlagen (Timeout / HTTP-Fehler / Netz)
+ */
+async function fetchLandingOnce(key) {
   const apiUrl = new URL("/rest/v1/landing_pages", SUPABASE_URL);
   apiUrl.searchParams.set("select", LANDING_SELECT);
   apiUrl.searchParams.set("domain", `eq.${key}`);
   apiUrl.searchParams.set("is_published", "eq.true");
   apiUrl.searchParams.set("limit", "1");
 
-  let row = null;
   try {
     const res = await requestJson(apiUrl, {
       apikey: SUPABASE_PUBLISHABLE_KEY,
       authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
       accept: "application/json",
     });
-    if (!res.ok) {
-      console.error(`[landing-server] DB-Error für ${key}: HTTP ${res.status} ${res.text}`);
-    } else {
-      const rows = res.json();
-      row = rows[0] || null;
-    }
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status} ${String(res.text).slice(0, 300)}` };
+    let rows;
+    try { rows = res.json(); } catch (e) { return { ok: false, error: `invalid JSON: ${e?.message || e}` }; }
+    if (!Array.isArray(rows)) return { ok: false, error: "unexpected response shape" };
+    return { ok: true, row: rows[0] || null };
   } catch (e) {
-    console.error(`[landing-server] DB-Error für ${key}:`, e?.message || e);
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// Ein Retry nach kurzer Pause — deckt einzelne Timeouts/5xx ab.
+async function refreshLanding(key) {
+  let result = await fetchLandingOnce(key);
+  if (!result.ok) {
+    await new Promise((r) => setTimeout(r, 300));
+    result = await fetchLandingOnce(key);
   }
 
-  cache.set(key, { row, expiresAt: Date.now() + CACHE_TTL_MS });
+  if (!result.ok) {
+    noteLookupError(key, result.error);
+    console.error(`[landing-server] DB-Error für ${key}: ${result.error}`);
+    const prev = cache.get(key);
+    if (prev && prev.row) {
+      // Letzten bekannten Stand weiterverwenden, statt die Landing offline zu nehmen.
+      prev.expiresAt = Date.now() + CACHE_TTL_MS;
+      prev.stale = true;
+      console.warn(`[landing-server] liefere zwischengespeicherten Stand für ${key} weiter (stale)`);
+      return { row: prev.row, degraded: true };
+    }
+    // Kein bekannter Stand → Fehler NICHT als "nicht vorhanden" cachen.
+    return { row: null, degraded: true };
+  }
+
+  cache.set(key, {
+    row: result.row,
+    stale: false,
+    expiresAt: Date.now() + (result.row ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS),
+  });
+  return { row: result.row, degraded: false };
+}
+
+/**
+ * Liefert die Landing zur Domain.
+ * @returns {Promise<{row: object|null, degraded: boolean}>}
+ *   degraded=true → Backend nicht erreichbar (nicht "Domain unbekannt").
+ */
+async function loadLandingState(domain) {
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    console.error("[landing-server] SUPABASE_URL und SUPABASE_PUBLISHABLE_KEY müssen gesetzt sein.");
+    return { row: null, degraded: true };
+  }
+
+  const key = domain.toLowerCase().replace(/^www\./, "");
+  const cached = cache.get(key);
+
+  if (cached && cached.expiresAt > Date.now()) return { row: cached.row, degraded: false };
+
+  // Abgelaufen, aber bekannt: sofort ausliefern und im Hintergrund erneuern.
+  if (cached && cached.row) {
+    cached.expiresAt = Date.now() + CACHE_TTL_MS;
+    if (!inFlight.has(key)) {
+      const p = refreshLanding(key).finally(() => inFlight.delete(key));
+      inFlight.set(key, p);
+      p.catch(() => {});
+    }
+    return { row: cached.row, degraded: false };
+  }
+
+  // Parallele Anfragen auf dieselbe Domain bündeln.
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = refreshLanding(key).finally(() => inFlight.delete(key));
+    inFlight.set(key, pending);
+  }
+  return pending;
+}
+
+async function loadLanding(domain) {
+  const { row } = await loadLandingState(domain);
   return row;
 }
 
