@@ -11,9 +11,10 @@ import { ZusageCard } from "@/components/interview/ZusageCard";
 
 type Msg = { role: "user" | "assistant"; text: string; ts: string };
 
-// Menschlichere Reaktionszeit: die KI "liest" erst kurz, bevor die Tippblase erscheint.
-const READ_DELAY_MIN_MS = 1200;
-const READ_DELAY_MAX_MS = 2500;
+// Menschlichere Reaktionszeit: erst "lesen/nachdenken", dann erst die Tippblase.
+// Bewusst deutlich länger — sofortige Antworten wirken maschinell.
+const READ_DELAY_MIN_MS = 3000;
+const READ_DELAY_MAX_MS = 7000;
 const readDelay = () =>
   READ_DELAY_MIN_MS + Math.random() * (READ_DELAY_MAX_MS - READ_DELAY_MIN_MS);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -227,10 +228,11 @@ function InterviewPage() {
       // Menschlichere Antwortzeit: kurze Denkpause + „Tipp"-Zeit abhängig von Antwortlänge
       const reply = (data.history ?? []).slice(-1)[0]?.text ?? "";
       const chars = reply.length;
-      // ~35ms pro Zeichen "Tippen", + 900ms Denkpause, gedeckelt bei 6s
-      const targetMs = Math.min(6000, 900 + chars * 35);
-      // Lesepause zählt mit, aber es wird immer mindestens ~600 ms sichtbar getippt.
-      const minVisible = readMs + 600;
+      // ~55 ms pro Zeichen "Tippen" (realistische Schreibgeschwindigkeit),
+      // plus Denkpause; gedeckelt bei 16 s, damit niemand ewig wartet.
+      const targetMs = Math.min(16000, readMs + 1200 + chars * 55);
+      // Es wird immer mindestens ~1,5 s sichtbar getippt.
+      const minVisible = readMs + 1500;
       const elapsed = Date.now() - startedAt;
       const wait = Math.max(0, Math.max(targetMs, minVisible) - elapsed);
       if (wait > 0) await sleep(wait);
