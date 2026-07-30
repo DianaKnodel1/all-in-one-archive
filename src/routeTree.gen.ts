@@ -93,6 +93,7 @@ import { Route as AdminAssignmentsAssignmentIdRouteImport } from './routes/admin
 import { Route as EmployeeTasksAssignmentIdRouteImport } from './routes/_employee/tasks.$assignmentId'
 import { Route as ApiPublicLandingServerFilesSplatRouteImport } from './routes/api/public/landing-server-files.$'
 import { Route as AdminTasksBuilderTemplateIdRouteImport } from './routes/admin.tasks.builder.$templateId'
+import { Route as EmployeeTasksAssignmentIdWebidRouteImport } from './routes/_employee/tasks_.$assignmentId.webid'
 
 const UnsubscribeRoute = UnsubscribeRouteImport.update({
   id: '/unsubscribe',
@@ -524,6 +525,12 @@ const AdminTasksBuilderTemplateIdRoute =
     path: '/tasks/builder/$templateId',
     getParentRoute: () => AdminRoute,
   } as any)
+const EmployeeTasksAssignmentIdWebidRoute =
+  EmployeeTasksAssignmentIdWebidRouteImport.update({
+    id: '/tasks_/$assignmentId/webid',
+    path: '/tasks/$assignmentId/webid',
+    getParentRoute: () => EmployeeRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -607,6 +614,7 @@ export interface FileRoutesByFullPath {
   '/interview/voice/$appId': typeof InterviewVoiceAppIdRoute
   '/termin/buchen/$token': typeof TerminBuchenTokenRoute
   '/admin/tasks/': typeof AdminTasksIndexRoute
+  '/tasks/$assignmentId/webid': typeof EmployeeTasksAssignmentIdWebidRoute
   '/admin/tasks/builder/$templateId': typeof AdminTasksBuilderTemplateIdRoute
   '/api/public/landing-server-files/$': typeof ApiPublicLandingServerFilesSplatRoute
 }
@@ -691,6 +699,7 @@ export interface FileRoutesByTo {
   '/interview/voice/$appId': typeof InterviewVoiceAppIdRoute
   '/termin/buchen/$token': typeof TerminBuchenTokenRoute
   '/admin/tasks': typeof AdminTasksIndexRoute
+  '/tasks/$assignmentId/webid': typeof EmployeeTasksAssignmentIdWebidRoute
   '/admin/tasks/builder/$templateId': typeof AdminTasksBuilderTemplateIdRoute
   '/api/public/landing-server-files/$': typeof ApiPublicLandingServerFilesSplatRoute
 }
@@ -778,6 +787,7 @@ export interface FileRoutesById {
   '/interview/voice/$appId': typeof InterviewVoiceAppIdRoute
   '/termin/buchen/$token': typeof TerminBuchenTokenRoute
   '/admin/tasks/': typeof AdminTasksIndexRoute
+  '/_employee/tasks_/$assignmentId/webid': typeof EmployeeTasksAssignmentIdWebidRoute
   '/admin/tasks/builder/$templateId': typeof AdminTasksBuilderTemplateIdRoute
   '/api/public/landing-server-files/$': typeof ApiPublicLandingServerFilesSplatRoute
 }
@@ -865,6 +875,7 @@ export interface FileRouteTypes {
     | '/interview/voice/$appId'
     | '/termin/buchen/$token'
     | '/admin/tasks/'
+    | '/tasks/$assignmentId/webid'
     | '/admin/tasks/builder/$templateId'
     | '/api/public/landing-server-files/$'
   fileRoutesByTo: FileRoutesByTo
@@ -949,6 +960,7 @@ export interface FileRouteTypes {
     | '/interview/voice/$appId'
     | '/termin/buchen/$token'
     | '/admin/tasks'
+    | '/tasks/$assignmentId/webid'
     | '/admin/tasks/builder/$templateId'
     | '/api/public/landing-server-files/$'
   id:
@@ -1035,6 +1047,7 @@ export interface FileRouteTypes {
     | '/interview/voice/$appId'
     | '/termin/buchen/$token'
     | '/admin/tasks/'
+    | '/_employee/tasks_/$assignmentId/webid'
     | '/admin/tasks/builder/$templateId'
     | '/api/public/landing-server-files/$'
   fileRoutesById: FileRoutesById
@@ -1665,6 +1678,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminTasksBuilderTemplateIdRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/_employee/tasks_/$assignmentId/webid': {
+      id: '/_employee/tasks_/$assignmentId/webid'
+      path: '/tasks/$assignmentId/webid'
+      fullPath: '/tasks/$assignmentId/webid'
+      preLoaderRoute: typeof EmployeeTasksAssignmentIdWebidRouteImport
+      parentRoute: typeof EmployeeRoute
+    }
   }
 }
 
@@ -1694,6 +1714,7 @@ interface EmployeeRouteChildren {
   EmployeeSmsRoute: typeof EmployeeSmsRoute
   EmployeeTasksRoute: typeof EmployeeTasksRouteWithChildren
   EmployeeVerificationRoute: typeof EmployeeVerificationRoute
+  EmployeeTasksAssignmentIdWebidRoute: typeof EmployeeTasksAssignmentIdWebidRoute
 }
 
 const EmployeeRouteChildren: EmployeeRouteChildren = {
@@ -1710,6 +1731,7 @@ const EmployeeRouteChildren: EmployeeRouteChildren = {
   EmployeeSmsRoute: EmployeeSmsRoute,
   EmployeeTasksRoute: EmployeeTasksRouteWithChildren,
   EmployeeVerificationRoute: EmployeeVerificationRoute,
+  EmployeeTasksAssignmentIdWebidRoute: EmployeeTasksAssignmentIdWebidRoute,
 }
 
 const EmployeeRouteWithChildren = EmployeeRoute._addFileChildren(
