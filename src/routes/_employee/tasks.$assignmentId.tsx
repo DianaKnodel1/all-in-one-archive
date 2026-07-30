@@ -99,6 +99,14 @@ function DynamicBlockRenderer({
       return <InfoBox variant="success" title={(block as any).label}><p className="whitespace-pre-wrap">{block.content}</p></InfoBox>;
     case "checkpoint":
       return <InfoBox variant="success" title="Kontrollpunkt erreicht"><p>{block.content}</p></InfoBox>;
+    case "webid":
+      return (
+        <InfoBox variant="info" title="WebID-Identifikation">
+          <p className="whitespace-pre-wrap">
+            {block.content || "Deine Vorgangsnummer und die Bestätigung findest du oben in der Übersicht im Block „WebID-Identifikation“."}
+          </p>
+        </InfoBox>
+      );
     case "image":
       return block.imageUrl ? (
         <div className="rounded-xl overflow-hidden border border-border">
