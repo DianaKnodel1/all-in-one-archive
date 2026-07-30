@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { WEBID_ENABLED } from "@/lib/webid";
 import {
   ArrowLeft, Plus, Trash2, GripVertical, Save, Eye, ChevronDown, ChevronUp,
   FileText, ClipboardList, PlayCircle, HelpCircle, PartyPopper, CheckCircle2,
@@ -238,7 +239,8 @@ function AdminTemplateBuilderPage() {
   }
 
   const currentStep = steps[activeStep];
-  const blockTypes: BlockType[] = ["text", "info", "hint", "warning", "success", "image", "qr", "input", "question", "yes_no", "upload", "checkpoint", "webid"];
+  const blockTypes: BlockType[] = ["text", "info", "hint", "warning", "success", "image", "qr", "input", "question", "yes_no", "upload", "checkpoint",
+    ...(WEBID_ENABLED ? (["webid"] as BlockType[]) : [])];
 
   if (showPreview) {
     return (

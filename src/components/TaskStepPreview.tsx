@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { WEBID_ENABLED } from "@/lib/webid";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -98,6 +99,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
         </PreviewInfoBox>
       );
     case "webid":
+      if (!WEBID_ENABLED) return null;
       return (
         <PreviewInfoBox variant="info">
           <p className="font-medium">🪪 WebID-Identifikation</p>

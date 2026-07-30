@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { TaskSmsMessages } from "@/components/TaskSmsMessages";
 import { AssignmentIndividualData } from "@/components/AssignmentIndividualData";
-import { WEBID_STATUS_LABEL, type WebIdStatus } from "@/lib/webid";
+import { WEBID_STATUS_LABEL, WEBID_ENABLED, type WebIdStatus } from "@/lib/webid";
 import { getNextAvailableSlot } from "@/lib/slot-utils";
 
 type AssignmentStatus = "entwurf" | "zugewiesen" | "geplant" | "in_bearbeitung" | "eingereicht" | "in_pruefung" | "genehmigt" | "abgelehnt" | "abgeschlossen" | "nachbesserung";
@@ -260,7 +260,7 @@ function AdminAssignmentDetailPage() {
       />
 
       {/* WebID-Status */}
-      {((assignment as any).webid_client_name || (assignment as any).individual_case_number) && (
+      {WEBID_ENABLED && ((assignment as any).webid_client_name || (assignment as any).individual_case_number) && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">WebID-Identifikation</CardTitle>

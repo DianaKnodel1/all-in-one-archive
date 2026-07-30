@@ -7,6 +7,14 @@
 
 export type WebIdStatus = "offen" | "gestartet" | "bestaetigt" | "geprueft";
 
+/**
+ * Zentraler Schalter für das WebID-Modul.
+ * Auf `false` ist WebID sowohl im Mitarbeiter- als auch im Admin-Portal
+ * komplett unsichtbar. Daten und Logik bleiben erhalten — zum Reaktivieren
+ * einfach auf `true` setzen.
+ */
+export const WEBID_ENABLED = false;
+
 /** Fallback, falls im Auftrag keine eigene Einstiegs-URL hinterlegt ist. */
 export const WEBID_DEFAULT_START_URL = "https://webid-solutions.de/";
 
