@@ -320,14 +320,25 @@ const server = Bun.serve({
     if (path === "/_internal/ask") {
       const domain = (url.searchParams.get("domain") || "").toLowerCase();
       if (!domain) return new Response("missing domain", { status: 400 });
-      const row = await loadLanding(domain);
+      const { row } = await loadLandingState(domain);
       return row ? new Response("ok") : new Response("not found", { status: 404 });
     }
 
     const host = (req.headers.get("host") || "").toLowerCase().split(":")[0];
     if (!host) return new Response("no host", { status: 400 });
-    const row = await loadLanding(host);
-    if (!row) return new Response(`Keine Landing für ${host} konfiguriert.`, { status: 404 });
+    const { row, degraded } = await loadLandingState(host);
+    if (!row) {
+      console.warn(`[landing-server] keine Landing für ${host} (${degraded ? "Backend-Störung" : "kein Datensatz"})`);
+      return degraded
+        ? new Response(
+            statusPage("Die Seite ist gerade nicht erreichbar", "Wir haben ein kurzes technisches Problem. Bitte lade die Seite in einem Moment neu."),
+            { status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "retry-after": "30" } },
+          )
+        : new Response(
+            statusPage("Diese Seite ist nicht verfügbar", "Unter dieser Adresse ist derzeit keine Seite hinterlegt."),
+            { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+          );
+    }
 
     if (path === "/style.css") {
       return new Response(renderCss(row), { headers: { "content-type": "text/css; charset=utf-8", "cache-control": "public,max-age=300" } });
