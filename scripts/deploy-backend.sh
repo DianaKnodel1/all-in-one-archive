@@ -140,6 +140,19 @@ REMOTE_MIG
   ok "Migrations aktuell"
 fi
 
+# ── 1b/4  API-Schema-Cache neu laden ───────────────────────────────────────
+# Ohne Reload meldet das Portal nach jeder Spalten-Migration:
+# "Could not find the '<spalte>' column ... in the schema cache".
+log "1b/4  API-Schema-Cache neu laden"
+if [ "$DRY_RUN" = "1" ]; then
+  info "[dry-run] würde PostgREST-Schema-Cache neu laden"
+else
+  $SSH "docker exec -i ${BACKEND_DB_CONTAINER:-supabase-db} psql -U supabase_admin -d postgres -c \"NOTIFY pgrst, 'reload schema';\"" >/dev/null 2>&1 \
+    && ok "NOTIFY pgrst gesendet" || warn "NOTIFY pgrst fehlgeschlagen"
+  $SSH "docker restart ${BACKEND_REST_CONTAINER:-supabase-rest}" >/dev/null 2>&1 \
+    && ok "PostgREST neu gestartet" || warn "PostgREST-Container nicht gefunden — nur NOTIFY genutzt"
+fi
+
 # ── 2/4  Edge Functions ────────────────────────────────────────────────────
 log "2/4  Edge Functions"
 FN_SRC="$REPO_DIR/supabase/functions/"
