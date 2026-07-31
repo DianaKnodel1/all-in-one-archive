@@ -24,7 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
-  buildWebIdStartUrl, WEBID_APP_LINKS, WEBID_ENABLED, WEBID_STATUS_LABEL, type WebIdStatus,
+  buildWebIdStartUrl, WEBID_APP_LINKS, useWebIdEnabled, WEBID_STATUS_LABEL, type WebIdStatus,
 } from "@/lib/webid";
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Copy, ExternalLink, Loader2,
@@ -54,6 +54,7 @@ const CHECKLIST = [
 ];
 
 function WebIdStationPage() {
+  const WEBID_ENABLED = useWebIdEnabled();
   const { assignmentId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
