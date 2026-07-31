@@ -16,9 +16,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { usePagination } from "@/hooks/use-pagination";
-import { PaginationBar } from "@/components/PaginationBar";
-import { Plus, Pencil, Copy, FileText, Info, Trash2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Plus, Pencil, Copy, FileText, Info, Trash2, ChevronDown, Search, AlertTriangle, Building2,
+} from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -27,6 +28,7 @@ import {
 const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",
 };
+const EMPLOYMENT_ORDER = ["minijob", "teilzeit", "vollzeit"];
 
 const PLACEHOLDER_GROUPS: { label: string; items: { ph: string; desc: string }[] }[] = [
   {
@@ -79,6 +81,8 @@ function AdminContractsPage() {
   const [loading, setLoading] = useState(true);
   const [filterTenant, setFilterTenant] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [openTenants, setOpenTenants] = useState<Record<string, boolean>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Template | null>(null);
 
@@ -88,6 +92,8 @@ function AdminContractsPage() {
   const [formTitle, setFormTitle] = useState("");
   const [formContent, setFormContent] = useState("");
   const [formActive, setFormActive] = useState(true);
+  const [formPreset, setFormPreset] = useState("standard");
+  const [showPlaceholders, setShowPlaceholders] = useState(false);
 
   const loadTemplates = async () => {
     const { data } = await supabase
@@ -106,6 +112,7 @@ function AdminContractsPage() {
     setFormType("minijob");
     setFormTitle("");
     setFormContent(DEFAULT_CONTRACT_TEMPLATE);
+    setFormPreset("standard");
     setFormActive(true);
   };
 
@@ -117,6 +124,7 @@ function AdminContractsPage() {
     setFormType(t.employment_type);
     setFormTitle(t.title);
     setFormContent(t.content || t.body_html);
+    setFormPreset("standard");
     setFormActive(t.is_active);
     setDialogOpen(true);
   };
@@ -180,15 +188,47 @@ function AdminContractsPage() {
     loadTemplates();
   };
 
+  const getTenantName = (id: string) => tenants.find((t) => t.id === id)?.name ?? "Ohne Firma";
+
+  const q = search.trim().toLowerCase();
   const filtered = templates.filter((t) => {
     if (filterTenant !== "all" && t.tenant_id !== filterTenant) return false;
     if (filterType !== "all" && t.employment_type !== filterType) return false;
+    if (q) {
+      const hay = `${t.title} ${getTenantName(t.tenant_id)}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
 
-  const { paged, page, setPage, pageCount, rangeFrom, rangeTo, total } = usePagination(filtered, 25);
+  // Nach Firma gruppieren – die Gruppe entsteht automatisch aus der
+  // Firmenzuordnung des Templates, es gibt keine separaten Gruppen-Datensätze.
+  const groups = Array.from(
+    filtered.reduce((map, t) => {
+      const list = map.get(t.tenant_id) ?? [];
+      list.push(t);
+      map.set(t.tenant_id, list);
+      return map;
+    }, new Map<string, Template[]>()),
+  )
+    .map(([tenantId, items]) => ({
+      tenantId,
+      name: getTenantName(tenantId),
+      items: [...items].sort(
+        (a, b) =>
+          EMPLOYMENT_ORDER.indexOf(a.employment_type) - EMPLOYMENT_ORDER.indexOf(b.employment_type) ||
+          a.title.localeCompare(b.title),
+      ),
+      missing: EMPLOYMENT_ORDER.filter(
+        (type) => !items.some((i) => i.employment_type === type && i.is_active),
+      ),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  const getTenantName = (id: string) => tenants.find((t) => t.id === id)?.name ?? "–";
+  const autoOpen = groups.length === 1 || filterTenant !== "all" || q.length > 0;
+  const isOpen = (tenantId: string) => openTenants[tenantId] ?? autoOpen;
+  const toggleGroup = (tenantId: string) =>
+    setOpenTenants((prev) => ({ ...prev, [tenantId]: !isOpen(tenantId) }));
 
   return (
     <div className="p-6 lg:p-10 max-w-5xl mx-auto space-y-6">
@@ -218,6 +258,15 @@ function AdminContractsPage() {
             {Object.entries(EMPLOYMENT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Vorlage oder Firma suchen…"
+            className="pl-8"
+          />
+        </div>
       </div>
 
       {/* Placeholder Info */}
@@ -225,7 +274,15 @@ function AdminContractsPage() {
         <CardContent className="py-3 px-4 flex items-start gap-2">
           <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
           <div className="text-xs text-muted-foreground space-y-2 flex-1">
-            <p className="font-medium text-foreground">Verfügbare Platzhalter</p>
+            <button
+              type="button"
+              onClick={() => setShowPlaceholders((v) => !v)}
+              className="font-medium text-foreground flex items-center gap-1"
+            >
+              Verfügbare Platzhalter
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showPlaceholders ? "rotate-180" : ""}`} />
+            </button>
+            {showPlaceholders && (<>
             <p className="text-[11px]">
               Wichtig: <code className="bg-muted px-1 rounded">{`{{address}}`}</code> und <code className="bg-muted px-1 rounded">{`{{city}}`}</code> beziehen sich auf den <b>Arbeitnehmer</b>.
               Für die Firmenadresse <b>immer</b> <code className="bg-muted px-1 rounded">{`{{company_address}}`}</code> / <code className="bg-muted px-1 rounded">{`{{company_city}}`}</code> verwenden.
@@ -243,6 +300,7 @@ function AdminContractsPage() {
                 </ul>
               </div>
             ))}
+            </>)}
           </div>
         </CardContent>
       </Card>
@@ -259,20 +317,45 @@ function AdminContractsPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {paged.map((t) => (
-            <Card key={t.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="py-4 px-5 flex items-center gap-4">
+          {groups.map((group) => (
+          <Collapsible key={group.tenantId} open={isOpen(group.tenantId)} onOpenChange={() => toggleGroup(group.tenantId)}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="w-full text-left px-5 py-4 flex items-center gap-3 hover:bg-muted/40 transition-colors rounded-lg">
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen(group.tenantId) ? "" : "-rotate-90"}`} />
+                  <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="font-semibold text-foreground truncate">{group.name}</span>
+                  <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                    {group.items.length} {group.items.length === 1 ? "Vorlage" : "Vorlagen"} ·{" "}
+                    {group.items.filter((i) => i.is_active).length} aktiv
+                  </span>
+                  {group.missing.length > 0 && (
+                    <Badge variant="outline" className="text-[10px] gap-1 border-amber-500/50 text-amber-600 shrink-0">
+                      <AlertTriangle className="h-3 w-3" />
+                      {group.missing.map((m) => EMPLOYMENT_LABELS[m]).join(", ")} fehlt
+                    </Badge>
+                  )}
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-3 pb-3 space-y-2">
+                  {group.missing.length > 0 && (
+                    <p className="text-[11px] text-amber-600 px-2">
+                      Ohne aktive Vorlage kann für diese Beschäftigungsart kein Vertrag erzeugt werden:{" "}
+                      {group.missing.map((m) => EMPLOYMENT_LABELS[m]).join(", ")}.
+                    </p>
+                  )}
+                  {group.items.map((t) => (
+            <div key={t.id} className="rounded-md border border-border/60 bg-muted/20 py-3 px-4 flex items-center gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-foreground truncate">{t.title}</p>
+                    <Badge variant="outline" className="text-[10px]">{EMPLOYMENT_LABELS[t.employment_type] ?? t.employment_type}</Badge>
+                    <p className="font-medium text-foreground truncate">{t.title}</p>
                     <Badge variant={t.is_active ? "default" : "secondary"} className="text-[10px]">
                       {t.is_active ? "Aktiv" : "Inaktiv"}
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">v{t.version}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {getTenantName(t.tenant_id)} · {EMPLOYMENT_LABELS[t.employment_type] ?? t.employment_type}
-                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Switch checked={t.is_active} onCheckedChange={() => toggleActive(t)} />
@@ -303,10 +386,13 @@ function AdminContractsPage() {
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
-              </CardContent>
+            </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
             </Card>
+          </Collapsible>
           ))}
-          <PaginationBar page={page} pageCount={pageCount} setPage={setPage} rangeFrom={rangeFrom} rangeTo={rangeTo} total={total} />
         </div>
       )}
 
@@ -341,6 +427,27 @@ function AdminContractsPage() {
               <label className="text-xs font-medium text-muted-foreground">Titel</label>
               <Input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="z.B. Minijob-Vertrag 2026" />
             </div>
+            {!editing && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Vorlage als Startpunkt</label>
+                <Select
+                  value={formPreset}
+                  onValueChange={(v) => {
+                    setFormPreset(v);
+                    setFormContent(v === "homeoffice" ? HOMEOFFICE_CONTRACT_TEMPLATE : DEFAULT_CONTRACT_TEMPLATE);
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standardvertrag</SelectItem>
+                    <SelectItem value="homeoffice">Home-Office / auftragsbezogen</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Der Text wird in das Feld unten geladen und kann anschließend frei angepasst werden.
+                </p>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-muted-foreground">Vertragstext (mit Platzhaltern)</label>
               <Textarea
@@ -365,6 +472,105 @@ function AdminContractsPage() {
     </div>
   );
 }
+
+const HOMEOFFICE_CONTRACT_TEMPLATE = `Arbeitsvertrag
+(für Angestellte und Mitarbeiter)
+
+Der Vertrag wird geschlossen zwischen:
+
+{{company_name}}
+{{company_address}}
+
+(Vertreten durch {{company_ceo_name}})
+
+- nachfolgend "Arbeitgeber" genannt -
+
+und
+
+{{first_name}} {{last_name}}
+{{address}}
+
+- nachfolgend "Arbeitnehmer auf Home-Office Basis" genannt -
+
+und beinhaltet die nachfolgenden Vereinbarungen:
+
+§ 1
+Beginn des Arbeitsverhältnisses
+Dieses Arbeitsverhältnis beginnt am {{start_date}} und nach beidseitiger Unterfertigung erhält dieser Vertrag seine Rechtswirksamkeit.
+
+§ 2
+Probezeit
+Das Arbeitsverhältnis wird auf unbestimmte Zeit geschlossen. Die ersten 3 Monate gelten als Probezeit. Während der Probezeit kann das Arbeitsverhältnis beiderseits mit einer Frist von zwei Wochen gekündigt werden. Der Arbeitnehmer wird als
+
+Mobile-App-Prüfer/in via Home-Office (m/w/d)
+
+eingestellt und vor allem mit folgenden Arbeiten beschäftigt:
+
+- an mobilen App-Prüfungen
+- aller Vorgänge
+- unserer Qualitätsstandards
+
+§ 3
+Arbeitsvergütung
+Die Vergütung erfolgt ausschließlich nach abgeschlossenem Auftrag.
+Ein Anspruch auf Zahlung besteht erst, wenn der Auftrag vollständig bearbeitet, ordnungsgemäß dokumentiert sowie geprüft und ausgewertet wurde.
+Der Arbeitnehmer erhält einen Lohn von bis zu {{monthly_salary}} netto.
+Der genaue Auszahlungsbetrag ergibt sich aus dem aus den Gutschriften für erfolgreich abgeschlossene Aufträge summierten Guthaben.
+Soweit eine zusätzliche Zahlung vom Arbeitgeber gewährt wird, handelt es sich um eine freiwillige Leistung. Auch die wiederholte vorbehaltslose Zahlung begründet keinen Rechtsanspruch auf Leistungsgewährung für die Zukunft.
+Ein Anspruch auf Zuwendungen besteht nicht für Zeiten, in denen das Arbeitsverhältnis ruht und kein Anspruch auf Arbeitsentgelt besteht.
+Die erstmalige Gehaltsauszahlung erfolgt am Ende des Folgemonats, nachdem der Arbeitsvertrag in Rechtskraft getreten ist und beinhaltet sowohl den Lohn für den ersten Monat als auch für den Folgemonat.
+Sollte das Guthaben zum Auszahlungstag die derzeit gültige Minijob-Grenze überschreiten, so wird das überschüssige Guthaben in den nächsten Monat übertragen.
+
+§ 4
+Arbeitszeit
+Die regelmäßige wöchentliche Arbeitszeit beträgt bis zu {{weekly_hours}} Wochenstunden auf Nebenjobbasis.
+Die tatsächliche Arbeitszeit bestimmt sich nach Art, Umfang und terminlicher Festlegung der jeweils übertragenen Aufträge. Der Arbeitnehmer ist grundsätzlich berechtigt, seine Arbeitszeit im Rahmen der für den jeweiligen Auftrag vorgegebenen Ausführungsfrist eigenverantwortlich zu gestalten.
+Bei bestimmten Aufträgen ist die persönliche Anwesenheit des Teamleiters erforderlich.
+In diesen Fällen ist der Arbeitnehmer verpflichtet, die Tätigkeit zum vorgegebenen Termin aufzunehmen. Aus der jeweiligen Auftragsbeschreibung ergibt sich, ob und in welchem Umfang eine zeitlich flexible Erledigung zulässig ist.
+Überstunden im arbeitsrechtlichen Sinne fallen nicht an; etwaige zeitliche Mehranforderungen ergeben sich ausschließlich aus den Besonderheiten des einzelnen Auftrags.
+
+§ 5
+Urlaub
+Der Arbeitnehmer hat Anspruch auf den gesetzlichen Mindesturlaub gemäß den gesetzlichen Bestimmungen.
+Eine gesonderte Urlaubsmeldung gegenüber dem Arbeitgeber ist nicht erforderlich, da die Arbeitsleistung ausschließlich auftragsbezogen erfolgt.
+Urlaubstage wirken sich nicht auf die Vergütung aus, da keine feste Monatsvergütung geschuldet wird.
+
+§ 6
+Krankheit
+Ist der Arbeitnehmer infolge unverschuldeter Krankheit arbeitsunfähig, so besteht Anspruch auf Fortzahlung der Arbeitsvergütung bis zur Dauer von sechs Wochen nach den gesetzlichen Bestimmungen. Die Arbeitsverhinderung ist dem Arbeitgeber unverzüglich mitzuteilen.
+Dauert die Arbeitsunfähigkeit länger als drei Kalendertage, hat der Arbeitnehmer eine ärztliche Bescheinigung über das Bestehen sowie deren voraussichtliche Dauer spätestens an dem auf den dritten Kalendertag folgenden Arbeitstag vorzulegen. Diese Nachweispflicht gilt auch nach Ablauf der sechs Wochen. Der Arbeitgeber ist berechtigt, die Vorlage der Arbeitsunfähigkeitsbescheinigung früher zu verlangen.
+
+§ 7
+Verschwiegenheitspflicht
+Der Arbeitnehmer verpflichtet sich, während der Dauer des Arbeitsverhältnisses und auch nach dem Ausscheiden, über alle Betriebs- und Geschäftsgeheimnisse Stillschweigen zu bewahren.
+
+§ 8
+Kündigung
+Nach Ablauf der Probezeit beträgt die Kündigungsfrist vier Wochen zum Fünfzehnten oder Ende eines Kalendermonats. Jede gesetzliche Verlängerung der Kündigungsfrist zugunsten des Arbeitnehmers gilt in gleicher Weise auch zugunsten des Arbeitgebers. Die Kündigung bedarf der Schriftform.
+Vor Antritt des Arbeitsverhältnisses ist die Kündigung ausgeschlossen. Der Arbeitgeber ist berechtigt, den Arbeitnehmer bis zur Beendigung des Arbeitsverhältnisses freizustellen. Die Freistellung erfolgt unter Anrechnung der dem Arbeitnehmer eventuell noch zustehenden Urlaubsansprüche sowie eventueller Guthaben auf dem Arbeitszeitkonto.
+In der Zeit der Freistellung hat sich der Arbeitnehmer einen durch Verwendung seiner Arbeitskraft erzielten Verdienst auf den Vergütungsanspruch gegenüber dem Arbeitgeber anrechnen zu lassen. Das Arbeitsverhältnis endet spätestens mit Ablauf des Monats, in dem der Arbeitnehmer das für ihn gesetzlich festgelegte Renteneintrittsalter vollendet hat.
+
+§ 9
+Folgen der Kündigung
+Mit Wirksamwerden der Kündigung wird der Zugang des Arbeitnehmers zum Mitarbeiterportal und allen internen Systemen des Arbeitgebers unverzüglich gesperrt.
+Sämtliche personenbezogenen Daten des Arbeitnehmers werden gemäß den Vorgaben der Datenschutz-Grundverordnung (DSGVO) unverzüglich gelöscht, soweit keine gesetzlichen Aufbewahrungspflichten entgegenstehen.
+Bereits erstellte, aber noch nicht abgerechnete Aufträge werden bis zum Abschluss regulär vergütet, sofern die Arbeiten ordnungsgemäß erbracht wurden.
+Alle materiellen Arbeitsmittel, Zugänge und Unterlagen, die dem Arbeitnehmer vom Arbeitgeber überlassen wurden, sind unverzüglich zurückzugeben.
+Etwaige bestehende Ansprüche auf Vergütung aus abgeschlossenen Aufträgen verfallen nicht und werden gemäß den vertraglichen Vereinbarungen abgerechnet.
+
+§ 10
+Verfall-/Ausschlussfristen
+Die Vertragsparteien müssen Ansprüche aus dem Arbeitsverhältnis innerhalb von drei Monaten nach ihrer Fälligkeit schriftlich geltend machen und im Falle der Ablehnung durch die Gegenseite innerhalb von weiteren drei Monaten einklagen. Andernfalls erlöschen sie. Für Ansprüche aus unerlaubter Handlung verbleibt es bei der gesetzlichen Regelung.
+
+§ 11
+Vertragsänderungen und Nebenabreden
+Änderungen, Ergänzungen und Nebenabreden bedürfen der Schriftform; dies gilt auch für die Aufhebung der Schriftform selbst. Sollten einzelne Bestimmungen dieses Vertrages unwirksam sein oder werden, wird hierdurch die Wirksamkeit des Vertrages im Übrigen nicht berührt. Der Arbeitnehmer verpflichtet sich, dem Arbeitgeber unverzüglich über Veränderungen der persönlichen Verhältnisse wie Familienstand, Kinderzahl, Adresse, Mitteilung zu machen.
+
+{{company_city}}, den {{date}}
+
+{{company_ceo_name}}
+
+{{city}}, {{first_name}} {{last_name}}`;
 
 const DEFAULT_CONTRACT_TEMPLATE = `ARBEITSVERTRAG
 
