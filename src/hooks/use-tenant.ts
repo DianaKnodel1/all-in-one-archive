@@ -42,6 +42,7 @@ export interface Tenant {
   whatsapp_number: string | null;
   reset_email_subject: string | null;
   reset_email_body: string | null;
+  webid_enabled?: boolean | null;
 }
 
 export function useTenantByDomain() {
