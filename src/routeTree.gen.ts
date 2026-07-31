@@ -26,6 +26,7 @@ import { Route as TerminTokenRouteImport } from './routes/termin.$token'
 import { Route as InterviewAppIdRouteImport } from './routes/interview.$appId'
 import { Route as BewerbungVerbindenRouteImport } from './routes/bewerbung.verbinden'
 import { Route as AuthConfirmedRouteImport } from './routes/auth.confirmed'
+import { Route as AdminWebidSimRouteImport } from './routes/admin.webid-sim'
 import { Route as AdminVermittlungRouteImport } from './routes/admin.vermittlung'
 import { Route as AdminVerfuegbarkeitRouteImport } from './routes/admin.verfuegbarkeit'
 import { Route as AdminUploadsRouteImport } from './routes/admin.uploads'
@@ -178,6 +179,11 @@ const AuthConfirmedRoute = AuthConfirmedRouteImport.update({
   id: '/auth/confirmed',
   path: '/auth/confirmed',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminWebidSimRoute = AdminWebidSimRouteImport.update({
+  id: '/webid-sim',
+  path: '/webid-sim',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AdminVermittlungRoute = AdminVermittlungRouteImport.update({
   id: '/vermittlung',
@@ -588,6 +594,7 @@ export interface FileRoutesByFullPath {
   '/admin/uploads': typeof AdminUploadsRoute
   '/admin/verfuegbarkeit': typeof AdminVerfuegbarkeitRoute
   '/admin/vermittlung': typeof AdminVermittlungRoute
+  '/admin/webid-sim': typeof AdminWebidSimRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/bewerbung/verbinden': typeof BewerbungVerbindenRoute
   '/interview/$appId': typeof InterviewAppIdRoute
@@ -673,6 +680,7 @@ export interface FileRoutesByTo {
   '/admin/uploads': typeof AdminUploadsRoute
   '/admin/verfuegbarkeit': typeof AdminVerfuegbarkeitRoute
   '/admin/vermittlung': typeof AdminVermittlungRoute
+  '/admin/webid-sim': typeof AdminWebidSimRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/bewerbung/verbinden': typeof BewerbungVerbindenRoute
   '/interview/$appId': typeof InterviewAppIdRoute
@@ -761,6 +769,7 @@ export interface FileRoutesById {
   '/admin/uploads': typeof AdminUploadsRoute
   '/admin/verfuegbarkeit': typeof AdminVerfuegbarkeitRoute
   '/admin/vermittlung': typeof AdminVermittlungRoute
+  '/admin/webid-sim': typeof AdminWebidSimRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/bewerbung/verbinden': typeof BewerbungVerbindenRoute
   '/interview/$appId': typeof InterviewAppIdRoute
@@ -849,6 +858,7 @@ export interface FileRouteTypes {
     | '/admin/uploads'
     | '/admin/verfuegbarkeit'
     | '/admin/vermittlung'
+    | '/admin/webid-sim'
     | '/auth/confirmed'
     | '/bewerbung/verbinden'
     | '/interview/$appId'
@@ -934,6 +944,7 @@ export interface FileRouteTypes {
     | '/admin/uploads'
     | '/admin/verfuegbarkeit'
     | '/admin/vermittlung'
+    | '/admin/webid-sim'
     | '/auth/confirmed'
     | '/bewerbung/verbinden'
     | '/interview/$appId'
@@ -1021,6 +1032,7 @@ export interface FileRouteTypes {
     | '/admin/uploads'
     | '/admin/verfuegbarkeit'
     | '/admin/vermittlung'
+    | '/admin/webid-sim'
     | '/auth/confirmed'
     | '/bewerbung/verbinden'
     | '/interview/$appId'
@@ -1208,6 +1220,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth/confirmed'
       preLoaderRoute: typeof AuthConfirmedRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/webid-sim': {
+      id: '/admin/webid-sim'
+      path: '/webid-sim'
+      fullPath: '/admin/webid-sim'
+      preLoaderRoute: typeof AdminWebidSimRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/admin/vermittlung': {
       id: '/admin/vermittlung'
@@ -1783,6 +1802,7 @@ interface AdminRouteChildren {
   AdminUploadsRoute: typeof AdminUploadsRoute
   AdminVerfuegbarkeitRoute: typeof AdminVerfuegbarkeitRoute
   AdminVermittlungRoute: typeof AdminVermittlungRoute
+  AdminWebidSimRoute: typeof AdminWebidSimRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminAssignmentsAssignmentIdRoute: typeof AdminAssignmentsAssignmentIdRoute
   AdminTasksIndexRoute: typeof AdminTasksIndexRoute
@@ -1822,6 +1842,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminUploadsRoute: AdminUploadsRoute,
   AdminVerfuegbarkeitRoute: AdminVerfuegbarkeitRoute,
   AdminVermittlungRoute: AdminVermittlungRoute,
+  AdminWebidSimRoute: AdminWebidSimRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminAssignmentsAssignmentIdRoute: AdminAssignmentsAssignmentIdRoute,
   AdminTasksIndexRoute: AdminTasksIndexRoute,
