@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -26,8 +27,11 @@ export const runSmtpTestServerSide = createServerFn({ method: "POST" })
     if (!roleRow) throw new Error("Nicht autorisiert");
 
     const baseUrl = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!baseUrl || !key) {
+    const apiKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+    // Die Edge Function prüft die Admin-Rolle anhand des Benutzer-Tokens –
+    // deshalb wird genau der Token des Aufrufers weitergereicht.
+    const userToken = (getRequest()?.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+    if (!baseUrl || !apiKey || !userToken) {
       return {
         success: false as const,
         error: "Backend-Konfiguration fehlt (URL oder Service-Key) — Prüf-Funktion nicht aufrufbar.",
@@ -41,10 +45,8 @@ export const runSmtpTestServerSide = createServerFn({ method: "POST" })
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-          apikey: key,
-          // Die Funktion prüft die Admin-Rolle über diesen Token; der
-          // Service-Key ist bereits privilegiert, die Rolle wurde oben geprüft.
+          Authorization: `Bearer ${userToken}`,
+          apikey: apiKey,
         },
         body: JSON.stringify({ tenant_id: data.tenant_id }),
       });
