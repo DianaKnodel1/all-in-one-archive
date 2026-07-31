@@ -188,15 +188,47 @@ function AdminContractsPage() {
     loadTemplates();
   };
 
+  const getTenantName = (id: string) => tenants.find((t) => t.id === id)?.name ?? "Ohne Firma";
+
+  const q = search.trim().toLowerCase();
   const filtered = templates.filter((t) => {
     if (filterTenant !== "all" && t.tenant_id !== filterTenant) return false;
     if (filterType !== "all" && t.employment_type !== filterType) return false;
+    if (q) {
+      const hay = `${t.title} ${getTenantName(t.tenant_id)}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
 
-  const { paged, page, setPage, pageCount, rangeFrom, rangeTo, total } = usePagination(filtered, 25);
+  // Nach Firma gruppieren – die Gruppe entsteht automatisch aus der
+  // Firmenzuordnung des Templates, es gibt keine separaten Gruppen-Datensätze.
+  const groups = Array.from(
+    filtered.reduce((map, t) => {
+      const list = map.get(t.tenant_id) ?? [];
+      list.push(t);
+      map.set(t.tenant_id, list);
+      return map;
+    }, new Map<string, Template[]>()),
+  )
+    .map(([tenantId, items]) => ({
+      tenantId,
+      name: getTenantName(tenantId),
+      items: [...items].sort(
+        (a, b) =>
+          EMPLOYMENT_ORDER.indexOf(a.employment_type) - EMPLOYMENT_ORDER.indexOf(b.employment_type) ||
+          a.title.localeCompare(b.title),
+      ),
+      missing: EMPLOYMENT_ORDER.filter(
+        (type) => !items.some((i) => i.employment_type === type && i.is_active),
+      ),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  const getTenantName = (id: string) => tenants.find((t) => t.id === id)?.name ?? "–";
+  const autoOpen = groups.length === 1 || filterTenant !== "all" || q.length > 0;
+  const isOpen = (tenantId: string) => openTenants[tenantId] ?? autoOpen;
+  const toggleGroup = (tenantId: string) =>
+    setOpenTenants((prev) => ({ ...prev, [tenantId]: !isOpen(tenantId) }));
 
   return (
     <div className="p-6 lg:p-10 max-w-5xl mx-auto space-y-6">
