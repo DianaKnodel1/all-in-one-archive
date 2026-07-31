@@ -24,6 +24,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { getStandardContractTemplate, standardContractTitle } from "@/lib/contract-templates";
 
 const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",
@@ -94,6 +96,9 @@ function AdminContractsPage() {
   const [formActive, setFormActive] = useState(true);
   const [formPreset, setFormPreset] = useState("standard");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const [rolloutOpen, setRolloutOpen] = useState(false);
+  const [rolloutReplace, setRolloutReplace] = useState(false);
+  const [rolloutBusy, setRolloutBusy] = useState(false);
 
   const loadTemplates = async () => {
     const { data } = await supabase
@@ -111,12 +116,18 @@ function AdminContractsPage() {
     setFormTenant(tenants[0]?.id ?? "");
     setFormType("minijob");
     setFormTitle("");
-    setFormContent(DEFAULT_CONTRACT_TEMPLATE);
+    setFormContent(getStandardContractTemplate("minijob"));
     setFormPreset("standard");
     setFormActive(true);
   };
 
   const openCreate = () => { resetForm(); setDialogOpen(true); };
+
+  /** Beschäftigungsart im Dialog wechseln – Standardtext ggf. nachziehen. */
+  const changeFormType = (v: string) => {
+    setFormType(v);
+    if (!editing && formPreset === "standard") setFormContent(getStandardContractTemplate(v));
+  };
 
   const openEdit = (t: Template) => {
     setEditing(t);
