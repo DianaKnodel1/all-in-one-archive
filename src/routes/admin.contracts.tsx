@@ -526,7 +526,7 @@ function AdminContractsPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Beschäftigungsart</label>
-                <Select value={formType} onValueChange={setFormType}>
+                <Select value={formType} onValueChange={changeFormType}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(EMPLOYMENT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
@@ -545,17 +545,17 @@ function AdminContractsPage() {
                   value={formPreset}
                   onValueChange={(v) => {
                     setFormPreset(v);
-                    setFormContent(v === "homeoffice" ? HOMEOFFICE_CONTRACT_TEMPLATE : DEFAULT_CONTRACT_TEMPLATE);
+                    setFormContent(v === "kurz" ? SHORT_CONTRACT_TEMPLATE : getStandardContractTemplate(formType));
                   }}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="standard">Standardvertrag</SelectItem>
-                    <SelectItem value="homeoffice">Home-Office / auftragsbezogen</SelectItem>
+                    <SelectItem value="standard">Standardvertrag (Home-Office / auftragsbezogen)</SelectItem>
+                    <SelectItem value="kurz">Kurzfassung (alt)</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Der Text wird in das Feld unten geladen und kann anschließend frei angepasst werden.
+                  Der Standardtext passt sich der gewählten Beschäftigungsart an (§ 3 / § 4) und kann anschließend frei angepasst werden.
                 </p>
               </div>
             )}
