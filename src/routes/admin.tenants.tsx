@@ -63,6 +63,7 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
   const [allowedEmploymentTypes, setAllowedEmploymentTypes] = useState<string[]>(
     ((tenant as any)?.allowed_employment_types as string[] | undefined) ?? ["minijob", "teilzeit", "vollzeit"]
   );
+  const [webidEnabled, setWebidEnabled] = useState<boolean>(!!(tenant as any)?.webid_enabled);
   const [smtpHost, setSmtpHost] = useState((tenant as any)?.smtp_host ?? "");
   const [smtpPort, setSmtpPort] = useState((tenant as any)?.smtp_port?.toString() ?? "587");
   const [smtpUsername, setSmtpUsername] = useState((tenant as any)?.smtp_username ?? "");
@@ -140,6 +141,7 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
       contract_additions: contractAdditions.trim() || null,
       allowed_employment_types:
         allowedEmploymentTypes.length > 0 ? allowedEmploymentTypes : ["minijob", "teilzeit", "vollzeit"],
+      webid_enabled: webidEnabled,
       smtp_host: smtpHost.trim() || null,
       smtp_port: parseInt(smtpPort) || 587,
       smtp_username: smtpUsername.trim() || null,
