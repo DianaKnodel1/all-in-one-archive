@@ -54,6 +54,7 @@ import { Route as AdminDomainsRouteImport } from './routes/admin.domains'
 import { Route as AdminContractsRouteImport } from './routes/admin.contracts'
 import { Route as AdminChatRouteImport } from './routes/admin.chat'
 import { Route as AdminCalendlyRouteImport } from './routes/admin.calendly'
+import { Route as AdminBotsRouteImport } from './routes/admin.bots'
 import { Route as AdminBewerbungstermineRouteImport } from './routes/admin.bewerbungstermine'
 import { Route as AdminBewerbungenRouteImport } from './routes/admin.bewerbungen'
 import { Route as AdminAppointmentsRouteImport } from './routes/admin.appointments'
@@ -320,6 +321,11 @@ const AdminCalendlyRoute = AdminCalendlyRouteImport.update({
   path: '/calendly',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminBotsRoute = AdminBotsRouteImport.update({
+  id: '/bots',
+  path: '/bots',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminBewerbungstermineRoute = AdminBewerbungstermineRouteImport.update({
   id: '/bewerbungstermine',
   path: '/bewerbungstermine',
@@ -567,6 +573,7 @@ export interface FileRoutesByFullPath {
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/bewerbungen': typeof AdminBewerbungenRoute
   '/admin/bewerbungstermine': typeof AdminBewerbungstermineRoute
+  '/admin/bots': typeof AdminBotsRoute
   '/admin/calendly': typeof AdminCalendlyRoute
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
@@ -653,6 +660,7 @@ export interface FileRoutesByTo {
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/bewerbungen': typeof AdminBewerbungenRoute
   '/admin/bewerbungstermine': typeof AdminBewerbungstermineRoute
+  '/admin/bots': typeof AdminBotsRoute
   '/admin/calendly': typeof AdminCalendlyRoute
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
@@ -742,6 +750,7 @@ export interface FileRoutesById {
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/bewerbungen': typeof AdminBewerbungenRoute
   '/admin/bewerbungstermine': typeof AdminBewerbungstermineRoute
+  '/admin/bots': typeof AdminBotsRoute
   '/admin/calendly': typeof AdminCalendlyRoute
   '/admin/chat': typeof AdminChatRoute
   '/admin/contracts': typeof AdminContractsRoute
@@ -831,6 +840,7 @@ export interface FileRouteTypes {
     | '/admin/appointments'
     | '/admin/bewerbungen'
     | '/admin/bewerbungstermine'
+    | '/admin/bots'
     | '/admin/calendly'
     | '/admin/chat'
     | '/admin/contracts'
@@ -917,6 +927,7 @@ export interface FileRouteTypes {
     | '/admin/appointments'
     | '/admin/bewerbungen'
     | '/admin/bewerbungstermine'
+    | '/admin/bots'
     | '/admin/calendly'
     | '/admin/chat'
     | '/admin/contracts'
@@ -1005,6 +1016,7 @@ export interface FileRouteTypes {
     | '/admin/appointments'
     | '/admin/bewerbungen'
     | '/admin/bewerbungstermine'
+    | '/admin/bots'
     | '/admin/calendly'
     | '/admin/chat'
     | '/admin/contracts'
@@ -1417,6 +1429,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCalendlyRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/bots': {
+      id: '/admin/bots'
+      path: '/bots'
+      fullPath: '/admin/bots'
+      preLoaderRoute: typeof AdminBotsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/bewerbungstermine': {
       id: '/admin/bewerbungstermine'
       path: '/bewerbungstermine'
@@ -1775,6 +1794,7 @@ interface AdminRouteChildren {
   AdminAppointmentsRoute: typeof AdminAppointmentsRoute
   AdminBewerbungenRoute: typeof AdminBewerbungenRoute
   AdminBewerbungstermineRoute: typeof AdminBewerbungstermineRoute
+  AdminBotsRoute: typeof AdminBotsRoute
   AdminCalendlyRoute: typeof AdminCalendlyRoute
   AdminChatRoute: typeof AdminChatRoute
   AdminContractsRoute: typeof AdminContractsRoute
@@ -1815,6 +1835,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAppointmentsRoute: AdminAppointmentsRoute,
   AdminBewerbungenRoute: AdminBewerbungenRoute,
   AdminBewerbungstermineRoute: AdminBewerbungstermineRoute,
+  AdminBotsRoute: AdminBotsRoute,
   AdminCalendlyRoute: AdminCalendlyRoute,
   AdminChatRoute: AdminChatRoute,
   AdminContractsRoute: AdminContractsRoute,
