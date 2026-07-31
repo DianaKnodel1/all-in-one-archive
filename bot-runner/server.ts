@@ -11,6 +11,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SERVICE_ROLE_KEY = process.env.SERVICE_ROLE_KEY!;
 const POLL_MS = Number(process.env.POLL_MS ?? 5000);
 const HEADLESS = process.env.HEADLESS !== "false";
+const WORKER_NAME = process.env.WORKER_NAME ?? `runner-${process.pid}`;
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   console.error("SUPABASE_URL und SERVICE_ROLE_KEY müssen gesetzt sein.");
@@ -114,7 +115,7 @@ async function runSteps(page: Page, run: Run, steps: Step[]) {
 }
 
 async function processOne(): Promise<boolean> {
-  const { data: claimed, error } = await db.rpc("bot_claim_next_run");
+  const { data: claimed, error } = await db.rpc("bot_claim_next_run", { _worker: WORKER_NAME });
   if (error) { console.error("claim:", error.message); return false; }
   const run = (Array.isArray(claimed) ? claimed[0] : claimed) as Run | undefined;
   if (!run) return false;
