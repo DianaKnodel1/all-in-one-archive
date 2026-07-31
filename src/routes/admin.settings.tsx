@@ -177,6 +177,7 @@ const SECTIONS: { value: string; hint: string; tiles: TileDef[] }[] = [
     tiles: [
       { to: "/admin/contracts", title: "Verträge", desc: "Vertragsvorlagen anlegen und bearbeiten", icon: FileText },
       { to: "/admin/tasks", title: "Auftrags-Vorlagen", desc: "Aufgaben und Schritte pflegen", icon: FileText },
+      { to: "/admin/bots", title: "Automatisierung / Bots", desc: "Registrierungs-Bots, Läufe und Admin-Übergaben", icon: Bot },
     ],
   },
   {
