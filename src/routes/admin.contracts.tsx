@@ -16,9 +16,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { usePagination } from "@/hooks/use-pagination";
-import { PaginationBar } from "@/components/PaginationBar";
-import { Plus, Pencil, Copy, FileText, Info, Trash2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Plus, Pencil, Copy, FileText, Info, Trash2, ChevronDown, Search, AlertTriangle, Building2,
+} from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -27,6 +28,7 @@ import {
 const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",
 };
+const EMPLOYMENT_ORDER = ["minijob", "teilzeit", "vollzeit"];
 
 const PLACEHOLDER_GROUPS: { label: string; items: { ph: string; desc: string }[] }[] = [
   {
