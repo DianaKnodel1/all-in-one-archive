@@ -60,6 +60,9 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
   const [companyCity, setCompanyCity] = useState((tenant as any)?.company_city ?? "");
   const [companyCeoName, setCompanyCeoName] = useState((tenant as any)?.company_ceo_name ?? "");
   const [contractAdditions, setContractAdditions] = useState(tenant?.contract_additions ?? "");
+  const [allowedEmploymentTypes, setAllowedEmploymentTypes] = useState<string[]>(
+    ((tenant as any)?.allowed_employment_types as string[] | undefined) ?? ["minijob", "teilzeit", "vollzeit"]
+  );
   const [smtpHost, setSmtpHost] = useState((tenant as any)?.smtp_host ?? "");
   const [smtpPort, setSmtpPort] = useState((tenant as any)?.smtp_port?.toString() ?? "587");
   const [smtpUsername, setSmtpUsername] = useState((tenant as any)?.smtp_username ?? "");
@@ -135,6 +138,8 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
       company_city: companyCity.trim() || null,
       company_ceo_name: companyCeoName.trim() || null,
       contract_additions: contractAdditions.trim() || null,
+      allowed_employment_types:
+        allowedEmploymentTypes.length > 0 ? allowedEmploymentTypes : ["minijob", "teilzeit", "vollzeit"],
       smtp_host: smtpHost.trim() || null,
       smtp_port: parseInt(smtpPort) || 587,
       smtp_username: smtpUsername.trim() || null,
@@ -306,6 +311,37 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
         <div>
           <Label className="text-xs">Vertragszusätze</Label>
           <Textarea value={contractAdditions} onChange={(e) => setContractAdditions(e.target.value)} placeholder="Zusätzliche Vertragsklauseln…" rows={3} className="mt-1" />
+        </div>
+        <div>
+          <Label className="text-xs">Wählbare Vertragsarten (Registrierung)</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(["minijob", "teilzeit", "vollzeit"] as const).map((v) => {
+              const active = allowedEmploymentTypes.includes(v);
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() =>
+                    setAllowedEmploymentTypes((prev) => {
+                      const next = active ? prev.filter((p) => p !== v) : [...prev, v];
+                      return next.length > 0 ? next : prev; // mindestens eine Art
+                    })
+                  }
+                  className={
+                    "px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors " +
+                    (active
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/40")
+                  }
+                >
+                  {v === "minijob" ? "Minijob" : v === "teilzeit" ? "Teilzeit" : "Vollzeit"}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Nur die aktivierten Arten stehen Bewerbern dieses Mandanten bei der Registrierung zur Auswahl.
+          </p>
         </div>
 
         {tenant && (
