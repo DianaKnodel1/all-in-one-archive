@@ -2901,6 +2901,7 @@ export type Database = {
           ai_language_style: string | null
           ai_model: string | null
           ai_system_prompt: string | null
+          allowed_employment_types: string[]
           application_received_body: string | null
           application_received_button_label: string | null
           application_received_subject: string | null
@@ -2993,6 +2994,7 @@ export type Database = {
           ai_language_style?: string | null
           ai_model?: string | null
           ai_system_prompt?: string | null
+          allowed_employment_types?: string[]
           application_received_body?: string | null
           application_received_button_label?: string | null
           application_received_subject?: string | null
@@ -3085,6 +3087,7 @@ export type Database = {
           ai_language_style?: string | null
           ai_model?: string | null
           ai_system_prompt?: string | null
+          allowed_employment_types?: string[]
           application_received_body?: string | null
           application_received_button_label?: string | null
           application_received_subject?: string | null
