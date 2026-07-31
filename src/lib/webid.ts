@@ -5,15 +5,28 @@
 // WebID-Seite (bzw. die vom Auftraggeber vorgegebene Einstiegs-URL) — mit deren
 // Original-Hinweistexten. Hier wird lediglich die Ziel-URL zusammengebaut.
 
+import { useTenant } from "@/contexts/TenantContext";
+
 export type WebIdStatus = "offen" | "gestartet" | "bestaetigt" | "geprueft";
 
 /**
- * Zentraler Schalter für das WebID-Modul.
- * Auf `false` ist WebID sowohl im Mitarbeiter- als auch im Admin-Portal
- * komplett unsichtbar. Daten und Logik bleiben erhalten — zum Reaktivieren
- * einfach auf `true` setzen.
+ * Globaler Fallback für das WebID-Modul (greift nur, wenn kein Tenant
+ * geladen ist bzw. die Spalte `webid_enabled` noch fehlt).
+ * Der eigentliche Schalter liegt jetzt pro Unternehmen in
+ * `tenants.webid_enabled` — im Portal unter „Domains / Tenants“.
  */
 export const WEBID_ENABLED = false;
+
+/**
+ * Ist WebID für das aktuelle Unternehmen (Tenant) aktiv?
+ * Nutzt den Tenant der aufgerufenen Domain — gilt für Admin- und
+ * Mitarbeiter-Portal gleichermaßen.
+ */
+export function useWebIdEnabled(): boolean {
+  const { tenant } = useTenant();
+  const flag = (tenant as any)?.webid_enabled;
+  return typeof flag === "boolean" ? flag : WEBID_ENABLED;
+}
 
 /** Fallback, falls im Auftrag keine eigene Einstiegs-URL hinterlegt ist. */
 export const WEBID_DEFAULT_START_URL = "https://webid-solutions.de/";
