@@ -678,6 +678,8 @@ export const generateLandingZip = createServerFn({ method: "POST" })
     html = injectFaq(html, slots);
     html = injectPolish(html);
     html = injectLandingConfig(html, cleanedBranding);
+    // Sicherheitsnetz: nicht aufgelöste {{platzhalter}} nie an Besucher ausliefern.
+    html = html.replace(/\{\{\s*[a-z0-9_]+\s*\}\}/gi, "");
     const css = applyPlaceholders(theme.css, cleanedBranding, slots);
     const js = applyPlaceholders(theme.js, cleanedBranding, slots);
 
