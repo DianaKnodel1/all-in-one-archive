@@ -33,6 +33,7 @@ interface Props {
 export function AssignmentIndividualData({ assignmentId, userId, initial, templateInstructions, onSaved }: Props) {
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
+  const WEBID_ENABLED = useWebIdEnabled();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
