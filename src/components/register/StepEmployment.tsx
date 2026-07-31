@@ -10,6 +10,8 @@ import { de } from "date-fns/locale";
 interface Props {
   employmentType: string;
   setEmploymentType: (v: string) => void;
+  /** Vom Mandanten freigegebene Vertragsarten (Default: alle). */
+  allowedTypes?: string[];
   startDate: Date | undefined;
   setStartDate: (v: Date | undefined) => void;
   onNext: () => void;
@@ -23,8 +25,9 @@ const OPTIONS = [
   { value: "vollzeit", label: "Vollzeit", desc: "40 Stunden / Woche" },
 ];
 
-export default function StepEmployment({ employmentType, setEmploymentType, startDate, setStartDate, onNext, onBack, loading }: Props) {
+export default function StepEmployment({ employmentType, setEmploymentType, allowedTypes, startDate, setStartDate, onNext, onBack, loading }: Props) {
   const minDate = addDays(startOfDay(new Date()), 7);
+  const options = OPTIONS.filter((o) => !allowedTypes?.length || allowedTypes.includes(o.value));
 
   return (
     <div className="space-y-5">
@@ -36,7 +39,7 @@ export default function StepEmployment({ employmentType, setEmploymentType, star
         <p className="text-sm text-muted-foreground mt-1">Wähle die passende Vertragsart und dein Startdatum</p>
       </div>
       <div className="space-y-3">
-        {OPTIONS.map((opt) => (
+        {options.map((opt) => (
           <button
             key={opt.value}
             onClick={() => setEmploymentType(opt.value)}
