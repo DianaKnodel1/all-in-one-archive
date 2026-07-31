@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { FileUp, Save, Trash2, Settings2, FileText, Loader2 } from "lucide-react";
-import { WEBID_ENABLED } from "@/lib/webid";
+import { useWebIdEnabled } from "@/lib/webid";
 
 export interface IndividualData {
   individual_instructions: string | null;
