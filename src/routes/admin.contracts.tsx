@@ -580,6 +580,53 @@ function AdminContractsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Rollout-Dialog: Standardvorlage für alle Firmen */}
+      <Dialog open={rolloutOpen} onOpenChange={setRolloutOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Standardvorlage für alle Firmen</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2 text-sm">
+            <p className="text-muted-foreground text-xs">
+              Legt je Firma die Standardvorlage für Minijob, Teilzeit und Vollzeit an. Firmen- und
+              Personendaten werden beim Unterschreiben automatisch eingesetzt.
+            </p>
+            <div className="rounded-md border border-border/60 divide-y divide-border/60">
+              {rolloutPlan.map((p) => (
+                <div key={p.tenantId} className="px-3 py-2 flex items-center gap-2">
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate flex-1">{p.name}</span>
+                  <span className="text-[11px] text-muted-foreground shrink-0">
+                    {p.missing.length > 0
+                      ? `${p.missing.map((m) => EMPLOYMENT_LABELS[m]).join(", ")} wird angelegt`
+                      : rolloutReplace ? "wird ersetzt" : "vollständig – übersprungen"}
+                  </span>
+                </div>
+              ))}
+              {rolloutPlan.length === 0 && (
+                <p className="px-3 py-3 text-xs text-muted-foreground">Keine Firmen vorhanden.</p>
+              )}
+            </div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <Checkbox checked={rolloutReplace} onCheckedChange={(c) => setRolloutReplace(c === true)} />
+              <span className="text-xs leading-relaxed">
+                Bestehende Vorlagen durch neue Version ersetzen ({rolloutReplaceCount} betroffen).
+                Die alten Versionen bleiben erhalten, werden aber deaktiviert.
+              </span>
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRolloutOpen(false)}>Abbrechen</Button>
+              <Button
+                onClick={runRollout}
+                disabled={rolloutBusy || (rolloutCreateCount === 0 && !rolloutReplace)}
+              >
+                {rolloutBusy ? "Wird ausgerollt…" : `Ausrollen (${rolloutReplace ? rolloutCreateCount + rolloutReplaceCount : rolloutCreateCount})`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
