@@ -11,16 +11,14 @@ const BLOCKED_AGENTS = [
   "applebot-extended", "bytespider", "ccbot", "diffbot", "facebookbot",
   "meta-externalagent", "amazonbot", "cohere-ai", "timpibot", "omgilibot",
   "imagesiftbot", "youbot", "ai2bot", "firecrawl", "scrapy", "httrack",
-  "wget", "libwww-perl", "python-requests", "python-urllib", "go-http-client",
-  "node-fetch", "axios/", "curl/", "headlesschrome", "phantomjs",
-  "puppeteer", "playwright", "webcopier", "webzip", "teleport", "sitesucker",
+  "libwww-perl", "phantomjs", "webcopier", "webzip", "teleport", "sitesucker",
   "heritrix", "nutch", "zgrab", "masscan",
 ];
 
-/** Leerer / fehlender User-Agent ist ebenfalls verdächtig (nur für HTML-Seiten geblockt). */
+/** Eigene Tools (curl, Deploy-Skripte, Health-Checks) bleiben absichtlich erlaubt. */
 export function isBlockedAgent(userAgent: string | null | undefined): boolean {
   const ua = (userAgent ?? "").toLowerCase().trim();
-  if (!ua) return true;
+  if (!ua) return false;
   return BLOCKED_AGENTS.some((needle) => ua.includes(needle));
 }
 

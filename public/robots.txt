@@ -52,5 +52,3 @@ User-agent: AI2Bot
 Disallow: /
 User-agent: Firecrawl
 Disallow: /
-User-agent: HeadlessChrome
-Disallow: /
