@@ -19,6 +19,7 @@
     { "key": "hero_subtitle", "label": "Hero Untertitel", "type": "longtext", "default": "Strategie, Design und Engineering aus einer Hand. Wir arbeiten mit ambitionierten Unternehmen, die sich sichtbar von der Masse abheben wollen." },
     { "key": "hero_cta_primary", "label": "Hero Button primär", "type": "text", "default": "Projekt starten" },
     { "key": "hero_cta_secondary", "label": "Hero Button sekundär", "type": "text", "default": "Arbeiten ansehen" },
+    { "key": "logo_image", "label": "Logo (Bild, optional — sonst Farbmarke)", "type": "image", "default": "" },
     { "key": "hero_image", "label": "Hero Bild (optional, Fallback: animierter Verlauf)", "type": "image", "default": "" },
     { "key": "hero_stat_1_num", "label": "Hero Stat 1 Zahl", "type": "text", "default": "12+" },
     { "key": "hero_stat_1_label", "label": "Hero Stat 1 Label", "type": "text", "default": "Jahre Erfahrung" },

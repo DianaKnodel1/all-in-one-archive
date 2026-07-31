@@ -68,4 +68,20 @@
     var el = document.querySelector(href);
     if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   });
+  // Bild-Hintergründe nur setzen, wenn eine echte URL hinterlegt ist —
+  // sonst bleibt der Verlaufs-Fallback aus der CSS sichtbar.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-mp-bg]'), function (el) {
+    var url = (el.getAttribute('data-mp-bg') || '').trim();
+    el.removeAttribute('data-mp-bg');
+    if (!url || url.indexOf('{{') !== -1) return;
+    el.style.backgroundImage = "url('" + url.replace(/'/g, "%27") + "')";
+  });
+
+  // Logo-Bild: nur zeigen, wenn ein Upload vorhanden ist.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-mp-logo]'), function (img) {
+    var src = (img.getAttribute('src') || '').trim();
+    if (!src || src.indexOf('{{') !== -1) { img.remove(); return; }
+    img.parentNode.classList.add('has-logo');
+    img.addEventListener('error', function () { img.parentNode.classList.remove('has-logo'); img.remove(); });
+  });
 })();

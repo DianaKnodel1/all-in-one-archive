@@ -203,3 +203,10 @@ p{margin:0;line-height:1.65}
 
 /* ---------- Focus ---------- */
 a:focus-visible,button:focus-visible,.mp-btn:focus-visible{outline:2px solid var(--mp-accent,#6366f1);outline-offset:3px;border-radius:8px}
+
+/* Logo-Bild im Header/Footer (nur sichtbar, wenn ein Logo hinterlegt ist) */
+.mp-brand-logo{display:none;height:28px;width:auto;object-fit:contain}
+.mp-brand.has-logo .mp-brand-mark{display:none}
+.mp-brand.has-logo .mp-brand-logo{display:block}
+.mp-legal-block{font-size:14.5px;line-height:1.75;opacity:.85}
+.mp-legal-block:empty{display:none}
