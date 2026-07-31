@@ -1,49 +1,48 @@
-## 1. Texte im Bewerbungsgespräch (Screenshot)
+Ja — die Interview-KI wurde bereits überarbeitet: menschlichere Lese-/Tipppausen, Verbot von Aufzählungen/Textbausteinen/Wiederholungen, kein „48-Stunden"-Versprechen mehr, Rückmeldung direkt im Anschluss. Aktiv wird das erst nach dem nächsten Deploy; Mandanten mit eigenem gespeichertem Prompt müssen einmal in den AI-Einstellungen nachziehen (das übernehme ich als Teil des Audits unten).
 
-`src/routes/interview.$appId.tsx` und `src/routes/interview.voice.$appId.tsx`:
+## 1. Go-Live-Checkliste pro Mandant (neu)
 
-- Satz „Ihre Antworten werden zur Bewerbungsauswertung gespeichert und für maximal 6 Monate aufbewahrt. Es findet keine Audio-Aufnahme statt." wird entfernt.
-- „Das Gespräch wird digital geführt und automatisiert ausgewertet." → „**Das Gespräch findet digital statt** – Ihre Antworten gehen anschließend direkt an Ihre Ansprechpartnerin bzw. Ihren Ansprechpartner." (Voice-Variante analog: „Das Gespräch findet als Sprachgespräch statt …")
-- Rest (Dauer, Themen, Button) bleibt unverändert.
+Eine dezente Checkliste, die automatisch prüft, ob ein Mandant wirklich startklar ist — keine Handarbeit, sondern echte Prüfungen gegen die Daten.
 
-## 2. Terminauswahl: einheitliche Texte + einheitliche Zeitzone
+Geprüft wird je Mandant:
+- **Versand**: SMTP vollständig hinterlegt, letzter Test erfolgreich, Versand nicht pausiert, Absenderadresse gesetzt.
+- **Auftritt**: Landingpage vorhanden und veröffentlicht, Domain/Alias gesetzt, Logo und Farbe hinterlegt.
+- **Vermittlung**: Vermittlungsseite bzw. verknüpfte Fast-Track-Seite vorhanden (falls der Mandant vermittelt).
+- **Termine**: Terminkalender angelegt, mindestens eine Verfügbarkeitsregel, Zeitzone Europe/Berlin, Vorlaufzeit plausibel.
+- **Interview**: Modus gesetzt (Chat/Voice), System- und Entscheidungs-Prompt vorhanden, kein veralteter „48-Stunden"-Satz im Prompt.
+- **Mails**: alle Kernvorlagen befüllt (Bewerbung eingegangen, Terminbestätigung, Terminerinnerung, kein Termin, No-Show, Zusage/Einladung, Registrierungs-Erinnerung).
+- **Onboarding**: Teamleiter zugewiesen, Standard-Aufgabenpaket gesetzt, Vertragsvorlage je freigegebener Vertragsart vorhanden, Firmendaten für den Vertrag (Adresse, Geschäftsführer, Unterschrift) komplett.
 
-Alle Themes nutzen bereits denselben Renderer `src/landing-themes/_shared/form-section.js` – der Text steht also nur an einer Stelle und gilt automatisch für jedes Theme. Ich prüfe zusätzlich alle Theme-Ordner auf eigene, abweichende Buchungstexte und entferne Duplikate.
+Darstellung:
+- In der Mandantenliste ein dezenter Fortschrittspunkt (z. B. „9/12") neben dem Namen; grün = startklar, gelb = Kleinigkeiten offen, rot = blockierend.
+- Klick öffnet ein Panel mit den Punkten, je Punkt Status, Klartext-Erklärung und Direktlink zur richtigen Stelle (Kalender, Landingpage, Mailvorlagen …).
+- Blockierende Punkte (SMTP kaputt, kein Kalender, keine Landingpage) werden oben zuerst gezeigt.
 
-Neue, einheitliche Formulierung:
-- Überschrift „Wunschtermin wählen"
-- „Wählen Sie einen freien Termin für Ihr Gespräch."
-- „Sie erhalten sofort eine Bestätigung per E-Mail – mit Kalendereintrag und allen Infos zum Gespräch."
-- „Freie Termine in den nächsten 4 Wochen"
-- Neue Zeile: „Alle Zeiten in deutscher Zeit (Europe/Berlin)."
+## 2. SMTP-Test schlägt fehl („Failed to send a request to the Edge Function")
 
-Zeitzone vereinheitlichen: Die Slot-Anzeige nutzt derzeit die Zeitzone des Bewerber-Browsers (`Intl` ohne feste Zone). Sitzt jemand im Ausland, sieht er andere Uhrzeiten als in der Mail steht. Künftig werden Tages- und Uhrzeit-Formatter fest auf `Europe/Berlin` gesetzt – damit stimmen Landing Page, Bestätigungsseite und E-Mail immer überein.
+Das ist kein Namecheap-Fehler: Der Browser erreicht die Prüf-Funktion gar nicht (Backend-Funktion nicht/veraltet deployed oder Netz). Geplant:
+- SMTP-Test zusätzlich über eine portal-eigene Serverfunktion, die als Fallback greift — damit ist der Test unabhängig vom Backend-Deploy.
+- Fehlermeldungen klar trennen: „Prüf-Funktion nicht erreichbar" vs. „SMTP-Login abgelehnt (falsches Passwort)".
+- Nach erfolgreichem Test wird der Mandant wie bisher automatisch entpausiert.
 
-Ergänzend serverseitig: `_shared/format-datetime.ts` wird auf die feste Berlin-Berechnung umgestellt (die bisherige „ICU-Erkennung" kann auf dem selbst gehosteten Server in UTC kippen – das erklärt die 22:30 statt 00:30 in der Bestätigungsmail). Zur Kontrolle schreibt die Bestätigungsfunktion UTC-Zeit + gerenderte Ortszeit in die Log-Metadaten.
+## 3. Gesamt-Audit vor der Werbeschaltung
 
-## 3. „Greeting never received" – Ursache und automatischer Nachversand
+Durchgängiger Test der Kette ohne echte Bewerber: Bewerbung eingegangen → Terminbestätigung → Terminerinnerung → kein Termin (24 h/72 h) → No-Show → Zusage/Willkommen → Registrierungs-Erinnerungen. Je Stufe: Auslöser, Cron-Lauf, Vorlage, Absender/Branding, Protokolleintrag, Doppelversand-Sperre. Ergebnis als grün/rot-Bericht plus Behebung der Lücken. Mandanten mit SMTP-Fehler (DGG Beratung, W3 Personal) werden gesondert ausgewiesen.
 
-Ursache: Das ist kein Bewerbungs- oder Vorlagenfehler, sondern die SMTP-Verbindung. Nodemailer wartet nach dem Verbindungsaufbau auf die Begrüßungszeile (`220`) des Mailservers; kommt sie nicht innerhalb von 10 Sekunden, bricht er ab. Typisch bei überlastetem/gedrosseltem Mailserver, kurzer Netzstörung oder blockiertem Port. Ja – das kann jede Mailart treffen, weil alle denselben SMTP-Weg nutzen.
+## 4. Chat-Anhänge Mitarbeiter ↔ Admin
 
-Umsetzung (neuer gemeinsamer Helfer `supabase/functions/_shared/smtp.ts`, genutzt von allen 13 Versandstellen):
+Bereits vorhanden (Bilder, PDF, Word, Excel, Text, max. 10 MB, in beiden Chats). Zu prüfen: ob der Speicherort „chat-attachments" auf dem Self-Hosting-Backend existiert und die Zugriffsregeln stimmen — sonst schlägt der Upload still fehl. Falls nötig anlegen und in beide Richtungen testen.
 
-- Timeouts hochsetzen: Verbindung/Begrüßung 20 s, Socket 30 s; bei Port 587 `requireTLS`, `tls.servername` = SMTP-Host.
-- **Sofort-Wiederholung innerhalb desselben Versandvorgangs**: bis zu 2 zusätzliche Versuche (nach 5 s und 15 s), aber **nur** bei reinen Verbindungsfehlern (`Greeting never received`, `ETIMEDOUT`, `ECONNECTION`, `ESOCKET`). Bei Auth-Fehlern (535), abgelehnter Empfängeradresse oder Vorlagenfehlern wird **nicht** wiederholt.
-- **Kein Spam-Risiko**: Die Wiederholung passiert innerhalb der bereits gesetzten Sperre (Claim + Unique-Index). Ein Versuch gilt erst als „gesendet", wenn der Server ihn angenommen hat; Verbindungsabbrüche vor der Annahme bedeuten, dass keine Mail zugestellt wurde. Es entsteht also kein zweiter Versand derselben Mail.
-- Fehlertexte werden übersetzt, bevor sie im E-Mail-Center landen: „SMTP-Server hat nicht geantwortet – Verbindung/Port prüfen" statt „Greeting never received".
-- Verbleibende Fehlschläge bleiben wie bisher im E-Mail-Center sichtbar und lassen sich dort manuell erneut senden.
+## 5. Vertragsarten je Mandant festlegen
 
-## 4. Bewerbung-eingegangen-Mail: 502 vom Gateway (Screenshot 4 der letzten Runde)
-
-Der rote Block war eine komplette Cloudflare-Fehlerseite: Das Portal rief die Mailfunktion per HTTP auf und bekam einen 502 zurück.
-
-- `src/routes/api/public/applications.ts`: bei 502/503/504 oder Netzwerkfehler bis zu 3 Versuche (0,5 s / 2 s Abstand), bevor „fehlgeschlagen" protokolliert wird. Auch hier keine Doppelmail, weil die Function bei einem 502 gar nicht bis zum Versand kam und die Sperre pro Ereignis greift.
-- HTML-Antworten werden erkannt und nicht mehr roh gespeichert → Klartext „Mailfunktion nicht erreichbar (HTTP 502)", Rohtext gekürzt in den Metadaten.
-- E-Mail-Center: Fehlertext auf 2 Zeilen begrenzt mit vollem Text im Tooltip; im Vorschau-Iframe wird `<meta charset="utf-8">` ergänzt, damit keine „Ã¤"-Zeichen mehr erscheinen.
+- Neues Feld pro Mandant: welche Vertragsarten angeboten werden (beliebige Kombination aus Minijob, Teilzeit, Vollzeit).
+- Auswahl in der Mandanten-Bearbeitung, mindestens eine Art muss aktiv bleiben.
+- Registrierung zeigt nur freigegebene Arten; bei genau einer wird sie vorausgewählt.
+- Serverseitige Absicherung gegen gesperrte Arten. Bestandsmandanten behalten alle drei.
 
 ## Technische Details
 
-- Neu: `supabase/functions/_shared/smtp.ts` (Transport + gezielter Retry + Fehlerübersetzung); alle `createTransport`-Aufrufe stellen darauf um.
-- Geändert: `_shared/format-datetime.ts`, `src/routes/api/public/applications.ts`, `src/routes/admin.email-center.tsx`, `src/landing-themes/_shared/form-section.js` (+ Theme-Assets-Build), `src/routes/interview.$appId.tsx`, `src/routes/interview.voice.$appId.tsx`.
-- Keine Datenbankmigration nötig; alle bestehenden Anti-Spam-Sperren bleiben unverändert.
-- Danach: Edge Functions neu deployen (`scripts/deploy-backend-local.sh`), Portal `git pull && sudo scripts/deploy.sh`.
+- Checkliste: `src/lib/tenant-readiness.functions.ts` (Admin-geschützt) sammelt pro Mandant Prüfergebnisse aus `tenants`, `tenant_smtp_health`, `landing_pages`, `availability_schedules`/`availability_rules`, `contract_templates`, `tenant_default_tasks`; UI als `TenantReadinessPanel.tsx`, eingebunden in `admin.tenants.tsx` (Badge + Dialog). Reine Leseprüfung, keine Schemaänderung nötig.
+- SMTP-Test: neue `createServerFn` mit Admin-Rollenprüfung, Wiederverwendung von `createSmtpTransport`; Aufrufer nutzen Edge-Function mit Fallback.
+- Vertragsarten: Migration `tenants.allowed_employment_types text[]` (Default alle drei, Prüfung auf gültige, nicht leere Werte); Anpassung `StepEmployment.tsx`, Registrierungs-Flow, Mandantenverwaltung.
+- Audit stützt sich auf `scripts/mail-audit.sh`, `scripts/verify-mail-matrix.sh`, `scripts/check-mail-health.sh` sowie Abfragen auf `email_send_log`, `application_reminder_log`, `cron.job`.
