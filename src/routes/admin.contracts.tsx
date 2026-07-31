@@ -24,6 +24,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { getStandardContractTemplate, standardContractTitle } from "@/lib/contract-templates";
 
 const EMPLOYMENT_LABELS: Record<string, string> = {
   minijob: "Minijob", teilzeit: "Teilzeit", vollzeit: "Vollzeit",
@@ -94,6 +96,9 @@ function AdminContractsPage() {
   const [formActive, setFormActive] = useState(true);
   const [formPreset, setFormPreset] = useState("standard");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const [rolloutOpen, setRolloutOpen] = useState(false);
+  const [rolloutReplace, setRolloutReplace] = useState(false);
+  const [rolloutBusy, setRolloutBusy] = useState(false);
 
   const loadTemplates = async () => {
     const { data } = await supabase
@@ -111,12 +116,18 @@ function AdminContractsPage() {
     setFormTenant(tenants[0]?.id ?? "");
     setFormType("minijob");
     setFormTitle("");
-    setFormContent(DEFAULT_CONTRACT_TEMPLATE);
+    setFormContent(getStandardContractTemplate("minijob"));
     setFormPreset("standard");
     setFormActive(true);
   };
 
   const openCreate = () => { resetForm(); setDialogOpen(true); };
+
+  /** Beschäftigungsart im Dialog wechseln – Standardtext ggf. nachziehen. */
+  const changeFormType = (v: string) => {
+    setFormType(v);
+    if (!editing && formPreset === "standard") setFormContent(getStandardContractTemplate(v));
+  };
 
   const openEdit = (t: Template) => {
     setEditing(t);
@@ -190,6 +201,93 @@ function AdminContractsPage() {
 
   const getTenantName = (id: string) => tenants.find((t) => t.id === id)?.name ?? "Ohne Firma";
 
+  /**
+   * Legt für jede Firma die fehlenden Standardvorlagen (Minijob/Teilzeit/
+   * Vollzeit) an. Bestehende Vorlagen werden nur ersetzt, wenn der Admin das
+   * ausdrücklich anhakt – dann als neue Version, die alte wird deaktiviert.
+   */
+  const rolloutPlan = tenants.map((tenant) => {
+    const own = templates.filter((t) => t.tenant_id === tenant.id);
+    const existing = EMPLOYMENT_ORDER.filter((type) => own.some((t) => t.employment_type === type));
+    return {
+      tenantId: tenant.id,
+      name: tenant.name,
+      missing: EMPLOYMENT_ORDER.filter((type) => !existing.includes(type)),
+      existing,
+    };
+  });
+  const rolloutCreateCount = rolloutPlan.reduce((n, p) => n + p.missing.length, 0);
+  const rolloutReplaceCount = rolloutPlan.reduce((n, p) => n + p.existing.length, 0);
+
+  const runRollout = async () => {
+    setRolloutBusy(true);
+    let created = 0;
+    let replaced = 0;
+    try {
+      for (const plan of rolloutPlan) {
+        const types = rolloutReplace ? EMPLOYMENT_ORDER : plan.missing;
+        for (const type of types) {
+          const content = getStandardContractTemplate(type);
+          const old = templates.filter((t) => t.tenant_id === plan.tenantId && t.employment_type === type);
+          const nextVersion = Math.max(0, ...old.map((t) => t.version)) + 1;
+          const { error } = await supabase.from("contract_templates").insert({
+            tenant_id: plan.tenantId,
+            employment_type: type as any,
+            title: standardContractTitle(type),
+            content,
+            body_html: content,
+            version: nextVersion,
+            is_active: true,
+          });
+          if (error) throw new Error(error.message);
+          if (old.length > 0) {
+            replaced++;
+            await supabase
+              .from("contract_templates")
+              .update({ is_active: false })
+              .in("id", old.map((t) => t.id));
+          } else {
+            created++;
+          }
+        }
+      }
+      toast({
+        title: "Standardvorlage ausgerollt",
+        description: `${created} neu angelegt${replaced ? `, ${replaced} ersetzt` : ""}.`,
+      });
+      setRolloutOpen(false);
+      setRolloutReplace(false);
+      loadTemplates();
+    } catch (e: any) {
+      toast({ title: "Fehler beim Ausrollen", description: e.message, variant: "destructive" });
+    } finally {
+      setRolloutBusy(false);
+    }
+  };
+
+  /** Fehlende Beschäftigungsarten einer einzelnen Firma ergänzen. */
+  const fillMissingForTenant = async (tenantId: string) => {
+    const own = templates.filter((t) => t.tenant_id === tenantId);
+    const missing = EMPLOYMENT_ORDER.filter((type) => !own.some((t) => t.employment_type === type));
+    if (missing.length === 0) {
+      toast({ title: "Nichts zu ergänzen", description: "Alle Beschäftigungsarten sind vorhanden." });
+      return;
+    }
+    for (const type of missing) {
+      const content = getStandardContractTemplate(type);
+      await supabase.from("contract_templates").insert({
+        tenant_id: tenantId,
+        employment_type: type as any,
+        title: standardContractTitle(type),
+        content,
+        body_html: content,
+        is_active: true,
+      });
+    }
+    toast({ title: `${missing.length} Vorlage(n) ergänzt` });
+    loadTemplates();
+  };
+
   const q = search.trim().toLowerCase();
   const filtered = templates.filter((t) => {
     if (filterTenant !== "all" && t.tenant_id !== filterTenant) return false;
@@ -237,9 +335,14 @@ function AdminContractsPage() {
           <h1 className="text-2xl font-heading font-bold">Vertrags-Templates</h1>
           <p className="text-sm text-muted-foreground">Vorlagen für automatische Vertragsgenerierung</p>
         </div>
-        <Button onClick={openCreate} className="gap-2">
-          <Plus className="h-4 w-4" /> Neues Template
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setRolloutOpen(true)} className="gap-2">
+            <Building2 className="h-4 w-4" /> Standardvorlage für alle Firmen
+          </Button>
+          <Button onClick={openCreate} className="gap-2">
+            <Plus className="h-4 w-4" /> Neues Template
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -345,6 +448,14 @@ function AdminContractsPage() {
                       {group.missing.map((m) => EMPLOYMENT_LABELS[m]).join(", ")}.
                     </p>
                   )}
+                  {EMPLOYMENT_ORDER.some((type) => !group.items.some((i) => i.employment_type === type)) && (
+                    <div className="px-2">
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1"
+                        onClick={() => fillMissingForTenant(group.tenantId)}>
+                        <Plus className="h-3 w-3" /> Fehlende Arten mit Standardvorlage ergänzen
+                      </Button>
+                    </div>
+                  )}
                   {group.items.map((t) => (
             <div key={t.id} className="rounded-md border border-border/60 bg-muted/20 py-3 px-4 flex items-center gap-4">
                 <div className="flex-1 min-w-0">
@@ -415,7 +526,7 @@ function AdminContractsPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Beschäftigungsart</label>
-                <Select value={formType} onValueChange={setFormType}>
+                <Select value={formType} onValueChange={changeFormType}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(EMPLOYMENT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
@@ -434,17 +545,17 @@ function AdminContractsPage() {
                   value={formPreset}
                   onValueChange={(v) => {
                     setFormPreset(v);
-                    setFormContent(v === "homeoffice" ? HOMEOFFICE_CONTRACT_TEMPLATE : DEFAULT_CONTRACT_TEMPLATE);
+                    setFormContent(v === "kurz" ? SHORT_CONTRACT_TEMPLATE : getStandardContractTemplate(formType));
                   }}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="standard">Standardvertrag</SelectItem>
-                    <SelectItem value="homeoffice">Home-Office / auftragsbezogen</SelectItem>
+                    <SelectItem value="standard">Standardvertrag (Home-Office / auftragsbezogen)</SelectItem>
+                    <SelectItem value="kurz">Kurzfassung (alt)</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Der Text wird in das Feld unten geladen und kann anschließend frei angepasst werden.
+                  Der Standardtext passt sich der gewählten Beschäftigungsart an (§ 3 / § 4) und kann anschließend frei angepasst werden.
                 </p>
               </div>
             )}
@@ -469,110 +580,58 @@ function AdminContractsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Rollout-Dialog: Standardvorlage für alle Firmen */}
+      <Dialog open={rolloutOpen} onOpenChange={setRolloutOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Standardvorlage für alle Firmen</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2 text-sm">
+            <p className="text-muted-foreground text-xs">
+              Legt je Firma die Standardvorlage für Minijob, Teilzeit und Vollzeit an. Firmen- und
+              Personendaten werden beim Unterschreiben automatisch eingesetzt.
+            </p>
+            <div className="rounded-md border border-border/60 divide-y divide-border/60">
+              {rolloutPlan.map((p) => (
+                <div key={p.tenantId} className="px-3 py-2 flex items-center gap-2">
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate flex-1">{p.name}</span>
+                  <span className="text-[11px] text-muted-foreground shrink-0">
+                    {p.missing.length > 0
+                      ? `${p.missing.map((m) => EMPLOYMENT_LABELS[m]).join(", ")} wird angelegt`
+                      : rolloutReplace ? "wird ersetzt" : "vollständig – übersprungen"}
+                  </span>
+                </div>
+              ))}
+              {rolloutPlan.length === 0 && (
+                <p className="px-3 py-3 text-xs text-muted-foreground">Keine Firmen vorhanden.</p>
+              )}
+            </div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <Checkbox checked={rolloutReplace} onCheckedChange={(c) => setRolloutReplace(c === true)} />
+              <span className="text-xs leading-relaxed">
+                Bestehende Vorlagen durch neue Version ersetzen ({rolloutReplaceCount} betroffen).
+                Die alten Versionen bleiben erhalten, werden aber deaktiviert.
+              </span>
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRolloutOpen(false)}>Abbrechen</Button>
+              <Button
+                onClick={runRollout}
+                disabled={rolloutBusy || (rolloutCreateCount === 0 && !rolloutReplace)}
+              >
+                {rolloutBusy ? "Wird ausgerollt…" : `Ausrollen (${rolloutReplace ? rolloutCreateCount + rolloutReplaceCount : rolloutCreateCount})`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-const HOMEOFFICE_CONTRACT_TEMPLATE = `Arbeitsvertrag
-(für Angestellte und Mitarbeiter)
-
-Der Vertrag wird geschlossen zwischen:
-
-{{company_name}}
-{{company_address}}
-
-(Vertreten durch {{company_ceo_name}})
-
-- nachfolgend "Arbeitgeber" genannt -
-
-und
-
-{{first_name}} {{last_name}}
-{{address}}
-
-- nachfolgend "Arbeitnehmer auf Home-Office Basis" genannt -
-
-und beinhaltet die nachfolgenden Vereinbarungen:
-
-§ 1
-Beginn des Arbeitsverhältnisses
-Dieses Arbeitsverhältnis beginnt am {{start_date}} und nach beidseitiger Unterfertigung erhält dieser Vertrag seine Rechtswirksamkeit.
-
-§ 2
-Probezeit
-Das Arbeitsverhältnis wird auf unbestimmte Zeit geschlossen. Die ersten 3 Monate gelten als Probezeit. Während der Probezeit kann das Arbeitsverhältnis beiderseits mit einer Frist von zwei Wochen gekündigt werden. Der Arbeitnehmer wird als
-
-Mobile-App-Prüfer/in via Home-Office (m/w/d)
-
-eingestellt und vor allem mit folgenden Arbeiten beschäftigt:
-
-- an mobilen App-Prüfungen
-- aller Vorgänge
-- unserer Qualitätsstandards
-
-§ 3
-Arbeitsvergütung
-Die Vergütung erfolgt ausschließlich nach abgeschlossenem Auftrag.
-Ein Anspruch auf Zahlung besteht erst, wenn der Auftrag vollständig bearbeitet, ordnungsgemäß dokumentiert sowie geprüft und ausgewertet wurde.
-Der Arbeitnehmer erhält einen Lohn von bis zu {{monthly_salary}} netto.
-Der genaue Auszahlungsbetrag ergibt sich aus dem aus den Gutschriften für erfolgreich abgeschlossene Aufträge summierten Guthaben.
-Soweit eine zusätzliche Zahlung vom Arbeitgeber gewährt wird, handelt es sich um eine freiwillige Leistung. Auch die wiederholte vorbehaltslose Zahlung begründet keinen Rechtsanspruch auf Leistungsgewährung für die Zukunft.
-Ein Anspruch auf Zuwendungen besteht nicht für Zeiten, in denen das Arbeitsverhältnis ruht und kein Anspruch auf Arbeitsentgelt besteht.
-Die erstmalige Gehaltsauszahlung erfolgt am Ende des Folgemonats, nachdem der Arbeitsvertrag in Rechtskraft getreten ist und beinhaltet sowohl den Lohn für den ersten Monat als auch für den Folgemonat.
-Sollte das Guthaben zum Auszahlungstag die derzeit gültige Minijob-Grenze überschreiten, so wird das überschüssige Guthaben in den nächsten Monat übertragen.
-
-§ 4
-Arbeitszeit
-Die regelmäßige wöchentliche Arbeitszeit beträgt bis zu {{weekly_hours}} Wochenstunden auf Nebenjobbasis.
-Die tatsächliche Arbeitszeit bestimmt sich nach Art, Umfang und terminlicher Festlegung der jeweils übertragenen Aufträge. Der Arbeitnehmer ist grundsätzlich berechtigt, seine Arbeitszeit im Rahmen der für den jeweiligen Auftrag vorgegebenen Ausführungsfrist eigenverantwortlich zu gestalten.
-Bei bestimmten Aufträgen ist die persönliche Anwesenheit des Teamleiters erforderlich.
-In diesen Fällen ist der Arbeitnehmer verpflichtet, die Tätigkeit zum vorgegebenen Termin aufzunehmen. Aus der jeweiligen Auftragsbeschreibung ergibt sich, ob und in welchem Umfang eine zeitlich flexible Erledigung zulässig ist.
-Überstunden im arbeitsrechtlichen Sinne fallen nicht an; etwaige zeitliche Mehranforderungen ergeben sich ausschließlich aus den Besonderheiten des einzelnen Auftrags.
-
-§ 5
-Urlaub
-Der Arbeitnehmer hat Anspruch auf den gesetzlichen Mindesturlaub gemäß den gesetzlichen Bestimmungen.
-Eine gesonderte Urlaubsmeldung gegenüber dem Arbeitgeber ist nicht erforderlich, da die Arbeitsleistung ausschließlich auftragsbezogen erfolgt.
-Urlaubstage wirken sich nicht auf die Vergütung aus, da keine feste Monatsvergütung geschuldet wird.
-
-§ 6
-Krankheit
-Ist der Arbeitnehmer infolge unverschuldeter Krankheit arbeitsunfähig, so besteht Anspruch auf Fortzahlung der Arbeitsvergütung bis zur Dauer von sechs Wochen nach den gesetzlichen Bestimmungen. Die Arbeitsverhinderung ist dem Arbeitgeber unverzüglich mitzuteilen.
-Dauert die Arbeitsunfähigkeit länger als drei Kalendertage, hat der Arbeitnehmer eine ärztliche Bescheinigung über das Bestehen sowie deren voraussichtliche Dauer spätestens an dem auf den dritten Kalendertag folgenden Arbeitstag vorzulegen. Diese Nachweispflicht gilt auch nach Ablauf der sechs Wochen. Der Arbeitgeber ist berechtigt, die Vorlage der Arbeitsunfähigkeitsbescheinigung früher zu verlangen.
-
-§ 7
-Verschwiegenheitspflicht
-Der Arbeitnehmer verpflichtet sich, während der Dauer des Arbeitsverhältnisses und auch nach dem Ausscheiden, über alle Betriebs- und Geschäftsgeheimnisse Stillschweigen zu bewahren.
-
-§ 8
-Kündigung
-Nach Ablauf der Probezeit beträgt die Kündigungsfrist vier Wochen zum Fünfzehnten oder Ende eines Kalendermonats. Jede gesetzliche Verlängerung der Kündigungsfrist zugunsten des Arbeitnehmers gilt in gleicher Weise auch zugunsten des Arbeitgebers. Die Kündigung bedarf der Schriftform.
-Vor Antritt des Arbeitsverhältnisses ist die Kündigung ausgeschlossen. Der Arbeitgeber ist berechtigt, den Arbeitnehmer bis zur Beendigung des Arbeitsverhältnisses freizustellen. Die Freistellung erfolgt unter Anrechnung der dem Arbeitnehmer eventuell noch zustehenden Urlaubsansprüche sowie eventueller Guthaben auf dem Arbeitszeitkonto.
-In der Zeit der Freistellung hat sich der Arbeitnehmer einen durch Verwendung seiner Arbeitskraft erzielten Verdienst auf den Vergütungsanspruch gegenüber dem Arbeitgeber anrechnen zu lassen. Das Arbeitsverhältnis endet spätestens mit Ablauf des Monats, in dem der Arbeitnehmer das für ihn gesetzlich festgelegte Renteneintrittsalter vollendet hat.
-
-§ 9
-Folgen der Kündigung
-Mit Wirksamwerden der Kündigung wird der Zugang des Arbeitnehmers zum Mitarbeiterportal und allen internen Systemen des Arbeitgebers unverzüglich gesperrt.
-Sämtliche personenbezogenen Daten des Arbeitnehmers werden gemäß den Vorgaben der Datenschutz-Grundverordnung (DSGVO) unverzüglich gelöscht, soweit keine gesetzlichen Aufbewahrungspflichten entgegenstehen.
-Bereits erstellte, aber noch nicht abgerechnete Aufträge werden bis zum Abschluss regulär vergütet, sofern die Arbeiten ordnungsgemäß erbracht wurden.
-Alle materiellen Arbeitsmittel, Zugänge und Unterlagen, die dem Arbeitnehmer vom Arbeitgeber überlassen wurden, sind unverzüglich zurückzugeben.
-Etwaige bestehende Ansprüche auf Vergütung aus abgeschlossenen Aufträgen verfallen nicht und werden gemäß den vertraglichen Vereinbarungen abgerechnet.
-
-§ 10
-Verfall-/Ausschlussfristen
-Die Vertragsparteien müssen Ansprüche aus dem Arbeitsverhältnis innerhalb von drei Monaten nach ihrer Fälligkeit schriftlich geltend machen und im Falle der Ablehnung durch die Gegenseite innerhalb von weiteren drei Monaten einklagen. Andernfalls erlöschen sie. Für Ansprüche aus unerlaubter Handlung verbleibt es bei der gesetzlichen Regelung.
-
-§ 11
-Vertragsänderungen und Nebenabreden
-Änderungen, Ergänzungen und Nebenabreden bedürfen der Schriftform; dies gilt auch für die Aufhebung der Schriftform selbst. Sollten einzelne Bestimmungen dieses Vertrages unwirksam sein oder werden, wird hierdurch die Wirksamkeit des Vertrages im Übrigen nicht berührt. Der Arbeitnehmer verpflichtet sich, dem Arbeitgeber unverzüglich über Veränderungen der persönlichen Verhältnisse wie Familienstand, Kinderzahl, Adresse, Mitteilung zu machen.
-
-{{company_city}}, den {{date}}
-
-{{company_ceo_name}}
-
-{{city}}, {{first_name}} {{last_name}}`;
-
-const DEFAULT_CONTRACT_TEMPLATE = `ARBEITSVERTRAG
+const SHORT_CONTRACT_TEMPLATE = `ARBEITSVERTRAG
 
 Zwischen
 {{company_name}}
