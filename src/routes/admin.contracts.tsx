@@ -335,9 +335,14 @@ function AdminContractsPage() {
           <h1 className="text-2xl font-heading font-bold">Vertrags-Templates</h1>
           <p className="text-sm text-muted-foreground">Vorlagen für automatische Vertragsgenerierung</p>
         </div>
-        <Button onClick={openCreate} className="gap-2">
-          <Plus className="h-4 w-4" /> Neues Template
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setRolloutOpen(true)} className="gap-2">
+            <Building2 className="h-4 w-4" /> Standardvorlage für alle Firmen
+          </Button>
+          <Button onClick={openCreate} className="gap-2">
+            <Plus className="h-4 w-4" /> Neues Template
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -442,6 +447,14 @@ function AdminContractsPage() {
                       Ohne aktive Vorlage kann für diese Beschäftigungsart kein Vertrag erzeugt werden:{" "}
                       {group.missing.map((m) => EMPLOYMENT_LABELS[m]).join(", ")}.
                     </p>
+                  )}
+                  {EMPLOYMENT_ORDER.some((type) => !group.items.some((i) => i.employment_type === type)) && (
+                    <div className="px-2">
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1"
+                        onClick={() => fillMissingForTenant(group.tenantId)}>
+                        <Plus className="h-3 w-3" /> Fehlende Arten mit Standardvorlage ergänzen
+                      </Button>
+                    </div>
                   )}
                   {group.items.map((t) => (
             <div key={t.id} className="rounded-md border border-border/60 bg-muted/20 py-3 px-4 flex items-center gap-4">
