@@ -1336,13 +1336,53 @@ function AdminTenantsPage() {
     reload();
   };
 
+  // Ein Mandant hängt an Bewerbungen, Mitarbeitern, Verträgen usw.
+  // Statt eines rohen Datenbankfehlers zeigen wir vorher im Klartext,
+  // was noch verknüpft ist – gelöscht wird nur, wenn nichts mehr dranhängt.
   const deleteTenant = async (id: string) => {
-    const { error } = await supabase.from("tenants").delete().eq("id", id);
-    if (error) {
-      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    const tenant = tenants.find((t) => t.id === id);
+    const checks: Array<{ table: string; label: string }> = [
+      { table: "applications", label: "Bewerbungen" },
+      { table: "profiles", label: "Mitarbeiter" },
+      { table: "contracts", label: "unterschriebene Verträge" },
+      { table: "contract_templates", label: "Vertragsvorlagen" },
+      { table: "documents", label: "Dokumente" },
+    ];
+    const blocking: string[] = [];
+    for (const c of checks) {
+      const { count } = await (supabase as any)
+        .from(c.table)
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", id);
+      if (count && count > 0) blocking.push(`${count} ${c.label}`);
+    }
+
+    if (blocking.length > 0) {
+      toast({
+        title: "Mandant kann nicht gelöscht werden",
+        description:
+          `${tenant?.name ?? "Dieser Mandant"} ist noch verknüpft mit: ${blocking.join(", ")}. ` +
+          `Diese Daten müssten zuerst entfernt oder einem anderen Mandanten zugeordnet werden. ` +
+          `Empfehlung: stattdessen „Deaktivieren“ – dann läuft nichts mehr, die Historie bleibt aber erhalten.`,
+        variant: "destructive",
+      });
       return;
     }
-    toast({ title: "Domain gelöscht" });
+
+    if (!window.confirm(`${tenant?.name ?? "Mandant"} endgültig löschen?`)) return;
+
+    const { error } = await supabase.from("tenants").delete().eq("id", id);
+    if (error) {
+      toast({
+        title: "Fehler beim Löschen",
+        description: error.message.includes("foreign key")
+          ? "Es hängen noch Daten an diesem Mandanten. Bitte stattdessen deaktivieren."
+          : error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Mandant gelöscht" });
     reload();
   };
 
