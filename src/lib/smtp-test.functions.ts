@@ -58,6 +58,18 @@ export const runSmtpTestServerSide = createServerFn({ method: "POST" })
         body = null;
       }
       if (!body) {
+        // 502 ohne JSON = die Prüfung lief zu lange und wurde von der
+        // Laufzeitumgebung abgebrochen. Das ist fast immer ein SMTP-Timeout,
+        // kein fehlendes Deployment.
+        if (res.status === 502 || res.status === 504) {
+          return {
+            success: false as const,
+            error:
+              "SMTP-Server hat nicht rechtzeitig geantwortet – Host, Port und Firewall prüfen (Zeitüberschreitung beim Verbindungsaufbau).",
+            errorCode: "TIMEOUT",
+            reachable: true,
+          };
+        }
         return {
           success: false as const,
           error: `Prüf-Funktion antwortete unerwartet (HTTP ${res.status}). Vermutlich ist die Backend-Funktion nicht deployed.`,

@@ -1218,17 +1218,27 @@ function AdminTenantsPage() {
         const res = await supabase.functions.invoke<any>("smtp-test", { body: { tenant_id: t.id } });
         if (res.error) throw res.error;
         data = res.data;
-      } catch {
-        // Browser erreicht die Prüf-Funktion nicht (CORS/Netz/Deploy) —
-        // zweiter Versuch über den Portal-Server.
-        data = await smtpTestFallback({ data: { tenant_id: t.id } });
-        if (data?.reachable === false) {
-          toast({
-            title: "Prüf-Funktion nicht erreichbar",
-            description: `${data?.error ?? "Backend antwortet nicht."} Das ist kein SMTP-Fehler — bitte Backend deployen.`,
-            variant: "destructive",
-          });
-          return;
+      } catch (invokeErr: any) {
+        // Die Funktion antwortet bei SMTP-Fehlern mit HTTP 502 – supabase-js
+        // wirft dann eine FunctionsHttpError, obwohl eine verwertbare
+        // JSON-Antwort vorliegt. Diese zuerst auslesen.
+        try {
+          const body = await invokeErr?.context?.json?.();
+          if (body && typeof body === "object") data = body;
+        } catch {
+          data = null;
+        }
+        if (!data) {
+          // Wirklich kein verwertbarer Body — zweiter Versuch über den Portal-Server.
+          data = await smtpTestFallback({ data: { tenant_id: t.id } });
+          if (data?.reachable === false) {
+            toast({
+              title: "SMTP-Test nicht abschließbar",
+              description: data?.error ?? "Die Prüfung lieferte keine Antwort.",
+              variant: "destructive",
+            });
+            return;
+          }
         }
       }
       if (data?.success === false) {

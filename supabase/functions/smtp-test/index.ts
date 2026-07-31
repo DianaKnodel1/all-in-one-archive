@@ -107,7 +107,10 @@ serve(async (req) => {
 
     await Promise.race([
       transporter.verify(),
-      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("verify timeout 25s")), 25000)),
+      // Bewusst kurz: die Edge-Runtime bricht länger laufende Aufrufe hart ab
+      // (Gateway antwortet dann mit HTTP 502 ohne JSON). So liefern wir immer
+      // eine saubere, verständliche Fehlermeldung zurück.
+      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("verify timeout 12s")), 12000)),
     ]);
 
     debug.last_successful_stage = "VERIFY";
