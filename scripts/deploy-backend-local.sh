@@ -16,6 +16,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SUPABASE_DIR="${BACKEND_SUPABASE_DIR:-/opt/supabase}"
 DB_CT="${BACKEND_DB_CONTAINER:-supabase-db}"
 FN_CT="${BACKEND_FUNCTIONS_CONTAINER:-supabase-edge-functions}"
+REST_CT="${BACKEND_REST_CONTAINER:-supabase-rest}"
 
 log()  { printf "\n\033[1;36m▸ %s\033[0m\n" "$*"; }
 ok()   { printf "\033[1;32m  ✓ %s\033[0m\n" "$*"; }
@@ -56,6 +57,18 @@ else
   ok "Migrations aktuell"
 fi
 
+# ── 1b/3  API-Schema-Cache neu laden ───────────────────────────────────────
+# PostgREST cached das Schema. Ohne Reload meldet das Portal nach jeder
+# Spalten-Migration: "Could not find the '<spalte>' column ... in the schema cache".
+log "1b/3  API-Schema-Cache neu laden"
+docker exec -i "$DB_CT" psql -U supabase_admin -d postgres -c "NOTIFY pgrst, 'reload schema';" >/dev/null 2>&1 \
+  && ok "NOTIFY pgrst gesendet" || warn "NOTIFY pgrst fehlgeschlagen"
+if docker inspect "$REST_CT" >/dev/null 2>&1; then
+  docker restart "$REST_CT" >/dev/null && ok "Container $REST_CT neu gestartet"
+else
+  warn "Container $REST_CT nicht gefunden — nur NOTIFY genutzt"
+fi
+
 # ── 2/3  Edge Functions ────────────────────────────────────────────────────
 log "2/3  Edge Functions"
 FN_SRC="$REPO_DIR/supabase/functions"
@@ -83,6 +96,28 @@ fi
 
 # ── 3/3  Status ────────────────────────────────────────────────────────────
 log "3/3  Status"
+
+# Pflichtspalten pruefen — schlaegt an, wenn eine Migration nie gelaufen ist
+MISSING="$(docker exec -i "$DB_CT" psql -U supabase_admin -d postgres -tAc "
+  SELECT string_agg(x.t || '.' || x.c, ', ')
+  FROM (VALUES
+    ('tenants','webid_enabled'),
+    ('tenants','allowed_employment_types'),
+    ('tenants','emails_paused'),
+    ('tenants','bewerbung_magic_link_subject'),
+    ('email_send_log','message_id')
+  ) AS x(t,c)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema='public' AND table_name=x.t AND column_name=x.c
+  );" 2>/dev/null | tr -d '[:space:]')"
+if [ -n "$MISSING" ]; then
+  warn "Fehlende Spalten: $MISSING"
+  warn "→ betroffene Migration erneut anwenden (Eintrag aus $STATE entfernen und Skript neu starten)"
+else
+  ok "Schema vollstaendig"
+fi
+
 docker ps --format 'table {{.Names}}\t{{.Status}}' | grep -E 'supabase|NAMES' || true
 echo
 ok "Fertig ✅"
