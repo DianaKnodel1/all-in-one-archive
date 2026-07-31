@@ -345,6 +345,16 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
             Nur die aktivierten Arten stehen Bewerbern dieses Mandanten bei der Registrierung zur Auswahl.
           </p>
         </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-3">
+          <div>
+            <Label className="text-xs">WebID-Identifikation</Label>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Blendet das WebID-Modul für dieses Unternehmen im Mitarbeiter- und Admin-Portal ein bzw. aus.
+              Vorhandene Daten bleiben beim Ausschalten erhalten.
+            </p>
+          </div>
+          <Switch checked={webidEnabled} onCheckedChange={setWebidEnabled} />
+        </div>
 
         {tenant && (
           <div className="space-y-2 pt-2">
