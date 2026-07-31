@@ -427,6 +427,27 @@ function AdminContractsPage() {
               <label className="text-xs font-medium text-muted-foreground">Titel</label>
               <Input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="z.B. Minijob-Vertrag 2026" />
             </div>
+            {!editing && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Vorlage als Startpunkt</label>
+                <Select
+                  value={formPreset}
+                  onValueChange={(v) => {
+                    setFormPreset(v);
+                    setFormContent(v === "homeoffice" ? HOMEOFFICE_CONTRACT_TEMPLATE : DEFAULT_CONTRACT_TEMPLATE);
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standardvertrag</SelectItem>
+                    <SelectItem value="homeoffice">Home-Office / auftragsbezogen</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Der Text wird in das Feld unten geladen und kann anschließend frei angepasst werden.
+                </p>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-muted-foreground">Vertragstext (mit Platzhaltern)</label>
               <Textarea
