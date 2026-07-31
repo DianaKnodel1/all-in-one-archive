@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Globe, Plus, Pencil, Trash2, User, Mail, Loader2, AlertTriangle, CheckCircle2, PenTool, ArrowRightLeft } from "lucide-react";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { SignatureGenerator } from "@/components/SignatureGenerator";
+import { TenantReadinessBadge, TenantReadinessDialog, useTenantReadiness } from "@/components/admin/TenantReadinessPanel";
 
 
 function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void }) {
@@ -1142,6 +1143,8 @@ function AdminTenantsPage() {
   const setDnsFn = useServerFn(setLandingDnsRecord);
   const [smtpHealth, setSmtpHealth] = useState<Record<string, SmtpHealthRow>>({});
   const [testingId, setTestingId] = useState<string | null>(null);
+  const { data: readiness, loading: readinessLoading, reload: reloadReadiness } = useTenantReadiness();
+  const [readinessTenantId, setReadinessTenantId] = useState<string | null>(null);
 
   const loadHealth = async () => {
     const { data } = await supabase
@@ -1347,6 +1350,11 @@ function AdminTenantsPage() {
                     </Badge>
                   )}
                   <SmtpBadge state={smtpStateOf(t, smtpHealth[t.id])} health={smtpHealth[t.id]} />
+                  <TenantReadinessBadge
+                    readiness={readiness[t.id]}
+                    loading={readinessLoading}
+                    onOpen={() => setReadinessTenantId(t.id)}
+                  />
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
