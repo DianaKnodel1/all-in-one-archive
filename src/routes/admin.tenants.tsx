@@ -1426,6 +1426,13 @@ function AdminTenantsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <TenantReadinessDialog
+        readiness={readinessTenantId ? readiness[readinessTenantId] : undefined}
+        open={!!readinessTenantId}
+        onOpenChange={(v) => { if (!v) setReadinessTenantId(null); }}
+        onRefresh={reloadReadiness}
+      />
     </div>
   );
 }
