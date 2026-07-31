@@ -201,6 +201,93 @@ function AdminContractsPage() {
 
   const getTenantName = (id: string) => tenants.find((t) => t.id === id)?.name ?? "Ohne Firma";
 
+  /**
+   * Legt für jede Firma die fehlenden Standardvorlagen (Minijob/Teilzeit/
+   * Vollzeit) an. Bestehende Vorlagen werden nur ersetzt, wenn der Admin das
+   * ausdrücklich anhakt – dann als neue Version, die alte wird deaktiviert.
+   */
+  const rolloutPlan = tenants.map((tenant) => {
+    const own = templates.filter((t) => t.tenant_id === tenant.id);
+    const existing = EMPLOYMENT_ORDER.filter((type) => own.some((t) => t.employment_type === type));
+    return {
+      tenantId: tenant.id,
+      name: tenant.name,
+      missing: EMPLOYMENT_ORDER.filter((type) => !existing.includes(type)),
+      existing,
+    };
+  });
+  const rolloutCreateCount = rolloutPlan.reduce((n, p) => n + p.missing.length, 0);
+  const rolloutReplaceCount = rolloutPlan.reduce((n, p) => n + p.existing.length, 0);
+
+  const runRollout = async () => {
+    setRolloutBusy(true);
+    let created = 0;
+    let replaced = 0;
+    try {
+      for (const plan of rolloutPlan) {
+        const types = rolloutReplace ? EMPLOYMENT_ORDER : plan.missing;
+        for (const type of types) {
+          const content = getStandardContractTemplate(type);
+          const old = templates.filter((t) => t.tenant_id === plan.tenantId && t.employment_type === type);
+          const nextVersion = Math.max(0, ...old.map((t) => t.version)) + 1;
+          const { error } = await supabase.from("contract_templates").insert({
+            tenant_id: plan.tenantId,
+            employment_type: type as any,
+            title: standardContractTitle(type),
+            content,
+            body_html: content,
+            version: nextVersion,
+            is_active: true,
+          });
+          if (error) throw new Error(error.message);
+          if (old.length > 0) {
+            replaced++;
+            await supabase
+              .from("contract_templates")
+              .update({ is_active: false })
+              .in("id", old.map((t) => t.id));
+          } else {
+            created++;
+          }
+        }
+      }
+      toast({
+        title: "Standardvorlage ausgerollt",
+        description: `${created} neu angelegt${replaced ? `, ${replaced} ersetzt` : ""}.`,
+      });
+      setRolloutOpen(false);
+      setRolloutReplace(false);
+      loadTemplates();
+    } catch (e: any) {
+      toast({ title: "Fehler beim Ausrollen", description: e.message, variant: "destructive" });
+    } finally {
+      setRolloutBusy(false);
+    }
+  };
+
+  /** Fehlende Beschäftigungsarten einer einzelnen Firma ergänzen. */
+  const fillMissingForTenant = async (tenantId: string) => {
+    const own = templates.filter((t) => t.tenant_id === tenantId);
+    const missing = EMPLOYMENT_ORDER.filter((type) => !own.some((t) => t.employment_type === type));
+    if (missing.length === 0) {
+      toast({ title: "Nichts zu ergänzen", description: "Alle Beschäftigungsarten sind vorhanden." });
+      return;
+    }
+    for (const type of missing) {
+      const content = getStandardContractTemplate(type);
+      await supabase.from("contract_templates").insert({
+        tenant_id: tenantId,
+        employment_type: type as any,
+        title: standardContractTitle(type),
+        content,
+        body_html: content,
+        is_active: true,
+      });
+    }
+    toast({ title: `${missing.length} Vorlage(n) ergänzt` });
+    loadTemplates();
+  };
+
   const q = search.trim().toLowerCase();
   const filtered = templates.filter((t) => {
     if (filterTenant !== "all" && t.tenant_id !== filterTenant) return false;
