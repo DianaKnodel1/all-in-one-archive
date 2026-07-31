@@ -11,6 +11,7 @@ import { compressImage } from "@/lib/image-compression";
 import { useAllTenants, type Tenant } from "@/hooks/use-tenant";
 import { switchToNewPrimaryDomain } from "@/lib/tenant-domains.functions";
 import { setLandingDnsRecord } from "@/lib/cloudflare.functions";
+import { runSmtpTestServerSide } from "@/lib/smtp-test.functions";
 
 // IP des Portal-Servers (Frontend). DNS-A-Record für portal.<tenant-domain>
 // wird beim Speichern eines Tenants automatisch in Cloudflare angelegt/aktualisiert.
@@ -70,6 +71,7 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const setDnsFn = useServerFn(setLandingDnsRecord);
+  const smtpTestFallback = useServerFn(runSmtpTestServerSide);
   const leaderInitials = (leaderName || "T").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const smtpConfigured = !!(smtpHost.trim() && smtpUsername.trim() && smtpPassword.trim() && senderEmail.trim());
 
@@ -1175,11 +1177,27 @@ function AdminTenantsPage() {
   const runSmtpTest = async (t: Tenant) => {
     setTestingId(t.id);
     try {
-      const { data, error } = await supabase.functions.invoke<any>("smtp-test", { body: { tenant_id: t.id } });
-      if (error) throw error;
+      let data: any = null;
+      try {
+        const res = await supabase.functions.invoke<any>("smtp-test", { body: { tenant_id: t.id } });
+        if (res.error) throw res.error;
+        data = res.data;
+      } catch {
+        // Browser erreicht die Prüf-Funktion nicht (CORS/Netz/Deploy) —
+        // zweiter Versuch über den Portal-Server.
+        data = await smtpTestFallback({ data: { tenant_id: t.id } });
+        if (data?.reachable === false) {
+          toast({
+            title: "Prüf-Funktion nicht erreichbar",
+            description: `${data?.error ?? "Backend antwortet nicht."} Das ist kein SMTP-Fehler — bitte Backend deployen.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
       if (data?.success === false) {
         toast({
-          title: "SMTP-Test fehlgeschlagen",
+          title: data?.errorCode === "AUTH_ERROR" ? "SMTP-Login abgelehnt" : "SMTP-Test fehlgeschlagen",
           description: data?.error ?? "Unbekannter Fehler",
           variant: "destructive",
         });
