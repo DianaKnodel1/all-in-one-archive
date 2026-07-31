@@ -1,64 +1,54 @@
 ## Ziel
 
-1. Die Vertrags-Templates-Seite wird nach Unternehmen gruppiert, damit sie auch bei 10–15 Firmen (30–45 Verträgen) übersichtlich bleibt.
-2. Der neue efficacitas-Arbeitsvertrag wird als fertige Vorlage mit Platzhaltern eingebaut, sodass du ihn mit einem Klick übernehmen kannst.
+Der von dir geschickte Vertrag wird zur **Standardvorlage** – in identischer Schreibweise für Minijob, Teilzeit und Vollzeit. Firmendaten und Bewerber-/Mitarbeiterdaten kommen automatisch aus dem jeweiligen Mandanten bzw. der Person.
 
-## Teil 1 – Gruppierung nach Unternehmen
+## 1. Der Vertragstext als kanonische Vorlage
 
-Wichtig vorab: Es braucht **keine neue Datenbanktabelle und keine echte "Gruppe"**. Jedes Template hat bereits eine Firmenzuordnung (`tenant_id`). Die Gruppe wird also rein in der Darstellung gebildet – automatisch, ohne Pflegeaufwand, ohne Migrationsrisiko. Neue Firmen erscheinen sofort als eigener Block.
+Der Text liegt bereits fast fertig als Vorlage „Home-Office / auftragsbezogen" in der Vertrags-Templates-Seite. Er wird zur **Standardvorlage** hochgestuft (die alte, kürzere „Standardvertrag"-Variante wandert nach hinten bzw. entfällt als Vorauswahl).
 
-Umbau der Seite „Vertrags-Templates":
+Automatisch ersetzt werden:
 
-```text
-▾ UWK Consulting GmbH                       3 Vorlagen · 3 aktiv
-    Minijob    · Minijob Vertrag      v1   [an] ✎ ⧉ 🗑
-    Teilzeit   · Teilzeit Vertrag     v1   [an] ✎ ⧉ 🗑
-    Vollzeit   · Vollzeit Vertrag     v1   [an] ✎ ⧉ 🗑
-▸ BV Agentur                                3 Vorlagen · 3 aktiv
-▸ Kadermarketing Agentur                    3 Vorlagen · 2 aktiv
-▸ Digital DGI GmbH                          3 Vorlagen · 3 aktiv
-```
-
-- Jede Firma wird ein aufklappbarer Block (Accordion) mit Firmenname, Anzahl Vorlagen und Anzahl aktiver Vorlagen.
-- Standard: alle Blöcke zugeklappt, außer es ist nur eine Firma vorhanden oder ein Firmenfilter ist gesetzt.
-- Innerhalb einer Firma werden die Vorlagen fest nach Minijob → Teilzeit → Vollzeit sortiert, nicht nach Erstellungsdatum.
-- Warnhinweis pro Firma, wenn eine Beschäftigungsart ohne aktive Vorlage ist (z. B. „Teilzeit: keine aktive Vorlage") – das ist heute die häufigste stille Fehlerquelle bei der Vertragsgenerierung.
-- Zusätzlich ein Suchfeld über Titel/Firma; die bestehenden Filter (Firma, Typ) bleiben.
-- Die Seitennummerierung entfällt zugunsten der Gruppierung (aufgeklappt wird immer nur eine Firma).
-- Die große Platzhalter-Box wird zu einem einklappbaren Hinweis („Verfügbare Platzhalter anzeigen"), damit die Liste sofort sichtbar ist.
-
-Alle Aktionen (aktiv schalten, bearbeiten, duplizieren, löschen) bleiben unverändert – nur Darstellung.
-
-## Teil 2 – Neuer Arbeitsvertrag als Vorlage
-
-Der von dir geschickte efficacitas-Vertrag wird 1:1 als Vorlagentext hinterlegt, mit Platzhaltern statt fester Daten. Im Dialog „Neues Template" kommt oben eine Auswahl „Vorlage als Startpunkt": *Standardvertrag* oder *Home-Office / auftragsbezogen (efficacitas-Form)*. Auswahl füllt das Textfeld, danach frei editierbar.
-
-Ersetzt werden:
-
-| Im Originaltext | Platzhalter |
+| Im Vertrag | Quelle |
 |---|---|
-| efficacitas GmbH | `{{company_name}}` |
-| Korbacher Str. 20 / 34508 Willingen | `{{company_address}}` |
-| Vertreten durch Silvia Köster | `{{company_ceo_name}}` |
-| Hassan Abdelkader | `{{first_name}} {{last_name}}` |
-| Münchener Str. 57, 85051 Ingolstadt | `{{address}}` |
-| beginnt am 16.06.2026 | `{{start_date}}` |
-| bis zu € 603,- netto | `{{monthly_salary}}` |
-| bis zu 6 Wochenstunden | `{{weekly_hours}}` |
-| Willingen, den 16.06.2026 | `{{company_city}}, den {{date}}` |
-| Ingolstadt, Hassan Abdelkader | `{{city}}, {{first_name}} {{last_name}}` |
+| efficacitas GmbH | Firmenname des Mandanten |
+| Korbacher Str. 20, 34508 Willingen | Firmenadresse des Mandanten |
+| Silvia Köster | Geschäftsführer/in des Mandanten |
+| Hassan Abdelkader | Vor-/Nachname der Person |
+| Münchener Str. 57, 85051 Ingolstadt | Adresse der Person |
+| 16.06.2026 (Beginn) | Startdatum des Arbeitsverhältnisses |
+| € 603,- netto | Gehalt (individuell → Mandant → Standard je Art) |
+| bis zu 6 Wochenstunden | Wochenstunden (individuell → Standard je Art) |
+| Willingen, den … / Ingolstadt, … | Firmenstadt + Datum / Wohnort + Name |
 
-Der versehentlich mitkopierte Chat-Zeitstempel („[16.06.2026 16:16] Geld NochMehrGeld:") vor § 7 wird entfernt.
+Der Chat-Zeitstempel („[16.06.2026 16:16] Geld NochMehrGeld:") kommt nicht in die Vorlage.
 
-Zwei Werte gibt es heute noch nicht als Platzhalter:
+## 2. Die drei Beschäftigungsarten
 
-- **Stellenbezeichnung** („Mobile-App-Prüfer/in via Home-Office (m/w/d)") – bleibt als fester Text in der Vorlage und ist pro Firma im Editor anpassbar. Ein eigener Platzhalter wäre nur sinnvoll, wenn die Bezeichnung pro Mitarbeiter variiert; sag Bescheid, dann ergänze ich `{{job_title}}` inkl. Feld in der Mandantenverwaltung.
-- **Probezeitdauer (3 Monate)** – bleibt fester Text.
+Gleicher Wortlaut, nur diese Stellen unterscheiden sich (sonst wäre der Text juristisch unsauber):
 
-Da die Vergütung hier auftragsbezogen ist („bis zu … netto"), passen die vorhandenen Standardwerte pro Beschäftigungsart (Minijob 556 €, Teilzeit 1.200 €, Vollzeit 2.400 €). Für die 603 € kannst du entweder beim Mitarbeiter ein individuelles Gehalt hinterlegen (gibt es bereits) oder ich setze den Betrag fest in die Vorlage – sag mir, was dir lieber ist; Standard meiner Umsetzung: Platzhalter `{{monthly_salary}}`, damit es pro Mitarbeiter steuerbar bleibt.
+- **§ 4 Arbeitszeit**: Minijob „bis zu {{weekly_hours}} Wochenstunden auf Nebenjobbasis", Teilzeit „bis zu {{weekly_hours}} Wochenstunden in Teilzeit", Vollzeit „{{weekly_hours}} Wochenstunden in Vollzeit".
+- **§ 3 Vergütung**: der Satz zur Minijob-Grenze („Sollte das Guthaben … Minijob-Grenze überschreiten") bleibt nur beim Minijob; bei Teilzeit/Vollzeit entfällt er.
+- Standardwerte, wenn nichts hinterlegt ist: Minijob 556 € / 10 Std., Teilzeit 1.200 € / 20 Std., Vollzeit 2.400 € / 40 Std. Individuelle Werte pro Person (Admin → Personen → Individueller Arbeitsvertrag) haben immer Vorrang.
+
+Alles andere (§ 1, 2, 5–11, Stellenbezeichnung „Mobile-App-Prüfer/in via Home-Office (m/w/d)", Probezeit 3 Monate) bleibt in allen drei Varianten wortgleich.
+
+## 3. Ausrollen auf alle Firmen
+
+Auf der Seite „Vertrags-Templates" kommt ein Button **„Standardvorlage für alle Firmen anlegen"**:
+
+- legt je Mandant die fehlenden Vorlagen für Minijob/Teilzeit/Vollzeit an und setzt sie aktiv;
+- **überschreibt nichts** ohne Rückfrage: existiert für eine Firma+Art bereits eine Vorlage, wird sie in der Vorschau als „vorhanden – wird übersprungen" gelistet, mit optionalem Häkchen „bestehende Vorlagen durch neue Version ersetzen" (dann als neue Version, alte bleibt im Verlauf).
+- Vorher-Dialog zeigt genau, was angelegt/ersetzt wird.
+
+Zusätzlich pro Firmenblock ein kleiner Button „fehlende Arten ergänzen".
+
+## 4. Fallback, wenn eine Firma keine Vorlage hat
+
+Der eingebaute Notfall-Vertrag (heute ein anderer, längerer Text mit festen 603 € und Minijob-Bezug) wird durch denselben Standardtext ersetzt, damit ein Mitarbeiter nie einen abweichenden Vertrag sieht.
 
 ## Technische Details
 
-- Betroffene Datei: `src/routes/admin.contracts.tsx` (Gruppierung, Suchfeld, Vorlagenauswahl, zweiter Vorlagentext als Konstante).
-- Keine Datenbankänderung, keine Migration, keine Änderung an der Vertragserzeugung (`src/lib/contract-utils.ts`) – bestehende Verträge und Signaturen bleiben unangetastet.
-- `usePagination` entfällt auf dieser Seite; `PaginationBar` bleibt für andere Seiten erhalten.
+- `src/lib/contract-templates.ts` (neu): kanonischer Vorlagentext + Variantenlogik je Beschäftigungsart, als einzige Quelle.
+- `src/routes/admin.contracts.tsx`: Vorlagenauswahl auf Standard umstellen, Bulk-Rollout-Dialog, „fehlende Arten ergänzen".
+- `src/lib/contract-utils.ts`: `generateFallbackContract` nutzt die neue Quelle; Platzhalter-Auflösung bleibt unverändert.
+- Keine Datenbank-Migration nötig – es werden nur Zeilen in `contract_templates` angelegt. Bereits unterschriebene Verträge bleiben unberührt (die sind als Text gespeichert).
