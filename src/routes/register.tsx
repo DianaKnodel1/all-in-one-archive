@@ -119,6 +119,27 @@ function RegisterPage() {
   // Marker: wenn true, hat ein Invitation-Token den Tenant gesetzt und darf
   // NICHT mehr von der Domain überschrieben werden.
   const [tenantFromInvitation, setTenantFromInvitation] = useState(false);
+  // Vom Mandanten freigegebene Vertragsarten (Default: alle drei)
+  const [allowedEmploymentTypes, setAllowedEmploymentTypes] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    (supabase.from("tenants") as any)
+      .select("allowed_employment_types")
+      .eq("id", tenantId)
+      .maybeSingle()
+      .then(({ data }: any) => {
+        if (cancelled) return;
+        const list: string[] = Array.isArray(data?.allowed_employment_types)
+          ? data.allowed_employment_types
+          : [];
+        setAllowedEmploymentTypes(list);
+        // Bereits gewählte, aber nicht mehr erlaubte Art zurücksetzen
+        setEmploymentType((cur) => (cur && list.length > 0 && !list.includes(cur) ? "" : cur));
+      });
+    return () => { cancelled = true; };
+  }, [tenantId]);
 
   // Tenant IMMER aus der aktuellen Domain ableiten (per Subdomain-Routing).
   // Sessionstorage-Cache wird bewusst NICHT verwendet, weil sonst ein
@@ -498,6 +519,7 @@ function RegisterPage() {
           {step === 4 && (
             <StepEmployment
               employmentType={employmentType} setEmploymentType={setEmploymentType}
+              allowedTypes={allowedEmploymentTypes}
               startDate={startDate} setStartDate={setStartDate}
               onNext={handleFinalSubmit} onBack={() => setStep(3)} loading={loading}
             />

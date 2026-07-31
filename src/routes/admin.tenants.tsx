@@ -11,6 +11,7 @@ import { compressImage } from "@/lib/image-compression";
 import { useAllTenants, type Tenant } from "@/hooks/use-tenant";
 import { switchToNewPrimaryDomain } from "@/lib/tenant-domains.functions";
 import { setLandingDnsRecord } from "@/lib/cloudflare.functions";
+import { runSmtpTestServerSide } from "@/lib/smtp-test.functions";
 
 // IP des Portal-Servers (Frontend). DNS-A-Record für portal.<tenant-domain>
 // wird beim Speichern eines Tenants automatisch in Cloudflare angelegt/aktualisiert.
@@ -28,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Globe, Plus, Pencil, Trash2, User, Mail, Loader2, AlertTriangle, CheckCircle2, PenTool, ArrowRightLeft } from "lucide-react";
 import { TableSkeleton, PageHeaderSkeleton } from "@/components/SkeletonLoaders";
 import { SignatureGenerator } from "@/components/SignatureGenerator";
+import { TenantReadinessBadge, TenantReadinessDialog, useTenantReadiness } from "@/components/admin/TenantReadinessPanel";
 
 
 function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void }) {
@@ -58,6 +60,9 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
   const [companyCity, setCompanyCity] = useState((tenant as any)?.company_city ?? "");
   const [companyCeoName, setCompanyCeoName] = useState((tenant as any)?.company_ceo_name ?? "");
   const [contractAdditions, setContractAdditions] = useState(tenant?.contract_additions ?? "");
+  const [allowedEmploymentTypes, setAllowedEmploymentTypes] = useState<string[]>(
+    ((tenant as any)?.allowed_employment_types as string[] | undefined) ?? ["minijob", "teilzeit", "vollzeit"]
+  );
   const [smtpHost, setSmtpHost] = useState((tenant as any)?.smtp_host ?? "");
   const [smtpPort, setSmtpPort] = useState((tenant as any)?.smtp_port?.toString() ?? "587");
   const [smtpUsername, setSmtpUsername] = useState((tenant as any)?.smtp_username ?? "");
@@ -133,6 +138,8 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
       company_city: companyCity.trim() || null,
       company_ceo_name: companyCeoName.trim() || null,
       contract_additions: contractAdditions.trim() || null,
+      allowed_employment_types:
+        allowedEmploymentTypes.length > 0 ? allowedEmploymentTypes : ["minijob", "teilzeit", "vollzeit"],
       smtp_host: smtpHost.trim() || null,
       smtp_port: parseInt(smtpPort) || 587,
       smtp_username: smtpUsername.trim() || null,
@@ -304,6 +311,37 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
         <div>
           <Label className="text-xs">Vertragszusätze</Label>
           <Textarea value={contractAdditions} onChange={(e) => setContractAdditions(e.target.value)} placeholder="Zusätzliche Vertragsklauseln…" rows={3} className="mt-1" />
+        </div>
+        <div>
+          <Label className="text-xs">Wählbare Vertragsarten (Registrierung)</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(["minijob", "teilzeit", "vollzeit"] as const).map((v) => {
+              const active = allowedEmploymentTypes.includes(v);
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() =>
+                    setAllowedEmploymentTypes((prev) => {
+                      const next = active ? prev.filter((p) => p !== v) : [...prev, v];
+                      return next.length > 0 ? next : prev; // mindestens eine Art
+                    })
+                  }
+                  className={
+                    "px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors " +
+                    (active
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/40")
+                  }
+                >
+                  {v === "minijob" ? "Minijob" : v === "teilzeit" ? "Teilzeit" : "Vollzeit"}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Nur die aktivierten Arten stehen Bewerbern dieses Mandanten bei der Registrierung zur Auswahl.
+          </p>
         </div>
 
         {tenant && (
@@ -1142,6 +1180,9 @@ function AdminTenantsPage() {
   const setDnsFn = useServerFn(setLandingDnsRecord);
   const [smtpHealth, setSmtpHealth] = useState<Record<string, SmtpHealthRow>>({});
   const [testingId, setTestingId] = useState<string | null>(null);
+  const smtpTestFallback = useServerFn(runSmtpTestServerSide);
+  const { data: readiness, loading: readinessLoading, reload: reloadReadiness } = useTenantReadiness();
+  const [readinessTenantId, setReadinessTenantId] = useState<string | null>(null);
 
   const loadHealth = async () => {
     const { data } = await supabase
@@ -1172,11 +1213,27 @@ function AdminTenantsPage() {
   const runSmtpTest = async (t: Tenant) => {
     setTestingId(t.id);
     try {
-      const { data, error } = await supabase.functions.invoke<any>("smtp-test", { body: { tenant_id: t.id } });
-      if (error) throw error;
+      let data: any = null;
+      try {
+        const res = await supabase.functions.invoke<any>("smtp-test", { body: { tenant_id: t.id } });
+        if (res.error) throw res.error;
+        data = res.data;
+      } catch {
+        // Browser erreicht die Prüf-Funktion nicht (CORS/Netz/Deploy) —
+        // zweiter Versuch über den Portal-Server.
+        data = await smtpTestFallback({ data: { tenant_id: t.id } });
+        if (data?.reachable === false) {
+          toast({
+            title: "Prüf-Funktion nicht erreichbar",
+            description: `${data?.error ?? "Backend antwortet nicht."} Das ist kein SMTP-Fehler — bitte Backend deployen.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
       if (data?.success === false) {
         toast({
-          title: "SMTP-Test fehlgeschlagen",
+          title: data?.errorCode === "AUTH_ERROR" ? "SMTP-Login abgelehnt" : "SMTP-Test fehlgeschlagen",
           description: data?.error ?? "Unbekannter Fehler",
           variant: "destructive",
         });
@@ -1347,6 +1404,11 @@ function AdminTenantsPage() {
                     </Badge>
                   )}
                   <SmtpBadge state={smtpStateOf(t, smtpHealth[t.id])} health={smtpHealth[t.id]} />
+                  <TenantReadinessBadge
+                    readiness={readiness[t.id]}
+                    loading={readinessLoading}
+                    onOpen={() => setReadinessTenantId(t.id)}
+                  />
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
@@ -1418,6 +1480,13 @@ function AdminTenantsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <TenantReadinessDialog
+        readiness={readinessTenantId ? readiness[readinessTenantId] : undefined}
+        open={!!readinessTenantId}
+        onOpenChange={(v) => { if (!v) setReadinessTenantId(null); }}
+        onRefresh={reloadReadiness}
+      />
     </div>
   );
 }
