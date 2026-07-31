@@ -71,7 +71,6 @@ function TenantForm({ tenant, onSaved }: { tenant?: Tenant; onSaved: () => void 
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const setDnsFn = useServerFn(setLandingDnsRecord);
-  const smtpTestFallback = useServerFn(runSmtpTestServerSide);
   const leaderInitials = (leaderName || "T").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const smtpConfigured = !!(smtpHost.trim() && smtpUsername.trim() && smtpPassword.trim() && senderEmail.trim());
 
@@ -1145,6 +1144,7 @@ function AdminTenantsPage() {
   const setDnsFn = useServerFn(setLandingDnsRecord);
   const [smtpHealth, setSmtpHealth] = useState<Record<string, SmtpHealthRow>>({});
   const [testingId, setTestingId] = useState<string | null>(null);
+  const smtpTestFallback = useServerFn(runSmtpTestServerSide);
   const { data: readiness, loading: readinessLoading, reload: reloadReadiness } = useTenantReadiness();
   const [readinessTenantId, setReadinessTenantId] = useState<string | null>(null);
 
