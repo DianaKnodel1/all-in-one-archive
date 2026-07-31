@@ -99,9 +99,10 @@ function AdminEmailCenterPage() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
 
   /**
-   * Doppelversand-Wächter: gleiche Vorlage + gleicher Empfänger mehrfach
-   * innerhalb von 24 h erfolgreich versendet. Das darf nicht vorkommen und
-   * deutet auf einen hängenden Reminder-Lauf hin.
+   * Doppelversand-Wächter: gleiche Vorlage + gleicher Empfänger + GLEICHER
+   * Vorgang (application_id) mehrfach innerhalb von 24 h erfolgreich versendet.
+   * Der Vorgang muss mit rein: dieselbe Person kann sich zweimal bewerben —
+   * dann sind zwei Mails derselben Vorlage korrekt und kein Fehler.
    */
   const duplicates = useMemo(() => {
     const since = Date.now() - 24 * 3600_000;
@@ -109,7 +110,10 @@ function AdminEmailCenterPage() {
     for (const r of rows) {
       if (r.status !== "sent") continue;
       if (new Date(r.created_at).getTime() < since) continue;
-      const key = `${r.template_name ?? "?"}|${(r.recipient_email ?? "").toLowerCase()}`;
+      const meta = (r.metadata ?? {}) as Record<string, unknown>;
+      const subject = String(meta.application_id ?? meta.appointment_id ?? meta.event_key ?? "");
+      // Ohne Vorgangsbezug bleibt es beim alten Verhalten (Vorlage + Empfänger).
+      const key = `${r.template_name ?? "?"}|${(r.recipient_email ?? "").toLowerCase()}|${subject}`;
       const g = groups.get(key);
       if (g) { g.count++; if (r.created_at > g.last) g.last = r.created_at; }
       else groups.set(key, { template: r.template_name ?? "?", recipient: r.recipient_email ?? "", count: 1, last: r.created_at });
