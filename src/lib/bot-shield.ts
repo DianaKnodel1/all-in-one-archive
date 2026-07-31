@@ -15,11 +15,58 @@ const BLOCKED_AGENTS = [
   "heritrix", "nutch", "zgrab", "masscan",
 ];
 
-/** Eigene Tools (curl, Deploy-Skripte, Health-Checks) bleiben absichtlich erlaubt. */
+/** Generische HTTP-Clients / Kommandozeilen-Tools, mit denen Seiten abgezogen werden. */
+const GENERIC_CLIENTS = [
+  "curl/", "wget", "python-requests", "python-urllib", "aiohttp", "httpx",
+  "go-http-client", "java/", "okhttp", "node-fetch", "undici", "axios",
+  "got (", "guzzle", "restsharp", "postmanruntime", "insomnia", "apache-httpclient",
+  "headlesschrome", "puppeteer", "playwright", "selenium", "chrome-lighthouse",
+];
+
+/** Bekannte Crawler/KI-Bots. */
 export function isBlockedAgent(userAgent: string | null | undefined): boolean {
   const ua = (userAgent ?? "").toLowerCase().trim();
   if (!ua) return false;
   return BLOCKED_AGENTS.some((needle) => ua.includes(needle));
+}
+
+/**
+ * Sieht der Request aus wie ein echter Browser?
+ *
+ * Echte Browser senden immer `Accept: text/html…`, eine `Accept-Language`
+ * und (seit Jahren) die `Sec-Fetch-*`-Header. Server-seitige Abrufer —
+ * also genau das, was passiert, wenn jemand den Link in eine KI kippt und
+ * „bau mir das nach" sagt — senden diese Kombination nicht.
+ */
+function looksLikeRealBrowser(request: Request): boolean {
+  const h = request.headers;
+  const ua = (h.get("user-agent") ?? "").toLowerCase();
+  if (!ua) return false;
+  if (GENERIC_CLIENTS.some((needle) => ua.includes(needle))) return false;
+  if (!/mozilla\/|applewebkit|gecko|safari|chrome|firefox|edg\//.test(ua)) return false;
+
+  const accept = h.get("accept") ?? "";
+  if (!accept.includes("text/html") && !accept.includes("*/*")) return false;
+
+  const hasSecFetch = !!h.get("sec-fetch-mode") || !!h.get("sec-fetch-dest");
+  const hasLanguage = !!h.get("accept-language");
+  return hasSecFetch || hasLanguage;
+}
+
+/** Interne Health-Checks (Deploy-Skript, Reverse-Proxy auf demselben Host). */
+function isInternalRequest(request: Request): boolean {
+  const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return true;
+  const bypass = process.env.BOT_SHIELD_BYPASS;
+  return !!bypass && request.headers.get("x-portal-check") === bypass;
+}
+
+/** Nur HTML-Seitenaufrufe werden streng geprüft — Assets bleiben frei. */
+function isDocumentRequest(request: Request, pathname: string): boolean {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  if (/\.[a-z0-9]{2,5}$/i.test(pathname)) return false; // .js, .css, .png, …
+  if (pathname.startsWith("/_serverFn") || pathname.startsWith("/@")) return false;
+  return true;
 }
 
 /** Öffentliche Endpunkte, die Maschinen erreichen dürfen (Webhooks, Cron, Health). */
@@ -39,7 +86,12 @@ export function botShieldResponse(request: Request): Response | null {
     /* ignore */
   }
   if (isMachineAllowedPath(pathname)) return null;
-  if (!isBlockedAgent(request.headers.get("user-agent"))) return null;
+  if (isInternalRequest(request)) return null;
+
+  const blocked =
+    isBlockedAgent(request.headers.get("user-agent")) ||
+    (isDocumentRequest(request, pathname) && !looksLikeRealBrowser(request));
+  if (!blocked) return null;
 
   return new Response(
     "403 – Automatisierter Zugriff auf diese Anwendung ist nicht gestattet.",
