@@ -258,6 +258,15 @@ function AdminContractsPage() {
             {Object.entries(EMPLOYMENT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Vorlage oder Firma suchen…"
+            className="pl-8"
+          />
+        </div>
       </div>
 
       {/* Placeholder Info */}
@@ -265,7 +274,15 @@ function AdminContractsPage() {
         <CardContent className="py-3 px-4 flex items-start gap-2">
           <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
           <div className="text-xs text-muted-foreground space-y-2 flex-1">
-            <p className="font-medium text-foreground">Verfügbare Platzhalter</p>
+            <button
+              type="button"
+              onClick={() => setShowPlaceholders((v) => !v)}
+              className="font-medium text-foreground flex items-center gap-1"
+            >
+              Verfügbare Platzhalter
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showPlaceholders ? "rotate-180" : ""}`} />
+            </button>
+            {showPlaceholders && (<>
             <p className="text-[11px]">
               Wichtig: <code className="bg-muted px-1 rounded">{`{{address}}`}</code> und <code className="bg-muted px-1 rounded">{`{{city}}`}</code> beziehen sich auf den <b>Arbeitnehmer</b>.
               Für die Firmenadresse <b>immer</b> <code className="bg-muted px-1 rounded">{`{{company_address}}`}</code> / <code className="bg-muted px-1 rounded">{`{{company_city}}`}</code> verwenden.
@@ -283,6 +300,7 @@ function AdminContractsPage() {
                 </ul>
               </div>
             ))}
+            </>)}
           </div>
         </CardContent>
       </Card>
@@ -299,20 +317,45 @@ function AdminContractsPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {paged.map((t) => (
-            <Card key={t.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="py-4 px-5 flex items-center gap-4">
+          {groups.map((group) => (
+          <Collapsible key={group.tenantId} open={isOpen(group.tenantId)} onOpenChange={() => toggleGroup(group.tenantId)}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="w-full text-left px-5 py-4 flex items-center gap-3 hover:bg-muted/40 transition-colors rounded-lg">
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen(group.tenantId) ? "" : "-rotate-90"}`} />
+                  <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="font-semibold text-foreground truncate">{group.name}</span>
+                  <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                    {group.items.length} {group.items.length === 1 ? "Vorlage" : "Vorlagen"} ·{" "}
+                    {group.items.filter((i) => i.is_active).length} aktiv
+                  </span>
+                  {group.missing.length > 0 && (
+                    <Badge variant="outline" className="text-[10px] gap-1 border-amber-500/50 text-amber-600 shrink-0">
+                      <AlertTriangle className="h-3 w-3" />
+                      {group.missing.map((m) => EMPLOYMENT_LABELS[m]).join(", ")} fehlt
+                    </Badge>
+                  )}
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-3 pb-3 space-y-2">
+                  {group.missing.length > 0 && (
+                    <p className="text-[11px] text-amber-600 px-2">
+                      Ohne aktive Vorlage kann für diese Beschäftigungsart kein Vertrag erzeugt werden:{" "}
+                      {group.missing.map((m) => EMPLOYMENT_LABELS[m]).join(", ")}.
+                    </p>
+                  )}
+                  {group.items.map((t) => (
+            <div key={t.id} className="rounded-md border border-border/60 bg-muted/20 py-3 px-4 flex items-center gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-foreground truncate">{t.title}</p>
+                    <Badge variant="outline" className="text-[10px]">{EMPLOYMENT_LABELS[t.employment_type] ?? t.employment_type}</Badge>
+                    <p className="font-medium text-foreground truncate">{t.title}</p>
                     <Badge variant={t.is_active ? "default" : "secondary"} className="text-[10px]">
                       {t.is_active ? "Aktiv" : "Inaktiv"}
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">v{t.version}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {getTenantName(t.tenant_id)} · {EMPLOYMENT_LABELS[t.employment_type] ?? t.employment_type}
-                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Switch checked={t.is_active} onCheckedChange={() => toggleActive(t)} />
@@ -343,10 +386,13 @@ function AdminContractsPage() {
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
-              </CardContent>
+            </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
             </Card>
+          </Collapsible>
           ))}
-          <PaginationBar page={page} pageCount={pageCount} setPage={setPage} rangeFrom={rangeFrom} rangeTo={rangeTo} total={total} />
         </div>
       )}
 
