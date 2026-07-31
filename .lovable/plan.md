@@ -1,54 +1,119 @@
+# WebID-Simulationsumgebung — Konzept & Plan
+
 ## Ziel
 
-Der von dir geschickte Vertrag wird zur **Standardvorlage** – in identischer Schreibweise für Minijob, Teilzeit und Vollzeit. Firmendaten und Bewerber-/Mitarbeiterdaten kommen automatisch aus dem jeweiligen Mandanten bzw. der Person.
+Ein Original-WebID-Gateway-Link (z. B. `https://webid-gateway.de/service/status/cn/000631/aid/620631658`)
+lässt sich durch reines Austauschen der Domain in einen Simulationslink verwandeln
+(z. B. `https://webid.uwk-consulting.de/service/status/cn/000631/aid/620631658`).
+Pfad und Parameter bleiben 1:1 erhalten. Beim Aufruf wird die echte
+WebID-Oberfläche transparent durchgereicht, aber eindeutig als Simulation
+gekennzeichnet.
 
-## 1. Der Vertragstext als kanonische Vorlage
+## Kernprinzip: transparenter Reverse-Proxy
 
-Der Text liegt bereits fast fertig als Vorlage „Home-Office / auftragsbezogen" in der Vertrags-Templates-Seite. Er wird zur **Standardvorlage** hochgestuft (die alte, kürzere „Standardvertrag"-Variante wandert nach hinten bzw. entfällt als Vorauswahl).
+Die Simulationsdomain ist ein dünner HTTP-Proxy vor `webid-gateway.de`:
 
-Automatisch ersetzt werden:
+```text
+Teilnehmer ── https://webid.uwk-consulting.de/<pfad>
+                │
+                ▼
+        Simulations-Server ── holt ── https://webid-gateway.de/<pfad>
+                │  (rewritet HTML/CSS/JS-URLs, injiziert Overlay)
+                ▼
+        Antwort an Teilnehmer
+```
 
-| Im Vertrag | Quelle |
-|---|---|
-| efficacitas GmbH | Firmenname des Mandanten |
-| Korbacher Str. 20, 34508 Willingen | Firmenadresse des Mandanten |
-| Silvia Köster | Geschäftsführer/in des Mandanten |
-| Hassan Abdelkader | Vor-/Nachname der Person |
-| Münchener Str. 57, 85051 Ingolstadt | Adresse der Person |
-| 16.06.2026 (Beginn) | Startdatum des Arbeitsverhältnisses |
-| € 603,- netto | Gehalt (individuell → Mandant → Standard je Art) |
-| bis zu 6 Wochenstunden | Wochenstunden (individuell → Standard je Art) |
-| Willingen, den … / Ingolstadt, … | Firmenstadt + Datum / Wohnort + Name |
+Es werden **keine** Formulardaten abgefangen, gespeichert oder umgeleitet
+— die Simulation ist nur eine Sichtebene.
 
-Der Chat-Zeitstempel („[16.06.2026 16:16] Geld NochMehrGeld:") kommt nicht in die Vorlage.
+## Simulations-Markierungen (Pflicht, immer sichtbar)
 
-## 2. Die drei Beschäftigungsarten
+1. **Topbar** oben, volle Breite, hoher Kontrast:
+   „⚠ SIMULATIONSUMGEBUNG – Keine echte Identifikation. Zu Schulungszwecken."
+2. **Hinweis-Popup** beim ersten Seitenaufruf pro Session, muss aktiv
+   bestätigt werden, bevor die Seite bedienbar wird.
+3. **Seitentitel** wird zu `[SIMULATION] <Originaltitel>` umgeschrieben.
+4. **Firmenlogo** (UWK/Kunde) unten rechts als fixierter Badge.
+5. **Favicon** wird durch ein Simulations-Favicon ersetzt.
 
-Gleicher Wortlaut, nur diese Stellen unterscheiden sich (sonst wäre der Text juristisch unsauber):
+Serverseitig ins HTML injiziert und per CSP so verankert, dass Skripte
+der Zielseite sie nicht entfernen.
 
-- **§ 4 Arbeitszeit**: Minijob „bis zu {{weekly_hours}} Wochenstunden auf Nebenjobbasis", Teilzeit „bis zu {{weekly_hours}} Wochenstunden in Teilzeit", Vollzeit „{{weekly_hours}} Wochenstunden in Vollzeit".
-- **§ 3 Vergütung**: der Satz zur Minijob-Grenze („Sollte das Guthaben … Minijob-Grenze überschreiten") bleibt nur beim Minijob; bei Teilzeit/Vollzeit entfällt er.
-- Standardwerte, wenn nichts hinterlegt ist: Minijob 556 € / 10 Std., Teilzeit 1.200 € / 20 Std., Vollzeit 2.400 € / 40 Std. Individuelle Werte pro Person (Admin → Personen → Individueller Arbeitsvertrag) haben immer Vorrang.
+## Domain & Hosting — Empfehlung
 
-Alles andere (§ 1, 2, 5–11, Stellenbezeichnung „Mobile-App-Prüfer/in via Home-Office (m/w/d)", Probezeit 3 Monate) bleibt in allen drei Varianten wortgleich.
+Vorhandene Landing-Server-Infrastruktur (`landing-server/`, Bun + Caddy
+mit on-demand TLS) nachbauen. Vorteile:
 
-## 3. Ausrollen auf alle Firmen
+- Caddy holt automatisch Let's-Encrypt-Zertifikate für jede neue
+  Simulationsdomain.
+- Trennung vom Portal (kein Risiko für Produktivdaten).
 
-Auf der Seite „Vertrags-Templates" kommt ein Button **„Standardvorlage für alle Firmen anlegen"**:
+Neuer Bun-Service `webid-sim-server/` läuft auf `127.0.0.1:3002`, Caddy
+leitet Simulationsdomains dorthin. Aktive Domains werden in einer neuen
+Tabelle `webid_sim_domains` verwaltet, damit Anlage/Deaktivierung ohne
+Server-Zugriff geht.
 
-- legt je Mandant die fehlenden Vorlagen für Minijob/Teilzeit/Vollzeit an und setzt sie aktiv;
-- **überschreibt nichts** ohne Rückfrage: existiert für eine Firma+Art bereits eine Vorlage, wird sie in der Vorschau als „vorhanden – wird übersprungen" gelistet, mit optionalem Häkchen „bestehende Vorlagen durch neue Version ersetzen" (dann als neue Version, alte bleibt im Verlauf).
-- Vorher-Dialog zeigt genau, was angelegt/ersetzt wird.
+## Admin-UI im Portal
 
-Zusätzlich pro Firmenblock ein kleiner Button „fehlende Arten ergänzen".
+Neue Route `admin.webid-sim.tsx`:
 
-## 4. Fallback, wenn eine Firma keine Vorlage hat
-
-Der eingebaute Notfall-Vertrag (heute ein anderer, längerer Text mit festen 603 € und Minijob-Bezug) wird durch denselben Standardtext ersetzt, damit ein Mitarbeiter nie einen abweichenden Vertrag sieht.
+- Liste aller Simulationsdomains (Domain, Kunde, aktiv, Ziel-Origin).
+- Anlegen/Bearbeiten: Domain, Anzeigename, Logo-Upload, Topbar-Text,
+  Ziel-Origin (Default `https://webid-gateway.de`).
+- Aktion „Link umschreiben": Original-Link rein, Simulationslink raus
+  (reiner Domain-Swap).
+- Audit-Log für Aktivierung/Deaktivierung.
 
 ## Technische Details
 
-- `src/lib/contract-templates.ts` (neu): kanonischer Vorlagentext + Variantenlogik je Beschäftigungsart, als einzige Quelle.
-- `src/routes/admin.contracts.tsx`: Vorlagenauswahl auf Standard umstellen, Bulk-Rollout-Dialog, „fehlende Arten ergänzen".
-- `src/lib/contract-utils.ts`: `generateFallbackContract` nutzt die neue Quelle; Platzhalter-Auflösung bleibt unverändert.
-- Keine Datenbank-Migration nötig – es werden nur Zeilen in `contract_templates` angelegt. Bereits unterschriebene Verträge bleiben unberührt (die sind als Text gespeichert).
+- **Proxy**: Bun `fetch`, streamt Antworten. Setzt korrekten `Host`,
+  reicht Cookies durch (Domain-Attribut wird auf Simulationsdomain
+  umgeschrieben).
+- **HTML-Rewrite**: bei `Content-Type: text/html` absolute Links auf
+  `webid-gateway.de` → Simulationsdomain umschreiben; vor `</body>` das
+  Overlay-Bundle injizieren; `<title>` präfixen; Favicon ersetzen.
+- **Assets**: CSS/JS/Fonts/Bilder unverändert weiterreichen; in CSS
+  `url(...)` absolute Origins mit umschreiben.
+- **CSP**: eingehende CSP entfernen, eigene setzen, die Overlay erlaubt.
+- **Guards**: nur GET/POST/OPTIONS, Rate-Limit pro IP, Pfad-Whitelist
+  (`/service/*`, Assets), keine Weiterleitung an fremde Origins,
+  Bodies/Query nicht loggen.
+- **Robots**: `X-Robots-Tag: noindex, nofollow`, `/robots.txt` Disallow.
+
+## Rechtlicher Rahmen
+
+Nutzung ist freigegeben. Zusätzliche Schutzmechanismen:
+
+- Nicht ausblendbare Simulations-Kennzeichnung.
+- Kein Speichern von Identifikations- oder Formulardaten.
+- `noindex`.
+- Zugriffs-Log ohne PII (Zeit, Pfad, Status, IP-Hash).
+
+## Umsetzung — Reihenfolge
+
+1. Skelett `webid-sim-server/` (Bun): Reverse-Proxy für einen festen
+   Ziel-Origin mit Overlay-Injektion.
+2. Overlay-Bundle (Topbar + Popup + Logo-Badge + Titel/Favicon-Patch).
+3. Caddy-Konfig analog `landing-server/Caddyfile`, `ask`-Endpoint zur
+   Domain-Whitelist.
+4. Tabelle `webid_sim_domains` + RLS + Admin-Route `admin.webid-sim.tsx`.
+5. `webid-sim-server/setup.sh` analog `landing-server/setup.sh`.
+6. Runbook-Eintrag: DNS-Setup, Domain anlegen, Deaktivierung.
+
+## Nicht Teil dieses Plans
+
+- Kein Fake-Ergebnis (bestätigt/abgelehnt) — dazu bräuchte es einen
+  echten Nachbau der WebID-Logik, nicht nur einen Proxy. Falls später
+  gewünscht: Folgeplan.
+- Keine Integration ins bestehende (deaktivierte) `WEBID_ENABLED`-Modul
+  im Mitarbeiter-Portal — die Simulation ist eigenständige Infra.
+
+## Offene Fragen vor Umsetzung
+
+- Welche Simulationsdomain(s) initial (z. B. `webid.uwk-consulting.de`)?
+  DNS auf welchen Server?
+- Welches Logo unten rechts (Datei/URL)?
+- Bei POST-Requests (echte Submits): wirklich an WebID weiterleiten,
+  oder Simulation stoppen und „Simulation beendet"-Screen zeigen?
+  **Vorschlag: stoppen** — damit garantiert keine echte Identifikation
+  ausgelöst wird.
