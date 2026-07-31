@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { WEBID_ENABLED } from "@/lib/webid";
+import { useWebIdEnabled } from "@/lib/webid";
 import {
   ArrowLeft, Plus, Trash2, GripVertical, Save, Eye, ChevronDown, ChevronUp,
   FileText, ClipboardList, PlayCircle, HelpCircle, PartyPopper, CheckCircle2,
@@ -34,6 +34,7 @@ interface TemplateData {
 }
 
 function AdminTemplateBuilderPage() {
+  const WEBID_ENABLED = useWebIdEnabled();
   const { templateId } = useParams<{ templateId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();

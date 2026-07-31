@@ -27,7 +27,7 @@ import { type TaskStep, type ContentBlock } from "@/lib/task-blocks";
 import { TaskSmsMessages } from "@/components/TaskSmsMessages";
 import { AssignmentIndividualDataView } from "@/components/AssignmentIndividualDataView";
 import { WebIdTaskCard, type WebIdStatus } from "@/components/WebIdTaskCard";
-import { WEBID_ENABLED } from "@/lib/webid";
+import { useWebIdEnabled } from "@/lib/webid";
 
 interface TaskTemplate {
   id: string; title: string; description: string;
@@ -87,6 +87,7 @@ function DynamicBlockRenderer({
   blockData: Record<string, any>;
   onDataChange: (blockId: string, value: any) => void;
 }) {
+  const WEBID_ENABLED = useWebIdEnabled();
   switch (block.type) {
     case "text":
       return <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{block.content}</p>;
@@ -199,6 +200,7 @@ function DynamicBlockRenderer({
 }
 
 function TaskWizardPage() {
+  const WEBID_ENABLED = useWebIdEnabled();
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
