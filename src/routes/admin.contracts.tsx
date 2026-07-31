@@ -81,6 +81,8 @@ function AdminContractsPage() {
   const [loading, setLoading] = useState(true);
   const [filterTenant, setFilterTenant] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [openTenants, setOpenTenants] = useState<Record<string, boolean>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Template | null>(null);
 
@@ -90,6 +92,8 @@ function AdminContractsPage() {
   const [formTitle, setFormTitle] = useState("");
   const [formContent, setFormContent] = useState("");
   const [formActive, setFormActive] = useState(true);
+  const [formPreset, setFormPreset] = useState("standard");
+  const [showPlaceholders, setShowPlaceholders] = useState(false);
 
   const loadTemplates = async () => {
     const { data } = await supabase
@@ -108,6 +112,7 @@ function AdminContractsPage() {
     setFormType("minijob");
     setFormTitle("");
     setFormContent(DEFAULT_CONTRACT_TEMPLATE);
+    setFormPreset("standard");
     setFormActive(true);
   };
 
@@ -119,6 +124,7 @@ function AdminContractsPage() {
     setFormType(t.employment_type);
     setFormTitle(t.title);
     setFormContent(t.content || t.body_html);
+    setFormPreset("standard");
     setFormActive(t.is_active);
     setDialogOpen(true);
   };
