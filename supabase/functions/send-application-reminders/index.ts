@@ -807,6 +807,9 @@ serve(async (req) => {
         application_id: app.id, kind, source: "send-application-reminders",
         sender_kind: emailKind, resolved_tenant_id: tenant.id,
         trigger: forceKind ? "manual" : "cron", manual_send: !!forceKind,
+        // Der eindeutige Index erlaubt eine zweite 'sent'-Zeile am selben Tag
+        // nur mit eigener Kennung — bewusster Handversand bleibt so möglich.
+        ...(forceKind ? { resend_nonce: `manual-${Date.now()}` } : {}),
       };
       const messageId = `${kind}-${app.id}-${Date.now()}@${isRegistration ? "fasttrack" : "vermittlung"}`;
 
@@ -861,6 +864,7 @@ serve(async (req) => {
             application_id: app.id, kind, source: "send-application-reminders",
             sender_kind: emailKind, resolved_tenant_id: tenant.id,
             trigger: manual ? "manual" : "cron", manual_send: manual,
+            ...(manual ? { resend_nonce: (logMeta as any).resend_nonce } : {}),
           },
         });
         if (!claim) {
