@@ -837,13 +837,25 @@ serve(async (req) => {
       // nur eine 'sent'-Zeile zu. Schlägt der Insert fehl, hat ein paralleler
       // Lauf diese Mail bereits übernommen → hier nicht nochmal senden.
       let claim: EmailClaim | null = null;
-      if (!forceKind) {
+      // Auch der manuelle Sofort-Versand reserviert. Er darf bewusst wiederholen,
+      // bekommt dafür aber eine eigene Kennung — so bleiben zwei parallele
+      // Handklicks (bzw. Handklick + Cron in derselben Sekunde) ausgeschlossen
+      // und die Zeile ist später als Handversand erkennbar.
+      {
+        const manual = !!forceKind;
+        const eventKey = manual
+          ? `application_reminder:${app.id}:${kind}:manual:${Math.floor(Date.now() / 60_000)}`
+          : `application_reminder:${app.id}:${kind}`;
         claim = await claimEmailEvent(admin, {
-          eventKey: `application_reminder:${app.id}:${kind}`,
+          eventKey,
           templateName, recipient: app.email, tenantId: tenant.id,
           senderEmail: tenant.sender_email ?? tenant.smtp_username,
           subject, html,
-          metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+          metadata: {
+            application_id: app.id, kind, source: "send-application-reminders",
+            sender_kind: emailKind, resolved_tenant_id: tenant.id,
+            trigger: manual ? "manual" : "cron", manual_send: manual,
+          },
         });
         if (!claim) {
           skipped++;
