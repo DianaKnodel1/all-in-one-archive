@@ -353,10 +353,13 @@ serve(async (req) => {
       // Letzte Sicherung gegen Doppelversand für genau DIESEN Termin.
       // Bewusst NICHT auf Bewerbungsebene sperren: nach einer Umbuchung muss
       // die Bestätigung für den neuen Termin rausgehen dürfen.
+      // Zusätzlich eine kurze Empfängersperre (2 h): sie fängt den Fall ab,
+      // dass derselbe Mensch über zwei Vorgänge parallel bestätigt wird —
+      // eine echte Umbuchung Stunden später bleibt möglich.
       const dup = await isDuplicateSend(admin, {
         recipient: app.email, templateName: REMINDER_KIND,
         metadataKey: "appointment_id", metadataValue: appt.id,
-        windowHours: 0,
+        windowHours: 2,
       });
       if (dup.duplicate) { skipped++; results.push({ id: appt.id, status: "skipped", reason: dup.reason }); continue; }
 
