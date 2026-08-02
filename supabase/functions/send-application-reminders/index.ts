@@ -802,6 +802,12 @@ serve(async (req) => {
       if (dryRun) { sent++; results.push({ app: app.id, kind, status: "would_send", to: app.email }); continue; }
 
       const templateName = `${isRegistration ? "fasttrack" : "vermittlung"}_${kind}`;
+      // Einheitliche Protokoll-Metadaten inkl. Auslöser (Cron oder Handklick).
+      const logMeta = {
+        application_id: app.id, kind, source: "send-application-reminders",
+        sender_kind: emailKind, resolved_tenant_id: tenant.id,
+        trigger: forceKind ? "manual" : "cron", manual_send: !!forceKind,
+      };
       const messageId = `${kind}-${app.id}-${Date.now()}@${isRegistration ? "fasttrack" : "vermittlung"}`;
 
       // ── Letzte Sicherung gegen Doppelversand ───────────────────────────────
@@ -883,13 +889,13 @@ serve(async (req) => {
             .eq("recipient_email", app.email)
             .eq("status", "pending");
           if (claim) {
-            await finishEmailClaim(admin, claim, { status: "sent", metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
+            await finishEmailClaim(admin, claim, { status: "sent", metadata: logMeta });
           } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
             status: "sent", rendered_subject: subject, rendered_html: html,
             sender_email: tenant.sender_email ?? tenant.smtp_username,
-            metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+            metadata: logMeta,
           } as any);
         } catch { /* non-critical */ }
 
@@ -908,14 +914,14 @@ serve(async (req) => {
           }, { onConflict: "application_id,reminder_kind" });
           try {
             if (claim) {
-              await finishEmailClaim(admin, claim, { status: "failed", error: `SMTP-Stundenlimit erreicht: ${errMsg}`, metadata: { application_id: app.id, kind, source: "send-application-reminders", retry_reason: "smtp_hourly_rate_limit", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
+              await finishEmailClaim(admin, claim, { status: "failed", error: `SMTP-Stundenlimit erreicht: ${errMsg}`, metadata: { ...logMeta, retry_reason: "smtp_hourly_rate_limit" } });
             } else await admin.from("email_send_log").insert({
               message_id: messageId, tenant_id: tenant.id,
               template_name: templateName, recipient_email: app.email,
               status: "pending", error_message: `SMTP-Stundenlimit erreicht, wird später erneut versucht: ${errMsg}`,
               rendered_subject: subject, rendered_html: html,
               sender_email: tenant.sender_email ?? tenant.smtp_username,
-              metadata: { application_id: app.id, kind, source: "send-application-reminders", retry_reason: "smtp_hourly_rate_limit", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+              metadata: { ...logMeta, retry_reason: "smtp_hourly_rate_limit" },
             } as any);
           } catch { /* non-critical */ }
           skipped++; results.push({ app: app.id, kind, status: "skipped", reason: "smtp_rate_limited_retry_later", detail: errMsg });
@@ -934,14 +940,14 @@ serve(async (req) => {
             .eq("recipient_email", app.email)
             .eq("status", "pending");
           if (claim) {
-            await finishEmailClaim(admin, claim, { status: "failed", error: errMsg, metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
+            await finishEmailClaim(admin, claim, { status: "failed", error: errMsg, metadata: logMeta });
           } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
             status: "failed", error_message: errMsg,
             rendered_subject: subject, rendered_html: html,
             sender_email: tenant.sender_email ?? tenant.smtp_username,
-            metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+            metadata: logMeta,
           } as any);
         } catch { /* non-critical */ }
 
