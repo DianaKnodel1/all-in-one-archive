@@ -106,20 +106,75 @@ function AdminEmailCenterPage() {
    */
   const duplicates = useMemo(() => {
     const since = Date.now() - 24 * 3600_000;
-    const groups = new Map<string, { template: string; recipient: string; count: number; last: string }>();
+    type Grp = {
+      template: string; recipient: string; count: number; last: string;
+      vorgaenge: Set<string>; manual: number; sources: Set<string>;
+    };
+    const groups = new Map<string, Grp>();
     for (const r of rows) {
       if (r.status !== "sent") continue;
       if (new Date(r.created_at).getTime() < since) continue;
       const meta = (r.metadata ?? {}) as Record<string, unknown>;
-      const subject = String(meta.application_id ?? meta.appointment_id ?? meta.event_key ?? "");
-      // Ohne Vorgangsbezug bleibt es beim alten Verhalten (Vorlage + Empfänger).
-      const key = `${r.template_name ?? "?"}|${(r.recipient_email ?? "").toLowerCase()}|${subject}`;
-      const g = groups.get(key);
-      if (g) { g.count++; if (r.created_at > g.last) g.last = r.created_at; }
-      else groups.set(key, { template: r.template_name ?? "?", recipient: r.recipient_email ?? "", count: 1, last: r.created_at });
+      const vorgang = String(meta.application_id ?? meta.appointment_id ?? "");
+      const manual = meta.trigger === "manual" || meta.manual_send === true;
+      const key = `${r.template_name ?? "?"}|${(r.recipient_email ?? "").toLowerCase()}`;
+      const g = groups.get(key) ?? {
+        template: r.template_name ?? "?", recipient: r.recipient_email ?? "",
+        count: 0, last: r.created_at, vorgaenge: new Set<string>(), manual: 0, sources: new Set<string>(),
+      };
+      g.count++;
+      if (r.created_at > g.last) g.last = r.created_at;
+      if (vorgang) g.vorgaenge.add(vorgang);
+      if (manual) g.manual++;
+      if (meta.source) g.sources.add(String(meta.source));
+      groups.set(key, g);
     }
-    return [...groups.values()].filter(g => g.count > 1).sort((a, b) => b.count - a.count);
+    return [...groups.values()]
+      .filter(g => g.count > 1)
+      .map(g => {
+        // Verschiedene Vorgänge derselben Person = korrektes Verhalten.
+        const kind: "expected" | "manual" | "real" =
+          g.vorgaenge.size >= g.count ? "expected" : g.manual > 0 ? "manual" : "real";
+        return { ...g, kind, vorgangCount: g.vorgaenge.size, source: [...g.sources].join(", ") };
+      })
+      .sort((a, b) => (a.kind === b.kind ? b.count - a.count : a.kind === "real" ? -1 : b.kind === "real" ? 1 : a.kind === "manual" ? -1 : 1));
   }, [rows]);
+
+  /** Echte Doppelungen — nur die sind ein Fehler im System. */
+  const realDuplicates = useMemo(() => duplicates.filter(d => d.kind === "real"), [duplicates]);
+
+  /**
+   * "Warum kam keine Mail an?" — Fehlversuche nach Ursache in Klartext,
+   * damit erkennbar ist, was zu tun ist (Passwort, Zugangsdaten, Limit …).
+   */
+  const failureCauses = useMemo(() => {
+    const classify = (msg: string): { label: string; action: string } => {
+      const m = msg.toLowerCase();
+      if (m.includes("535") || m.includes("authentication failed"))
+        return { label: "SMTP-Passwort wird abgelehnt", action: "Zugangsdaten des Mandanten neu hinterlegen und testen" };
+      if (m.includes("smtp_incomplete") || m.includes("no credentials"))
+        return { label: "Keine SMTP-Zugangsdaten hinterlegt", action: "Mandanten-Einstellungen vervollständigen" };
+      if (m.includes("554") || m.includes("too many messages") || m.includes("rate"))
+        return { label: "Limit des Mailanbieters erreicht", action: "Kein Eingriff nötig – wird automatisch nachgeholt" };
+      if (m.includes("550") || m.includes("does not exist") || m.includes("unknown user") || m.includes("mailbox"))
+        return { label: "Adresse existiert nicht", action: "Adresse beim Bewerber prüfen (Tippfehler)" };
+      if (m.includes("timeout") || m.includes("etimedout") || m.includes("econn"))
+        return { label: "Mailserver nicht erreichbar", action: "Host/Port prüfen, danach erneut senden" };
+      if (m.includes("paused")) return { label: "Versand für Mandant pausiert", action: "Pause im Mandanten aufheben" };
+      return { label: msg ? msg.slice(0, 60) : "Ohne Fehlermeldung", action: "Details im Roh-Log ansehen" };
+    };
+    const m = new Map<string, { label: string; action: string; count: number; tenants: Set<string>; last: string }>();
+    for (const r of rows) {
+      if (!["failed", "dlq", "bounced"].includes(r.status)) continue;
+      const c = classify(String(r.error_message ?? ""));
+      const cur = m.get(c.label) ?? { ...c, count: 0, tenants: new Set<string>(), last: r.created_at };
+      cur.count++;
+      if (r.created_at > cur.last) cur.last = r.created_at;
+      cur.tenants.add(tenantNames[r.tenant_id ?? ""] ?? "Ohne Mandant");
+      m.set(c.label, cur);
+    }
+    return [...m.values()].sort((a, b) => b.count - a.count);
+  }, [rows, tenantNames]);
 
   /** Tagesverlauf: echte Sendungen pro Tag (für die Balken). */
   const daily = useMemo(() => {
