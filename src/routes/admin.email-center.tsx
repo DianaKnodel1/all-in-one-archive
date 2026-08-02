@@ -379,26 +379,64 @@ function AdminEmailCenterPage() {
 
       {/* Doppelversand-Warnung */}
       {duplicates.length > 0 && (
-        <Card className="border-amber-500/50 bg-amber-500/5">
+        <Card className={realDuplicates.length > 0 ? "border-rose-500/50 bg-rose-500/5" : "border-amber-500/50 bg-amber-500/5"}>
           <CardContent className="p-4">
-            <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-              Mögliche Doppelversände in den letzten 24 Stunden ({duplicates.length})
+            <div className={`text-sm font-semibold ${realDuplicates.length > 0 ? "text-rose-700 dark:text-rose-400" : "text-amber-700 dark:text-amber-400"}`}>
+              Mehrfachversand in den letzten 24 Stunden ({duplicates.length}) ·{" "}
+              {realDuplicates.length > 0 ? `${realDuplicates.length} echte Doppelung` : "keine echte Doppelung"}
             </div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              Dieselbe Vorlage ging mehrfach an dieselbe Adresse. Prüfen mit{" "}
-              <code>scripts/cleanup-duplicate-mails.sh</code>.
+              „Verschiedene Vorgänge“ ist normal: dieselbe Person hat zwei Bewerbungen oder Termine.
+              Nur „Echte Doppelung“ ist ein Fehler. Vollständige Analyse mit{" "}
+              <code>scripts/diagnose-duplicates.sh</code>.
             </div>
             <div className="mt-3 space-y-1">
-              {duplicates.slice(0, 8).map(d => (
-                <div key={`${d.template}|${d.recipient}`} className="flex items-center gap-3 text-xs">
-                  <span className="flex-1 truncate">{d.recipient}</span>
-                  <span className="truncate text-muted-foreground max-w-[16rem]">{d.template}</span>
-                  <span className="tabular-nums font-semibold text-amber-700 dark:text-amber-400">×{d.count}</span>
-                </div>
-              ))}
+              {duplicates.slice(0, 8).map(d => {
+                const badge = d.kind === "real"
+                  ? { text: "Echte Doppelung", cls: "text-rose-700 dark:text-rose-400" }
+                  : d.kind === "manual"
+                    ? { text: "Handversand", cls: "text-amber-700 dark:text-amber-400" }
+                    : { text: `${d.vorgangCount} verschiedene Vorgänge`, cls: "text-muted-foreground" };
+                return (
+                  <div key={`${d.template}|${d.recipient}`} className="flex items-center gap-3 text-xs">
+                    <span className="flex-1 truncate">{d.recipient}</span>
+                    <span className="truncate text-muted-foreground max-w-[14rem]">
+                      {EMAIL_TYPE_LABELS[d.template] ?? d.template}
+                    </span>
+                    <span className={`truncate max-w-[12rem] ${badge.cls}`}>{badge.text}</span>
+                    <span className="tabular-nums font-semibold">×{d.count}</span>
+                  </div>
+                );
+              })}
               {duplicates.length > 8 && (
                 <div className="text-[11px] text-muted-foreground">… und {duplicates.length - 8} weitere</div>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Warum Mails nicht ankamen */}
+      {failureCauses.length > 0 && (
+        <Card className="border-rose-500/40 bg-rose-500/5">
+          <CardContent className="p-4">
+            <div className="text-sm font-semibold text-rose-700 dark:text-rose-400">
+              Warum Mails nicht ankamen ({failureCauses.reduce((n, f) => n + f.count, 0)})
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              Fehlversuche im gewählten Zeitraum, nach Ursache gruppiert — mit dem nötigen nächsten Schritt.
+            </div>
+            <div className="mt-3 space-y-2">
+              {failureCauses.slice(0, 8).map(f => (
+                <div key={f.label} className="text-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="flex-1 truncate font-medium">{f.label}</span>
+                    <span className="truncate text-muted-foreground max-w-[16rem]">{[...f.tenants].join(", ")}</span>
+                    <span className="tabular-nums font-semibold text-rose-700 dark:text-rose-400">{f.count}×</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">➜ {f.action}</div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
