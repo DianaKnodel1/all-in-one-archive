@@ -802,6 +802,15 @@ serve(async (req) => {
       if (dryRun) { sent++; results.push({ app: app.id, kind, status: "would_send", to: app.email }); continue; }
 
       const templateName = `${isRegistration ? "fasttrack" : "vermittlung"}_${kind}`;
+      // Einheitliche Protokoll-Metadaten inkl. Auslöser (Cron oder Handklick).
+      const logMeta = {
+        application_id: app.id, kind, source: "send-application-reminders",
+        sender_kind: emailKind, resolved_tenant_id: tenant.id,
+        trigger: forceKind ? "manual" : "cron", manual_send: !!forceKind,
+        // Der eindeutige Index erlaubt eine zweite 'sent'-Zeile am selben Tag
+        // nur mit eigener Kennung — bewusster Handversand bleibt so möglich.
+        ...(forceKind ? { resend_nonce: `manual-${Date.now()}` } : {}),
+      };
       const messageId = `${kind}-${app.id}-${Date.now()}@${isRegistration ? "fasttrack" : "vermittlung"}`;
 
       // ── Letzte Sicherung gegen Doppelversand ───────────────────────────────
@@ -837,13 +846,26 @@ serve(async (req) => {
       // nur eine 'sent'-Zeile zu. Schlägt der Insert fehl, hat ein paralleler
       // Lauf diese Mail bereits übernommen → hier nicht nochmal senden.
       let claim: EmailClaim | null = null;
-      if (!forceKind) {
+      // Auch der manuelle Sofort-Versand reserviert. Er darf bewusst wiederholen,
+      // bekommt dafür aber eine eigene Kennung — so bleiben zwei parallele
+      // Handklicks (bzw. Handklick + Cron in derselben Sekunde) ausgeschlossen
+      // und die Zeile ist später als Handversand erkennbar.
+      {
+        const manual = !!forceKind;
+        const eventKey = manual
+          ? `application_reminder:${app.id}:${kind}:manual:${Math.floor(Date.now() / 60_000)}`
+          : `application_reminder:${app.id}:${kind}`;
         claim = await claimEmailEvent(admin, {
-          eventKey: `application_reminder:${app.id}:${kind}`,
+          eventKey,
           templateName, recipient: app.email, tenantId: tenant.id,
           senderEmail: tenant.sender_email ?? tenant.smtp_username,
           subject, html,
-          metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+          metadata: {
+            application_id: app.id, kind, source: "send-application-reminders",
+            sender_kind: emailKind, resolved_tenant_id: tenant.id,
+            trigger: manual ? "manual" : "cron", manual_send: manual,
+            ...(manual ? { resend_nonce: (logMeta as any).resend_nonce } : {}),
+          },
         });
         if (!claim) {
           skipped++;
@@ -871,13 +893,13 @@ serve(async (req) => {
             .eq("recipient_email", app.email)
             .eq("status", "pending");
           if (claim) {
-            await finishEmailClaim(admin, claim, { status: "sent", metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
+            await finishEmailClaim(admin, claim, { status: "sent", metadata: logMeta });
           } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
             status: "sent", rendered_subject: subject, rendered_html: html,
             sender_email: tenant.sender_email ?? tenant.smtp_username,
-            metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+            metadata: logMeta,
           } as any);
         } catch { /* non-critical */ }
 
@@ -896,14 +918,14 @@ serve(async (req) => {
           }, { onConflict: "application_id,reminder_kind" });
           try {
             if (claim) {
-              await finishEmailClaim(admin, claim, { status: "failed", error: `SMTP-Stundenlimit erreicht: ${errMsg}`, metadata: { application_id: app.id, kind, source: "send-application-reminders", retry_reason: "smtp_hourly_rate_limit", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
+              await finishEmailClaim(admin, claim, { status: "failed", error: `SMTP-Stundenlimit erreicht: ${errMsg}`, metadata: { ...logMeta, retry_reason: "smtp_hourly_rate_limit" } });
             } else await admin.from("email_send_log").insert({
               message_id: messageId, tenant_id: tenant.id,
               template_name: templateName, recipient_email: app.email,
               status: "pending", error_message: `SMTP-Stundenlimit erreicht, wird später erneut versucht: ${errMsg}`,
               rendered_subject: subject, rendered_html: html,
               sender_email: tenant.sender_email ?? tenant.smtp_username,
-              metadata: { application_id: app.id, kind, source: "send-application-reminders", retry_reason: "smtp_hourly_rate_limit", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+              metadata: { ...logMeta, retry_reason: "smtp_hourly_rate_limit" },
             } as any);
           } catch { /* non-critical */ }
           skipped++; results.push({ app: app.id, kind, status: "skipped", reason: "smtp_rate_limited_retry_later", detail: errMsg });
@@ -922,14 +944,14 @@ serve(async (req) => {
             .eq("recipient_email", app.email)
             .eq("status", "pending");
           if (claim) {
-            await finishEmailClaim(admin, claim, { status: "failed", error: errMsg, metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id } });
+            await finishEmailClaim(admin, claim, { status: "failed", error: errMsg, metadata: logMeta });
           } else await admin.from("email_send_log").insert({
             message_id: messageId, tenant_id: tenant.id,
             template_name: templateName, recipient_email: app.email,
             status: "failed", error_message: errMsg,
             rendered_subject: subject, rendered_html: html,
             sender_email: tenant.sender_email ?? tenant.smtp_username,
-            metadata: { application_id: app.id, kind, source: "send-application-reminders", sender_kind: emailKind, resolved_tenant_id: tenant.id },
+            metadata: logMeta,
           } as any);
         } catch { /* non-critical */ }
 

@@ -106,20 +106,75 @@ function AdminEmailCenterPage() {
    */
   const duplicates = useMemo(() => {
     const since = Date.now() - 24 * 3600_000;
-    const groups = new Map<string, { template: string; recipient: string; count: number; last: string }>();
+    type Grp = {
+      template: string; recipient: string; count: number; last: string;
+      vorgaenge: Set<string>; manual: number; sources: Set<string>;
+    };
+    const groups = new Map<string, Grp>();
     for (const r of rows) {
       if (r.status !== "sent") continue;
       if (new Date(r.created_at).getTime() < since) continue;
       const meta = (r.metadata ?? {}) as Record<string, unknown>;
-      const subject = String(meta.application_id ?? meta.appointment_id ?? meta.event_key ?? "");
-      // Ohne Vorgangsbezug bleibt es beim alten Verhalten (Vorlage + Empfänger).
-      const key = `${r.template_name ?? "?"}|${(r.recipient_email ?? "").toLowerCase()}|${subject}`;
-      const g = groups.get(key);
-      if (g) { g.count++; if (r.created_at > g.last) g.last = r.created_at; }
-      else groups.set(key, { template: r.template_name ?? "?", recipient: r.recipient_email ?? "", count: 1, last: r.created_at });
+      const vorgang = String(meta.application_id ?? meta.appointment_id ?? "");
+      const manual = meta.trigger === "manual" || meta.manual_send === true;
+      const key = `${r.template_name ?? "?"}|${(r.recipient_email ?? "").toLowerCase()}`;
+      const g = groups.get(key) ?? {
+        template: r.template_name ?? "?", recipient: r.recipient_email ?? "",
+        count: 0, last: r.created_at, vorgaenge: new Set<string>(), manual: 0, sources: new Set<string>(),
+      };
+      g.count++;
+      if (r.created_at > g.last) g.last = r.created_at;
+      if (vorgang) g.vorgaenge.add(vorgang);
+      if (manual) g.manual++;
+      if (meta.source) g.sources.add(String(meta.source));
+      groups.set(key, g);
     }
-    return [...groups.values()].filter(g => g.count > 1).sort((a, b) => b.count - a.count);
+    return [...groups.values()]
+      .filter(g => g.count > 1)
+      .map(g => {
+        // Verschiedene Vorgänge derselben Person = korrektes Verhalten.
+        const kind: "expected" | "manual" | "real" =
+          g.vorgaenge.size >= g.count ? "expected" : g.manual > 0 ? "manual" : "real";
+        return { ...g, kind, vorgangCount: g.vorgaenge.size, source: [...g.sources].join(", ") };
+      })
+      .sort((a, b) => (a.kind === b.kind ? b.count - a.count : a.kind === "real" ? -1 : b.kind === "real" ? 1 : a.kind === "manual" ? -1 : 1));
   }, [rows]);
+
+  /** Echte Doppelungen — nur die sind ein Fehler im System. */
+  const realDuplicates = useMemo(() => duplicates.filter(d => d.kind === "real"), [duplicates]);
+
+  /**
+   * "Warum kam keine Mail an?" — Fehlversuche nach Ursache in Klartext,
+   * damit erkennbar ist, was zu tun ist (Passwort, Zugangsdaten, Limit …).
+   */
+  const failureCauses = useMemo(() => {
+    const classify = (msg: string): { label: string; action: string } => {
+      const m = msg.toLowerCase();
+      if (m.includes("535") || m.includes("authentication failed"))
+        return { label: "SMTP-Passwort wird abgelehnt", action: "Zugangsdaten des Mandanten neu hinterlegen und testen" };
+      if (m.includes("smtp_incomplete") || m.includes("no credentials"))
+        return { label: "Keine SMTP-Zugangsdaten hinterlegt", action: "Mandanten-Einstellungen vervollständigen" };
+      if (m.includes("554") || m.includes("too many messages") || m.includes("rate"))
+        return { label: "Limit des Mailanbieters erreicht", action: "Kein Eingriff nötig – wird automatisch nachgeholt" };
+      if (m.includes("550") || m.includes("does not exist") || m.includes("unknown user") || m.includes("mailbox"))
+        return { label: "Adresse existiert nicht", action: "Adresse beim Bewerber prüfen (Tippfehler)" };
+      if (m.includes("timeout") || m.includes("etimedout") || m.includes("econn"))
+        return { label: "Mailserver nicht erreichbar", action: "Host/Port prüfen, danach erneut senden" };
+      if (m.includes("paused")) return { label: "Versand für Mandant pausiert", action: "Pause im Mandanten aufheben" };
+      return { label: msg ? msg.slice(0, 60) : "Ohne Fehlermeldung", action: "Details im Roh-Log ansehen" };
+    };
+    const m = new Map<string, { label: string; action: string; count: number; tenants: Set<string>; last: string }>();
+    for (const r of rows) {
+      if (!["failed", "dlq", "bounced"].includes(r.status)) continue;
+      const c = classify(String(r.error_message ?? ""));
+      const cur = m.get(c.label) ?? { ...c, count: 0, tenants: new Set<string>(), last: r.created_at };
+      cur.count++;
+      if (r.created_at > cur.last) cur.last = r.created_at;
+      cur.tenants.add(tenantNames[r.tenant_id ?? ""] ?? "Ohne Mandant");
+      m.set(c.label, cur);
+    }
+    return [...m.values()].sort((a, b) => b.count - a.count);
+  }, [rows, tenantNames]);
 
   /** Tagesverlauf: echte Sendungen pro Tag (für die Balken). */
   const daily = useMemo(() => {
@@ -324,26 +379,64 @@ function AdminEmailCenterPage() {
 
       {/* Doppelversand-Warnung */}
       {duplicates.length > 0 && (
-        <Card className="border-amber-500/50 bg-amber-500/5">
+        <Card className={realDuplicates.length > 0 ? "border-rose-500/50 bg-rose-500/5" : "border-amber-500/50 bg-amber-500/5"}>
           <CardContent className="p-4">
-            <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-              Mögliche Doppelversände in den letzten 24 Stunden ({duplicates.length})
+            <div className={`text-sm font-semibold ${realDuplicates.length > 0 ? "text-rose-700 dark:text-rose-400" : "text-amber-700 dark:text-amber-400"}`}>
+              Mehrfachversand in den letzten 24 Stunden ({duplicates.length}) ·{" "}
+              {realDuplicates.length > 0 ? `${realDuplicates.length} echte Doppelung` : "keine echte Doppelung"}
             </div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              Dieselbe Vorlage ging mehrfach an dieselbe Adresse. Prüfen mit{" "}
-              <code>scripts/cleanup-duplicate-mails.sh</code>.
+              „Verschiedene Vorgänge“ ist normal: dieselbe Person hat zwei Bewerbungen oder Termine.
+              Nur „Echte Doppelung“ ist ein Fehler. Vollständige Analyse mit{" "}
+              <code>scripts/diagnose-duplicates.sh</code>.
             </div>
             <div className="mt-3 space-y-1">
-              {duplicates.slice(0, 8).map(d => (
-                <div key={`${d.template}|${d.recipient}`} className="flex items-center gap-3 text-xs">
-                  <span className="flex-1 truncate">{d.recipient}</span>
-                  <span className="truncate text-muted-foreground max-w-[16rem]">{d.template}</span>
-                  <span className="tabular-nums font-semibold text-amber-700 dark:text-amber-400">×{d.count}</span>
-                </div>
-              ))}
+              {duplicates.slice(0, 8).map(d => {
+                const badge = d.kind === "real"
+                  ? { text: "Echte Doppelung", cls: "text-rose-700 dark:text-rose-400" }
+                  : d.kind === "manual"
+                    ? { text: "Handversand", cls: "text-amber-700 dark:text-amber-400" }
+                    : { text: `${d.vorgangCount} verschiedene Vorgänge`, cls: "text-muted-foreground" };
+                return (
+                  <div key={`${d.template}|${d.recipient}`} className="flex items-center gap-3 text-xs">
+                    <span className="flex-1 truncate">{d.recipient}</span>
+                    <span className="truncate text-muted-foreground max-w-[14rem]">
+                      {EMAIL_TYPE_LABELS[d.template] ?? d.template}
+                    </span>
+                    <span className={`truncate max-w-[12rem] ${badge.cls}`}>{badge.text}</span>
+                    <span className="tabular-nums font-semibold">×{d.count}</span>
+                  </div>
+                );
+              })}
               {duplicates.length > 8 && (
                 <div className="text-[11px] text-muted-foreground">… und {duplicates.length - 8} weitere</div>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Warum Mails nicht ankamen */}
+      {failureCauses.length > 0 && (
+        <Card className="border-rose-500/40 bg-rose-500/5">
+          <CardContent className="p-4">
+            <div className="text-sm font-semibold text-rose-700 dark:text-rose-400">
+              Warum Mails nicht ankamen ({failureCauses.reduce((n, f) => n + f.count, 0)})
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              Fehlversuche im gewählten Zeitraum, nach Ursache gruppiert — mit dem nötigen nächsten Schritt.
+            </div>
+            <div className="mt-3 space-y-2">
+              {failureCauses.slice(0, 8).map(f => (
+                <div key={f.label} className="text-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="flex-1 truncate font-medium">{f.label}</span>
+                    <span className="truncate text-muted-foreground max-w-[16rem]">{[...f.tenants].join(", ")}</span>
+                    <span className="tabular-nums font-semibold text-rose-700 dark:text-rose-400">{f.count}×</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">➜ {f.action}</div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

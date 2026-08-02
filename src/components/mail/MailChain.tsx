@@ -41,6 +41,17 @@ export function MailChain({ applicationId, applicantName, events, expected, next
 
   const history = [...events].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
 
+  /**
+   * Letzter erfolgreicher Versand der geplanten Erinnerung — Grundlage für die
+   * Rückfrage vor dem Handversand, damit niemand versehentlich doppelt sendet.
+   */
+  const lastSameKindSend = nextStep.kind
+    ? history.find(
+        (e) => e.status === "sent" && (e.key === nextStep.kind || e.key.endsWith(`_${nextStep.kind}`)),
+      )
+    : undefined;
+  const lastAnySend = history.find((e) => e.status === "sent");
+
   const summary = history.reduce(
     (acc, e) => {
       if (e.status === "sent") acc.sent++;
@@ -187,6 +198,22 @@ export function MailChain({ applicationId, applicantName, events, expected, next
                 sofort an {applicantName} raus — der geplante Versand entfällt dann.
               </DialogDescription>
             </DialogHeader>
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+              {lastSameKindSend ? (
+                <span className="text-amber-700 dark:text-amber-400">
+                  Achtung: Genau diese Mail ging bereits am {formatWhen(lastSameKindSend.at)} raus.
+                  Ein erneuter Versand ist für den Empfänger ein Doppelversand.
+                </span>
+              ) : lastAnySend ? (
+                <span className="text-muted-foreground">
+                  Zuletzt versendet: {mailLabel(lastAnySend.key)} · {formatWhen(lastAnySend.at)}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Bisher wurde an {applicantName} keine E-Mail erfolgreich versendet.
+                </span>
+              )}
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button size="sm" variant="ghost" onClick={() => setConfirmNow(false)}>Abbrechen</Button>
               <Button size="sm" disabled={busy} onClick={doSendNow}>
