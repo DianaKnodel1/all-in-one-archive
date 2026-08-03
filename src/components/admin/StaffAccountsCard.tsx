@@ -25,7 +25,7 @@ export function StaffAccountsCard() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await listStaffAccounts({ data: {} });
+      const res = await listStaffAccounts();
       setAccounts(res.accounts);
     } catch (e: any) {
       toast({ title: "Fehler", description: e?.message ?? "Konten konnten nicht geladen werden.", variant: "destructive" });
