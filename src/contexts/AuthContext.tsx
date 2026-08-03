@@ -6,6 +6,10 @@ interface AuthContextType {
   session: Session | null;
   user: User | null;
   isAdmin: boolean;
+  /** Eingeschränktes Admin-Konto: nur Aufträge + Chat. */
+  isStaff: boolean;
+  /** Darf den Admin-Bereich überhaupt betreten (Admin oder Admin-Mitarbeiter). */
+  canAccessAdmin: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -14,6 +18,8 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   isAdmin: false,
+  isStaff: false,
+  canAccessAdmin: false,
   loading: true,
   signOut: async () => {},
 });
@@ -24,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
   // Cache: only re-check admin role when user.id actually changes
   const lastCheckedUserIdRef = useRef<string | null>(null);
 
@@ -34,17 +41,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     let cancelled = false;
 
-    const checkAdminRole = async (userId: string): Promise<boolean> => {
+    const checkRoles = async (userId: string): Promise<{ admin: boolean; staff: boolean }> => {
       try {
         const { data } = await supabase
           .from("user_roles")
           .select("role")
-          .eq("user_id", userId)
-          .eq("role", "admin")
-          .maybeSingle();
-        return !!data;
+          .eq("user_id", userId);
+        const roles = (data ?? []).map((r: { role: string }) => r.role);
+        return { admin: roles.includes("admin"), staff: roles.includes("admin_mitarbeiter") };
       } catch {
-        return false;
+        return { admin: false, staff: false };
       }
     };
 
@@ -61,16 +67,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (nextSession?.user) {
-        const admin = await checkAdminRole(nextSession.user.id);
+        const roles = await checkRoles(nextSession.user.id);
         if (cancelled) return;
         lastCheckedUserIdRef.current = nextSession.user.id;
         setSession(nextSession);
-        setIsAdmin(admin);
+        setIsAdmin(roles.admin);
+        setIsStaff(roles.staff);
       } else {
         if (cancelled) return;
         lastCheckedUserIdRef.current = null;
         setSession(null);
         setIsAdmin(false);
+        setIsStaff(false);
       }
       if (!cancelled) setLoading(false);
     };
@@ -104,7 +112,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, isAdmin, loading, signOut }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        user: session?.user ?? null,
+        isAdmin,
+        isStaff,
+        canAccessAdmin: isAdmin || isStaff,
+        loading,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

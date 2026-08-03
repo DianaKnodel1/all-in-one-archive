@@ -81,16 +81,36 @@ const navGroups: NavGroup[] = [
 // Einstellungen liegen fest am unteren Rand – nicht in den aufklappbaren Gruppen.
 const settingsItem: NavItem = { title: "Einstellungen", url: "/admin/settings", icon: Settings, end: true };
 
+// Admin-Mitarbeiter ("rechte Hand"): nur Aufträge zuweisen/prüfen und Chat.
+const STAFF_GROUPS = ["Aufträge", "Kommunikation"];
+const STAFF_ALLOWED_PREFIXES = [
+  "/admin/tasks",
+  "/admin/assignments",
+  "/admin/appointments",
+  "/admin/reviews",
+  "/admin/revisions",
+  "/admin/uploads",
+  "/admin/chat",
+];
+const STAFF_HOME = "/admin/tasks";
+const staffNavGroups: NavGroup[] = navGroups
+  .filter((g) => STAFF_GROUPS.includes(g.label))
+  .map((g) => ({
+    ...g,
+    items: g.items.filter((i) => STAFF_ALLOWED_PREFIXES.some((p) => i.url === p || i.url.startsWith(p + "/"))),
+  }));
+
 function AdminSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const { signOut } = useAuth();
+  const { signOut, isAdmin } = useAuth();
   const badges = useAdminBadges();
   const { pathname } = useLocation();
+  const groups = isAdmin ? navGroups : staffNavGroups;
 
   // Nur die Gruppe der aktuellen Seite ist offen — das hält die Sidebar ruhig.
   const activeGroup =
-    navGroups.find((g) => g.items.some((i) => pathname === i.url || pathname.startsWith(i.url + "/")))?.label ?? navGroups[0].label;
+    groups.find((g) => g.items.some((i) => pathname === i.url || pathname.startsWith(i.url + "/")))?.label ?? groups[0].label;
   const [openGroups, setOpenGroups] = useState<string[]>([activeGroup]);
   useEffect(() => {
     setOpenGroups((prev) => (prev.includes(activeGroup) ? prev : [...prev, activeGroup]));
@@ -137,22 +157,26 @@ function AdminSidebar() {
             A
           </div>
           {!collapsed && (
-            <span className="text-[15px] font-bold text-sidebar-foreground tracking-tight">ADMIN</span>
+            <span className="text-[15px] font-bold text-sidebar-foreground tracking-tight">
+              {isAdmin ? "ADMIN" : "TEAM"}
+            </span>
           )}
         </div>
 
         {/* Dashboard solo */}
-        <div className="px-2">
-          <SidebarGroup className="py-0">
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">{renderItem(dashboardItem)}</SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </div>
+        {isAdmin && (
+          <div className="px-2">
+            <SidebarGroup className="py-0">
+              <SidebarGroupContent>
+                <SidebarMenu className="gap-0.5">{renderItem(dashboardItem)}</SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </div>
+        )}
 
         {/* Gruppierte Navigation – einklappbar */}
         <div className="flex-1 overflow-y-auto px-2 pb-2">
-          {navGroups.map((grp) => {
+          {groups.map((grp) => {
             const groupBadge = grp.items.reduce((sum, i) => sum + (i.badgeKey ? badges[i.badgeKey] : 0), 0);
             if (collapsed) {
               return (
@@ -192,7 +216,7 @@ function AdminSidebar() {
         {/* Einstellungen + Logout */}
         <div className="border-t border-sidebar-border p-2">
           <SidebarMenu className="gap-0.5">
-            {renderItem(settingsItem)}
+            {isAdmin && renderItem(settingsItem)}
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={signOut}
@@ -210,13 +234,19 @@ function AdminSidebar() {
 }
 
 export default function AdminLayout() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, canAccessAdmin, loading } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");
-    if (!loading && user && !isAdmin) navigate("/dashboard");
-  }, [user, isAdmin, loading, navigate]);
+    if (!loading && user && !canAccessAdmin) navigate("/dashboard");
+    // Admin-Mitarbeiter: nur freigegebene Bereiche
+    if (!loading && user && canAccessAdmin && !isAdmin) {
+      const allowed = STAFF_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+      if (!allowed) navigate(STAFF_HOME);
+    }
+  }, [user, isAdmin, canAccessAdmin, loading, pathname, navigate]);
 
   if (loading) {
     return (
@@ -229,7 +259,8 @@ export default function AdminLayout() {
     );
   }
 
-  if (!user || !isAdmin) return null;
+  if (!user || !canAccessAdmin) return null;
+  if (!isAdmin && !STAFF_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))) return null;
 
   return (
     <SidebarProvider>
@@ -239,7 +270,9 @@ export default function AdminLayout() {
           <header className="h-12 flex items-center border-b border-border bg-card px-5 gap-3 shrink-0">
             <SidebarTrigger />
             <div className="h-4 w-px bg-border" />
-            <span className="text-xs font-heading font-semibold text-muted-foreground uppercase tracking-wider">Admin Panel</span>
+            <span className="text-xs font-heading font-semibold text-muted-foreground uppercase tracking-wider">
+              {isAdmin ? "Admin Panel" : "Team Panel"}
+            </span>
             <button
               onClick={() => {
                 // Synthetic Cmd+K

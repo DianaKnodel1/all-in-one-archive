@@ -110,9 +110,7 @@ function LoginPage() {
             supabase
               .from("user_roles")
               .select("role")
-              .eq("user_id", data.user.id)
-              .eq("role", "admin")
-              .maybeSingle(),
+              .eq("user_id", data.user.id),
           ]),
           PROFILE_CHECK_TIMEOUT_MS,
           "Login erfolgreich, aber die Profilprüfung antwortet nicht. Bitte prüfe die Datenbank/API-Verbindung.",
@@ -134,7 +132,9 @@ function LoginPage() {
       }
 
       const profile = profileRes.data;
-      const isAdminUser = !!roleRes.data;
+      const roles: string[] = (roleRes.data ?? []).map((r: { role: string }) => r.role);
+      const isAdminUser = roles.includes("admin");
+      const isStaffUser = roles.includes("admin_mitarbeiter");
 
       if (profile?.status === "deaktiviert") {
         await supabase.auth.signOut();
@@ -152,6 +152,10 @@ function LoginPage() {
 
       if (isAdminUser) {
         navigate("/admin");
+        return;
+      }
+      if (isStaffUser) {
+        navigate("/admin/tasks");
         return;
       }
     }

@@ -3630,6 +3630,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin_staff: { Args: { _user_id: string }; Returns: boolean }
       validate_invitation_token: {
         Args: { _token: string }
         Returns: {
@@ -3641,7 +3642,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "admin_mitarbeiter"
       booking_status: "gebucht" | "bestätigt" | "abgeschlossen" | "storniert"
       document_category: "identitaet" | "auftrag" | "sonstiges"
       document_status: "hochgeladen" | "geprueft" | "abgelehnt"
@@ -3802,7 +3803,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "admin_mitarbeiter"],
       booking_status: ["gebucht", "bestätigt", "abgeschlossen", "storniert"],
       document_category: ["identitaet", "auftrag", "sonstiges"],
       document_status: ["hochgeladen", "geprueft", "abgelehnt"],
