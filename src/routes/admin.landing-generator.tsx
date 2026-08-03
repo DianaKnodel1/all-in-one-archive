@@ -699,6 +699,17 @@ document.addEventListener('submit', function(e){
       setEditingId((row as any).id);
       setSlug((row as any).slug);
 
+      // Warnung: Vermittlung ohne Fast-Track-Verknüpfung → Bewerber-Mails
+      // können keinen Portal-Link (Bewerbung/Termin/Registrierung) bilden.
+      if (branding.flow_type === "broker" && !branding.linked_fasttrack_landing_id) {
+        toast({
+          title: "⚠️ Keine Fast-Track-Verknüpfung",
+          description:
+            "Diese Vermittlungsseite hat keine verknüpfte Fast-Track-Seite. Bewerber-Mails (Eingangsbestätigung, Terminbestätigung, Interview-Link) können dann keinen Portal-Link erzeugen und werden übersprungen.",
+          variant: "destructive",
+        });
+      }
+
       // Portal-Design auf den Tenant übertragen (nur Fast-Track hat ein Portal).
       if (branding.flow_type === "fast" && branding.tenant_id) {
         try {
@@ -918,6 +929,11 @@ document.addEventListener('submit', function(e){
                             !String(l.calendly_url ?? "").trim()
                           ) {
                             problems.push("Vermittlungsziel fehlt");
+                          }
+                          // Bewerber-Mails brauchen zwingend die Fast-Track-Verknüpfung
+                          // (Portal-Link). Partner/Calendly reichen dafür nicht.
+                          if (l.flow_type === "broker" && !l.linked_fasttrack_landing_id) {
+                            problems.push("Fast-Track-Verknüpfung fehlt (keine Portal-Links in Mails)");
                           }
                           const bookingMode = l.booking_mode ?? "calendly";
                           if (bookingMode === "internal") {
@@ -1388,6 +1404,13 @@ document.addEventListener('submit', function(e){
                     <p className="text-[10px] text-muted-foreground mt-1">
                       🔗 Die <strong>Terminzeiten beider Seiten werden automatisch synchron gehalten</strong> — beim Speichern eines Kalenders unter „Verfügbarkeiten" wird der Plan auf die verknüpfte Seite gespiegelt.
                     </p>
+                    {!branding.linked_fasttrack_landing_id && (
+                      <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
+                        ⚠️ <strong>Pflicht für Bewerber-Mails:</strong> Ohne verknüpfte Fast-Track-Seite kann kein Portal-Link
+                        (<code>portal.…/bewerbung</code>, Terminbuchung, Registrierung) gebildet werden. Eingangsbestätigung,
+                        Terminbestätigung und Interview-Erinnerung werden dann übersprungen statt einen 404-Link zu senden.
+                      </div>
+                    )}
                   </Field>
                 </div>
               )}
