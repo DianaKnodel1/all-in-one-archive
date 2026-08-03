@@ -1,5 +1,5 @@
 // Deno Edge Function: send-appointment-reminders
-// FUNCTION_VERSION: 2026-07-09-interview-invite-30min-v1
+// FUNCTION_VERSION: 2026-08-03-fasttrack-interview-link-v2
 //
 // Sendet ~30 Minuten VOR dem gebuchten Interview-Termin (applications.scheduled_at)
 // die "Interview-Einladung" (Template bewerbung_magic_link_*) mit Magic-Link
@@ -23,7 +23,7 @@ import { claimEmailEvent, finishEmailClaim } from "../_shared/send-claim.ts";
 import { formatAppointmentDate, formatAppointmentTime } from "../_shared/format-datetime.ts";
 
 
-const FUNCTION_VERSION = "2026-07-09-interview-invite-30min-v1";
+const FUNCTION_VERSION = "2026-08-03-fasttrack-interview-link-v2";
 const REMINDER_KIND = "interview_invite_30min";
 
 const corsHeaders = {
@@ -79,6 +79,14 @@ interface TenantRow {
 
 function hasValidSmtp(t: TenantRow | null | undefined): t is TenantRow {
   return !!(t && t.smtp_host && t.smtp_port && t.smtp_username && t.smtp_password && t.sender_email);
+}
+
+function portalHost(domain: unknown): string {
+  const clean = String(domain ?? "").trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .replace(/^portal\./i, "");
+  return clean ? `portal.${clean}` : "";
 }
 
 function json(body: unknown, status = 200) {
@@ -242,7 +250,7 @@ serve(async (req) => {
 
     // Applications im Fenster (scheduled_at zwischen +25 und +40 Min)
     let appsQuery = admin.from("applications")
-      .select("id,email,first_name,last_name,full_name,tenant_id,scheduled_at,magic_token,magic_token_expires_at,target_landing_id,booking_status");
+      .select("id,email,first_name,last_name,full_name,tenant_id,scheduled_at,magic_token,magic_token_expires_at,source_landing_id,target_landing_id,booking_status");
     if (forced) {
       appsQuery = appsQuery.eq("id", onlyApplicationId);
     } else {
@@ -280,12 +288,26 @@ serve(async (req) => {
     }
     const todo = forced ? apps : apps.filter((a: any) => !sentSet.has(a.id));
 
-    // Landing-Pages (für Domain → Magic-Link)
-    const landingIds = Array.from(new Set(todo.map((a: any) => a.target_landing_id).filter(Boolean)));
-    const landingMap = new Map<string, { domain: string | null }>();
+    // Landing-Pages (für Domain → Magic-Link). Bei Vermittlungen ist die
+    // source-Landing die Broker-Seite und linked_fasttrack_landing_id die
+    // tatsächliche Portal-/Interview-Seite.
+    const landingIds = Array.from(new Set(
+      todo.flatMap((a: any) => [a.source_landing_id, a.target_landing_id]).filter(Boolean),
+    ));
+    const landingMap = new Map<string, { id: string; domain: string | null; flow_type: string | null; linked_fasttrack_landing_id: string | null }>();
     if (landingIds.length) {
-      const { data: lp } = await admin.from("landing_pages").select("id,domain").in("id", landingIds);
-      (lp ?? []).forEach((l: any) => landingMap.set(l.id, { domain: l.domain }));
+      const { data: lp } = await admin.from("landing_pages")
+        .select("id,domain,flow_type,linked_fasttrack_landing_id").in("id", landingIds);
+      (lp ?? []).forEach((l: any) => landingMap.set(l.id, l));
+
+      const linkedIds = Array.from(new Set(
+        (lp ?? []).map((l: any) => l.linked_fasttrack_landing_id).filter(Boolean),
+      )).filter((id) => !landingMap.has(id as string));
+      if (linkedIds.length) {
+        const { data: linked } = await admin.from("landing_pages")
+          .select("id,domain,flow_type,linked_fasttrack_landing_id").in("id", linkedIds);
+        (linked ?? []).forEach((l: any) => landingMap.set(l.id, l));
+      }
     }
 
     let sent = 0, skipped = 0, failed = 0;
@@ -299,12 +321,27 @@ serve(async (req) => {
       if (tenant.emails_paused) { skipped++; results.push({ application_id: a.id, status: "skipped", reason: "tenant_paused" }); if (!dryRun) await logSkip(admin, a, tenant, "tenant_paused"); continue; }
       if (!hasValidSmtp(tenant)) { skipped++; results.push({ application_id: a.id, status: "skipped", reason: "smtp_incomplete" }); if (!dryRun) await logSkip(admin, a, tenant, "smtp_incomplete"); continue; }
 
-      const landing = a.target_landing_id ? landingMap.get(a.target_landing_id) : null;
-      const domain = landing?.domain || tenant.primary_domain || tenant.domain;
-      if (!domain) { skipped++; results.push({ application_id: a.id, status: "skipped", reason: "no_domain" }); if (!dryRun) await logSkip(admin, a, tenant, "no_domain"); continue; }
+      const sourceLanding = a.source_landing_id ? landingMap.get(a.source_landing_id) : null;
+      const targetLanding = a.target_landing_id ? landingMap.get(a.target_landing_id) : null;
+      const linkedFastTrack = sourceLanding?.linked_fasttrack_landing_id
+        ? landingMap.get(sourceLanding.linked_fasttrack_landing_id)
+        : null;
+      const isBroker = (landing: typeof sourceLanding) => landing?.flow_type === "broker";
+      let fastTrackLanding = linkedFastTrack || targetLanding || (isBroker(sourceLanding) ? null : sourceLanding);
+      if (isBroker(fastTrackLanding)) fastTrackLanding = null;
 
+      // Niemals auf die Vermittlungs-Domain zurückfallen: dort läuft nur die
+      // öffentliche Landing und /bewerbung existiert nicht. Ohne eindeutiges
+      // Fast-Track-Ziel lieber sichtbar skippen als erneut einen 404-Link senden.
+      const interviewHost = portalHost(fastTrackLanding?.domain);
+      if (!interviewHost) {
+        skipped++;
+        results.push({ application_id: a.id, status: "skipped", reason: "missing_fasttrack_portal_domain" });
+        if (!dryRun) await logSkip(admin, a, tenant, "missing_fasttrack_portal_domain");
+        continue;
+      }
 
-      const magicLink = `https://${domain}/bewerbung?token=${a.magic_token}`;
+      const magicLink = `https://${interviewHost}/bewerbung?token=${encodeURIComponent(a.magic_token)}`;
       const startsAt = new Date(a.scheduled_at);
       const firstName = a.first_name || (a.full_name?.split(" ")[0] ?? "");
 
