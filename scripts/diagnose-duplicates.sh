@@ -100,8 +100,9 @@ SELECT to_char(b.created_at,'DD.MM. HH24:MI:SS')||' | '||rpad(b.rcpt,32)||' | '|
 
 hd "3) Warum kamen Mails nicht an — Ursachen gruppiert"
 sqlt "
-SELECT rpad(coalesce(t.name,'(ohne Mandant)'),26)||' | '||lpad(count(*)::text,4)||'x | '
-       ||CASE
+WITH f AS (
+  SELECT coalesce(t.name,'(ohne Mandant)') AS mandant,
+         CASE
           WHEN l.error_message ILIKE '%535%' OR l.error_message ILIKE '%authentication failed%'
             THEN 'SMTP-Passwort falsch -> im Portal neu hinterlegen'
           WHEN l.error_message ILIKE '%smtp_incomplete%' OR l.error_message ILIKE '%no credentials%'
@@ -113,26 +114,32 @@ SELECT rpad(coalesce(t.name,'(ohne Mandant)'),26)||' | '||lpad(count(*)::text,4)
           WHEN l.error_message ILIKE '%timeout%' OR l.error_message ILIKE '%ETIMEDOUT%' OR l.error_message ILIKE '%ECONN%'
             THEN 'Verbindung zum Mailserver gescheitert'
           WHEN l.error_message ILIKE '%tenant_paused%' THEN 'Versand fuer Mandant pausiert'
-          ELSE 'Sonstiges: '||left(regexp_replace(coalesce(l.error_message,'(keine Meldung)'),'\s+',' ','g'),70)
-         END
-  FROM email_send_log l LEFT JOIN tenants t ON t.id = l.tenant_id
- WHERE l.created_at > now() - interval '$DAYS days'
-   AND l.status IN ('failed','bounced','dlq')
- GROUP BY 1,3 ORDER BY count(*) DESC LIMIT 25;" | sed 's/^/  /'
+          ELSE 'Sonstiges: '||left(regexp_replace(coalesce(l.error_message,'(keine Meldung)'),'[[:space:]]+',' ','g'),70)
+         END AS ursache
+    FROM email_send_log l LEFT JOIN tenants t ON t.id = l.tenant_id
+   WHERE l.created_at > now() - interval '\$DAYS days'
+     AND l.status IN ('failed','bounced','dlq')
+)
+SELECT rpad(mandant,26)||' | '||lpad(count(*)::text,4)||'x | '||ursache
+  FROM f GROUP BY mandant, ursache ORDER BY count(*) DESC LIMIT 25;" | sed 's/^/  /'
 
 hd "4) Betroffene Empfaenger ohne jede erfolgreiche Mail"
 sqlt "
-SELECT rpad(lower(l.recipient_email),36)||' | '||count(*)||' Fehlversuche | zuletzt '
-       ||to_char(max(l.created_at),'DD.MM. HH24:MI')
-  FROM email_send_log l
- WHERE l.created_at > now() - interval '$DAYS days'
-   AND l.status IN ('failed','bounced','dlq')
-   AND NOT EXISTS (
-        SELECT 1 FROM email_send_log s
-         WHERE lower(s.recipient_email) = lower(l.recipient_email)
-           AND s.status = 'sent'
-           AND s.created_at > now() - interval '$DAYS days')
- GROUP BY 1 ORDER BY count(*) DESC LIMIT 30;" | sed 's/^/  /'
+WITH f AS (
+  SELECT lower(l.recipient_email) AS rcpt, l.created_at
+    FROM email_send_log l
+   WHERE l.created_at > now() - interval '\$DAYS days'
+     AND l.status IN ('failed','bounced','dlq')
+     AND NOT EXISTS (
+          SELECT 1 FROM email_send_log s
+           WHERE lower(s.recipient_email) = lower(l.recipient_email)
+             AND s.status = 'sent'
+             AND s.created_at > now() - interval '\$DAYS days')
+)
+SELECT rpad(rcpt,36)||' | '||count(*)||' Fehlversuche | zuletzt '
+       ||to_char(max(created_at),'DD.MM. HH24:MI')
+  FROM f GROUP BY rcpt ORDER BY count(*) DESC LIMIT 30;" | sed 's/^/  /'
+
 
 hd "5) Versandfaehigkeit je Mandant"
 sqlt "SELECT rpad(name,26)||' smtp='||CASE WHEN coalesce(smtp_host,'')<>'' AND coalesce(smtp_password,'')<>'' THEN 'ja ' ELSE 'NEIN' END
