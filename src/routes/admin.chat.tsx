@@ -59,7 +59,7 @@ interface ChatMessage {
 }
 
 function AdminChatPage() {
-  const { user } = useAuth();
+  const { user, isStaff } = useAuth();
   const onlineUsers = useOnlineUsers();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -79,6 +79,10 @@ function AdminChatPage() {
   const typingTimeoutRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // user_id -> team_leader_id (für Antworten im Namen des Teamleiters)
+  const leaderMapRef = useRef<Map<string, string | null>>(new Map());
+  // Alle Admin-/Staff-Konten (Gegenseite im Chat)
+  const adminIdsRef = useRef<Set<string>>(new Set());
 
   // Browser-Notification + Sound + Tab-Title-Blink
   const totalUnread = useMemo(
@@ -104,20 +108,30 @@ function AdminChatPage() {
   }, [user]);
 
   const loadConversations = async () => {
-    const [profilesRes, convsRes, msgsRes, tenantsRes] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, tenant_id"),
+    const [profilesRes, convsRes, msgsRes, tenantsRes, rolesRes] = await Promise.all([
+      supabase.from("profiles").select("user_id, full_name, tenant_id, team_leader_id"),
       supabase.from("chat_conversations").select("user_id, status, escalated_at, admin_hidden_at, admin_unread, admin_note"),
       supabase
         .from("chat_messages")
         .select("sender_id, receiver_id, message, read, created_at")
-        .or(`sender_id.eq.${user!.id},receiver_id.eq.${user!.id}`)
         .order("created_at", { ascending: false })
         .limit(5000),
       supabase.from("tenants").select("id, name"),
+      supabase.from("user_roles").select("user_id, role"),
     ]);
 
     const profiles = profilesRes.data ?? [];
     if (!profiles.length) { setLoading(false); return; }
+    const adminIds = new Set<string>(
+      ((rolesRes.data ?? []) as any[])
+        .filter((r) => r.role === "admin" || r.role === "admin_mitarbeiter")
+        .map((r) => r.user_id as string)
+    );
+    adminIds.add(user!.id);
+    adminIdsRef.current = adminIds;
+    leaderMapRef.current = new Map(
+      (profiles as any[]).map((p) => [p.user_id as string, (p.team_leader_id as string | null) ?? null])
+    );
     const tenantMap = new Map<string, string>(((tenantsRes.data ?? []) as any[]).map((t) => [t.id, t.name]));
     const profileMap = new Map(profiles.map((p: any) => [p.user_id, { name: p.full_name as string, tenant_id: p.tenant_id as string | null }]));
     const convMap = new Map<string, any>((convsRes.data ?? []).map((c: any) => [c.user_id, c]));
@@ -126,7 +140,9 @@ function AdminChatPage() {
     const agg = new Map<string, Agg>();
     // msgs are ordered DESC → first entry per partner is the newest
     for (const m of (msgsRes.data ?? []) as any[]) {
-      const partnerId = m.sender_id === user!.id ? m.receiver_id : m.sender_id;
+      // Gegenüber = die Seite, die kein Admin-/Staff-Konto ist
+      const partnerId = adminIds.has(m.sender_id) ? m.receiver_id : m.sender_id;
+      if (!partnerId || adminIds.has(partnerId)) continue;
       if (!profileMap.has(partnerId)) continue;
       let entry = agg.get(partnerId);
       if (!entry) {
@@ -205,13 +221,13 @@ function AdminChatPage() {
     setSelectedUserId(userId);
     const { data: msgs } = await supabase
       .from("chat_messages").select("*")
-      .or(`and(sender_id.eq.${userId},receiver_id.eq.${user!.id}),and(sender_id.eq.${user!.id},receiver_id.eq.${userId})`)
+      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
       .order("created_at", { ascending: true });
     setMessages((msgs ?? []) as ChatMessage[]);
 
     await supabase
       .from("chat_messages").update({ read: true } as any)
-      .eq("sender_id", userId).eq("receiver_id", user!.id).eq("read", false);
+      .eq("sender_id", userId).eq("read", false);
 
     // Beim Öffnen: ungelesen-Flag zurücksetzen
     await supabase
@@ -396,8 +412,11 @@ function AdminChatPage() {
   const sendMessage = async () => {
     if ((!newMessage.trim() && !pendingAttachment) || !selectedUserId || !user) return;
     setSending(true);
+    // Mitarbeiter sehen nur Nachrichten ihres Teamleiters → im Zweifel in dessen Namen senden
+    const leaderId = leaderMapRef.current.get(selectedUserId) ?? null;
+    const senderId = leaderId && leaderId !== user.id && isStaff ? leaderId : user.id;
     await supabase.from("chat_messages").insert({
-      sender_id: user.id,
+      sender_id: senderId,
       receiver_id: selectedUserId,
       message: newMessage.trim() || (pendingAttachment ? `📎 ${pendingAttachment.name}` : ""),
       attachment_url: pendingAttachment?.url ?? null,
@@ -416,13 +435,12 @@ function AdminChatPage() {
       .channel("admin-chat-unified")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, async (payload) => {
         const msg = payload.new as ChatMessage;
-        if (msg.receiver_id !== user.id && msg.sender_id !== user.id) return;
+        const adminIds = adminIdsRef.current;
+        const partner = adminIds.has(msg.sender_id) ? msg.receiver_id : msg.sender_id;
+        if (!partner || adminIds.has(partner)) return;
 
         // Nachricht zum offenen Chat hinzufügen
-        if (selectedUserId && (
-          (msg.sender_id === selectedUserId && msg.receiver_id === user.id) ||
-          (msg.sender_id === user.id && msg.receiver_id === selectedUserId)
-        )) {
+        if (selectedUserId && partner === selectedUserId) {
           setMessages((prev) => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
           if (msg.sender_id === selectedUserId) {
             await supabase.from("chat_messages").update({ read: true } as any).eq("id", msg.id);
@@ -430,7 +448,7 @@ function AdminChatPage() {
         }
 
         // Conversation-Liste live aktualisieren
-        if (msg.sender_id !== user.id) {
+        if (!adminIds.has(msg.sender_id)) {
           const partnerId = msg.sender_id;
           setConversations((prev) => {
             const existing = prev.find(c => c.user_id === partnerId);
