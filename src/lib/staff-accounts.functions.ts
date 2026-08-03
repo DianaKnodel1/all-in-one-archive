@@ -29,7 +29,13 @@ export const listStaffAccounts = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     const ids: string[] = (roles ?? []).map((r: any) => r.user_id);
-    if (ids.length === 0) return { accounts: [] as Array<{ user_id: string; email: string; full_name: string }> };
+    if (ids.length === 0) {
+      const { data: t0 } = await sb.from("tenants").select("id, name").order("name");
+      return {
+        accounts: [] as Array<{ user_id: string; email: string; full_name: string; tenant_ids: string[] }>,
+        tenants: (t0 ?? []) as Array<{ id: string; name: string }>,
+      };
+    }
 
     const { data: profiles } = await sb
       .from("profiles")
