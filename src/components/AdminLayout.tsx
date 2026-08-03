@@ -81,15 +81,11 @@ const navGroups: NavGroup[] = [
 // Einstellungen liegen fest am unteren Rand – nicht in den aufklappbaren Gruppen.
 const settingsItem: NavItem = { title: "Einstellungen", url: "/admin/settings", icon: Settings, end: true };
 
-// Admin-Mitarbeiter ("rechte Hand"): nur Aufträge zuweisen/prüfen und Chat.
+// Admin-Mitarbeiter ("rechte Hand"): NUR Aufträge zuweisen und Chat.
 const STAFF_GROUPS = ["Aufträge", "Kommunikation"];
 const STAFF_ALLOWED_PREFIXES = [
   "/admin/tasks",
   "/admin/assignments",
-  "/admin/appointments",
-  "/admin/reviews",
-  "/admin/revisions",
-  "/admin/uploads",
   "/admin/chat",
 ];
 const STAFF_HOME = "/admin/tasks";
