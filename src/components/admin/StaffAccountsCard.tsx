@@ -5,17 +5,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { UserCog, Plus, Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   listStaffAccounts,
   createStaffAccount,
   revokeStaffAccount,
+  setStaffTenants,
 } from "@/lib/staff-accounts.functions";
 
-type StaffAccount = { user_id: string; email: string; full_name: string };
+type StaffAccount = { user_id: string; email: string; full_name: string; tenant_ids: string[] };
+type Tenant = { id: string; name: string };
 
 export function StaffAccountsCard() {
   const { toast } = useToast();
   const [accounts, setAccounts] = useState<StaffAccount[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -27,6 +31,7 @@ export function StaffAccountsCard() {
     try {
       const res = await listStaffAccounts();
       setAccounts(res.accounts);
+      setTenants(res.tenants ?? []);
     } catch (e: any) {
       toast({ title: "Fehler", description: e?.message ?? "Konten konnten nicht geladen werden.", variant: "destructive" });
     } finally {
@@ -66,6 +71,19 @@ export function StaffAccountsCard() {
     }
   };
 
+  const toggleTenant = async (acc: StaffAccount, tenantId: string) => {
+    const next = acc.tenant_ids.includes(tenantId)
+      ? acc.tenant_ids.filter((t) => t !== tenantId)
+      : [...acc.tenant_ids, tenantId];
+    setAccounts((prev) => prev.map((a) => (a.user_id === acc.user_id ? { ...a, tenant_ids: next } : a)));
+    try {
+      await setStaffTenants({ data: { user_id: acc.user_id, tenant_ids: next } });
+    } catch (e: any) {
+      toast({ title: "Fehler", description: e?.message ?? "Konnte nicht gespeichert werden.", variant: "destructive" });
+      await load();
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -85,14 +103,32 @@ export function StaffAccountsCard() {
             <p className="text-sm text-muted-foreground">Noch keine Admin-Mitarbeiter angelegt.</p>
           ) : (
             accounts.map((acc) => (
-              <div key={acc.user_id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{acc.full_name || "Ohne Namen"}</p>
-                  <p className="text-xs text-muted-foreground truncate">{acc.email}</p>
+              <div key={acc.user_id} className="rounded-lg border border-border px-3 py-2 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{acc.full_name || "Ohne Namen"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{acc.email}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => revoke(acc)} className="gap-1.5 shrink-0">
+                    <Trash2 className="h-3.5 w-3.5" /> Entziehen
+                  </Button>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => revoke(acc)} className="gap-1.5 shrink-0">
-                  <Trash2 className="h-3.5 w-3.5" /> Entziehen
-                </Button>
+                <div className="pt-1 border-t border-border/60">
+                  <p className="text-[11px] text-muted-foreground mb-1.5">
+                    Sichtbare Marken (Chats) — nichts angehakt = alle
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {tenants.map((t) => (
+                      <label key={t.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox
+                          checked={acc.tenant_ids.includes(t.id)}
+                          onCheckedChange={() => void toggleTenant(acc, t.id)}
+                        />
+                        <span className="truncate max-w-[180px]">{t.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
             ))
           )}
