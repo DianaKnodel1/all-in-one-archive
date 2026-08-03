@@ -466,7 +466,7 @@ serve(async (req) => {
         ),
       ]);
       await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "sent", undefined, { ...smtpMeta, message_id: info?.messageId ?? null });
-      await resetRecipientFailure(supabaseAdmin, to);
+      await resetRecipientFailure(supabaseAdmin, to, tenant.id);
       return json({ success: true }, 200);
     } catch (sendErr: any) {
       const reason = String(sendErr?.message ?? sendErr);
@@ -602,25 +602,27 @@ async function bumpRecipientFailure(admin: any, email: string, tenantId: string,
       last_error: reason.slice(0, 500),
       suppressed_at: suppress ?? undefined,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "recipient_email" });
+    }, { onConflict: "recipient_email,tenant_id" });
     // suppressed_at NUR setzen, wenn Schwelle erreicht — sonst nicht zurücksetzen wenn schon gesperrt
     if (suppress) {
       await admin.from("email_recipient_failures")
         .update({ suppressed_at: suppress })
         .eq("recipient_email", key)
+        .eq("tenant_id", tenantId)
         .is("suppressed_at", null);
     }
   } catch (e) { console.warn("[send-invitation-email] bumpRecipientFailure skipped:", (e as any)?.message ?? e); }
 }
 
-async function resetRecipientFailure(admin: any, email: string) {
+async function resetRecipientFailure(admin: any, email: string, tenantId: string) {
   try {
     const key = email.toLowerCase().trim();
     await admin.from("email_recipient_failures").upsert({
       recipient_email: key,
+      tenant_id: tenantId,
       consecutive_failures: 0,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "recipient_email" });
+    }, { onConflict: "recipient_email,tenant_id" });
   } catch { /* egal */ }
 }
 
