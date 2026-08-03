@@ -149,18 +149,39 @@ function PersonDetailPage() {
   useEffect(() => {
     let cancelled = false;
     async function loadKycUrls() {
-      if (!kyc) { setKycDocUrls({}); return; }
-      const fields = ["id_front_url", "id_back_url", "selfie_url"] as const;
-      const entries = await Promise.all(
-        fields
-          .filter((field) => kyc[field])
-          .map(async (field) => {
-            const raw = String(kyc[field]);
-            if (/^https?:\/\//i.test(raw)) return [field, raw] as const;
-            const { data } = await supabase.storage.from("kyc-documents").createSignedUrl(raw, 3600);
-            return [field, data?.signedUrl ?? ""] as const;
-          }),
-      );
+      const jobs: Array<Promise<readonly [string, string]>> = [];
+
+      if (kyc) {
+        const fields = ["id_front_url", "id_back_url", "selfie_url"] as const;
+        for (const field of fields) {
+          if (!kyc[field]) continue;
+          const raw = String(kyc[field]);
+          jobs.push(
+            (async () => {
+              if (/^https?:\/\//i.test(raw)) return [field, raw] as const;
+              const { data } = await supabase.storage
+                .from("kyc-documents")
+                .createSignedUrl(raw.replace(/^kyc-documents\//, ""), 3600);
+              return [field, data?.signedUrl ?? ""] as const;
+            })(),
+          );
+        }
+      }
+
+      const sigRaw = resolved.prof?.signature_url ? String(resolved.prof.signature_url) : "";
+      if (sigRaw && !sigRaw.startsWith("text:")) {
+        jobs.push(
+          (async () => {
+            if (/^https?:\/\//i.test(sigRaw)) return ["signature_url", sigRaw] as const;
+            const { data } = await supabase.storage
+              .from("signatures")
+              .createSignedUrl(sigRaw.replace(/^signatures\//, ""), 3600);
+            return ["signature_url", data?.signedUrl ?? ""] as const;
+          })(),
+        );
+      }
+
+      const entries = await Promise.all(jobs);
       if (cancelled) return;
       const next: Record<string, string> = {};
       for (const [field, url] of entries) if (url) next[field] = url;
@@ -168,7 +189,7 @@ function PersonDetailPage() {
     }
     loadKycUrls();
     return () => { cancelled = true; };
-  }, [kyc]);
+  }, [kyc, resolved.prof?.signature_url]);
 
   useEffect(() => {
     setEmpType(resolved.prof?.employment_type ?? "");
@@ -587,7 +608,14 @@ function PersonDetailPage() {
           title="Vertrag"
           items={[
             ["Unterschrieben", prof?.contract_signed_at ? fmt(prof.contract_signed_at) : "—"],
-            ["Signatur", prof?.signature_url ? <FileLink href={prof.signature_url} label="Öffnen" /> : "—"],
+            [
+              "Signatur",
+              prof?.signature_url
+                ? String(prof.signature_url).startsWith("text:")
+                  ? String(prof.signature_url).slice(5)
+                  : <FileLink href={kycDocUrls.signature_url} label={kycDocUrls.signature_url ? "Öffnen" : "Lädt…"} />
+                : "—",
+            ],
             ["Admin-Notizen", prof?.admin_notes],
           ]}
         />
