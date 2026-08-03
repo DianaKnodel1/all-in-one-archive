@@ -267,7 +267,7 @@ export default function AdminLayout() {
             <SidebarTrigger />
             <div className="h-4 w-px bg-border" />
             <span className="text-xs font-heading font-semibold text-muted-foreground uppercase tracking-wider">
-              {isAdmin ? "Admin Panel" : "Team Panel"}
+              Admin Panel
             </span>
             <button
               onClick={() => {
