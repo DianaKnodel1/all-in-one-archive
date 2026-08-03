@@ -82,6 +82,11 @@ const HARMLESS_REASONS = new Set([
 export function reasonLabel(reason: string | null | undefined): string {
   if (!reason) return "";
   const key = String(reason).trim();
+  // Rohe Gateway-Fehlerseiten (Cloudflare-HTML) nie ungefiltert anzeigen.
+  if (/^<|<!doctype|<html|cf-wrapper|cloudflare/i.test(key)) {
+    const status = key.match(/\b(50[024]|52[0124])\b/)?.[1] ?? null;
+    return `Mail-Dienst war kurzzeitig nicht erreichbar${status ? ` (Gateway ${status})` : ""} – Nachversand möglich`;
+  }
   return REASON_LABELS[key] ?? REASON_LABELS[key.replace(/^routing_/, "routing_")] ?? key.replace(/_/g, " ");
 }
 
