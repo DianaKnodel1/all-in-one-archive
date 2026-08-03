@@ -35,6 +35,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<Record<string, string>>({});
   const [confirmDup, setConfirmDup] = useState<string | null>(null);
   const [confirmNow, setConfirmNow] = useState(false);
   const steps = buildMailChain(events, expected);
@@ -73,6 +74,11 @@ export function MailChain({ applicationId, applicantName, events, expected, next
    */
   const resendOne = async (logId: string, templateKey?: string) => {
     setResending(logId);
+    setResendError((p) => ({ ...p, [logId]: "" }));
+    const fail = (msg: string) => {
+      setResendError((p) => ({ ...p, [logId]: msg }));
+      toast.error(msg);
+    };
     try {
       const rebuild = templateKey === "application_received";
       if (rebuild) {
@@ -81,7 +87,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
           toast.success(`Erneut versendet an ${res.to || "Empfänger"}`);
           onRefresh?.();
         } else {
-          toast.error(res?.reason || "Versand fehlgeschlagen");
+          fail(res?.reason || "Versand fehlgeschlagen");
         }
         return;
       }
@@ -99,12 +105,12 @@ export function MailChain({ applicationId, applicantName, events, expected, next
           onRefresh?.();
           return;
         }
-        toast.error(rebuilt?.reason || res.message || "Versand fehlgeschlagen");
+        fail(rebuilt?.reason || res.message || "Versand fehlgeschlagen");
         return;
       }
-      toast.error(res.message || "Versand fehlgeschlagen");
+      fail(res.message || "Versand fehlgeschlagen");
     } catch (e: any) {
-      toast.error(e?.message ?? "Versand fehlgeschlagen");
+      fail(e?.message ?? "Versand fehlgeschlagen");
     } finally {
       setResending(null);
     }
@@ -327,6 +333,11 @@ export function MailChain({ applicationId, applicantName, events, expected, next
                       <div className="text-xs text-orange-600 mt-0.5">
                         Schritt wurde ausgelöst, aber kein Versand protokolliert — der Cron holt ihn beim
                         nächsten Lauf nach.
+                      </div>
+                    )}
+                    {e.logId && resendError[e.logId] && (
+                      <div className="text-xs mt-1 rounded border border-rose-300/60 bg-rose-50 dark:bg-rose-950/30 px-2 py-1 text-rose-700 dark:text-rose-300 break-words">
+                        Nachversand fehlgeschlagen: {resendError[e.logId]}
                       </div>
                     )}
                   </div>
