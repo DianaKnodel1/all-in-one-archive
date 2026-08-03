@@ -215,6 +215,7 @@ function AdminBewerbungenPage() {
   // E-Mail-Adresse, Reminder-Log per application_id). Daraus entsteht die
   // feste 4er-Kette in der Liste und die Historie im Dialog.
   const [mailEventsByApp, setMailEventsByApp] = useState<Map<string, MailEvent[]>>(new Map());
+  const [mailSendEventsByApp, setMailSendEventsByApp] = useState<Map<string, MailEvent[]>>(new Map());
   const [mailEventsByEmail, setMailEventsByEmail] = useState<Map<string, MailEvent[]>>(new Map());
   const [mailReload, setMailReload] = useState(0);
 
@@ -282,13 +283,7 @@ function AdminBewerbungenPage() {
           byEmail.set(email, list);
         }
       }
-      setMailEventsByApp((current) => {
-        const merged = new Map(current);
-        for (const [applicationId, events] of byApplication) {
-          merged.set(applicationId, [...(merged.get(applicationId) ?? []), ...events]);
-        }
-        return merged;
-      });
+      setMailSendEventsByApp(byApplication);
       setMailEventsByEmail(byEmail);
     })();
     return () => { cancelled = true; };
@@ -326,6 +321,7 @@ function AdminBewerbungenPage() {
       const sched = bookingByApp.get(a.id) ?? (a.scheduled_at ? new Date(a.scheduled_at) : null);
       const phase = computePhase(a, sched, prof);
       const mailEvents: MailEvent[] = mergeMailEvents([
+        ...(mailSendEventsByApp.get(a.id) ?? []),
         ...(email ? mailEventsByEmail.get(email) ?? [] : []),
         ...(mailEventsByApp.get(a.id) ?? []),
       ]);
@@ -363,7 +359,7 @@ function AdminBewerbungenPage() {
         }),
       };
     }).sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
-  }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, mailEventsByEmail, mailEventsByApp]);
+  }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, mailSendEventsByApp, mailEventsByEmail, mailEventsByApp]);
 
   // Gruppierte Tabs — statt 12 Chips nur 6 sinnvolle Buckets
   const GROUPS: { key: string; label: string; emoji: string; phases: Phase[] }[] = [
