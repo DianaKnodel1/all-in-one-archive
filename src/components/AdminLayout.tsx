@@ -81,15 +81,11 @@ const navGroups: NavGroup[] = [
 // Einstellungen liegen fest am unteren Rand – nicht in den aufklappbaren Gruppen.
 const settingsItem: NavItem = { title: "Einstellungen", url: "/admin/settings", icon: Settings, end: true };
 
-// Admin-Mitarbeiter ("rechte Hand"): nur Aufträge zuweisen/prüfen und Chat.
+// Admin-Mitarbeiter ("rechte Hand"): NUR Aufträge zuweisen und Chat.
 const STAFF_GROUPS = ["Aufträge", "Kommunikation"];
 const STAFF_ALLOWED_PREFIXES = [
   "/admin/tasks",
   "/admin/assignments",
-  "/admin/appointments",
-  "/admin/reviews",
-  "/admin/revisions",
-  "/admin/uploads",
   "/admin/chat",
 ];
 const STAFF_HOME = "/admin/tasks";
@@ -271,7 +267,7 @@ export default function AdminLayout() {
             <SidebarTrigger />
             <div className="h-4 w-px bg-border" />
             <span className="text-xs font-heading font-semibold text-muted-foreground uppercase tracking-wider">
-              {isAdmin ? "Admin Panel" : "Team Panel"}
+              Admin Panel
             </span>
             <button
               onClick={() => {
