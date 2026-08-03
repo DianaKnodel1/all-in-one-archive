@@ -137,6 +137,7 @@ type LandingRow = {
   booking_mode?: string | null;
   domain?: string | null;
   linked_fasttrack_landing_id?: string | null;
+  flow_type?: string | null;
 };
 
 function normalizeKey(value: unknown): string {
@@ -164,6 +165,7 @@ function toLanding(row: any): LandingRow {
     booking_mode: row?.booking_mode ?? null,
     domain: row?.domain ?? null,
     linked_fasttrack_landing_id: row?.linked_fasttrack_landing_id ?? null,
+    flow_type: row?.flow_type ?? null,
   };
 }
 
@@ -363,7 +365,7 @@ serve(async (req) => {
     const landingIds = Array.from(new Set(apps.flatMap((a: any) => [a.source_landing_id, a.target_landing_id]).filter(Boolean)));
     const landingMap = new Map<string, LandingRow>();
     const landingErrors: Record<string, string> = {};
-    const LANDING_COLS = "id,tenant_id,slug,source_slug,calendly_url,branding,updated_at,booking_mode,domain,linked_fasttrack_landing_id";
+    const LANDING_COLS = "id,tenant_id,slug,source_slug,calendly_url,branding,updated_at,booking_mode,domain,linked_fasttrack_landing_id,flow_type";
     if (landingIds.length) {
       const { data: lps, error: lpErr } = await admin.from("landing_pages")
         .select(LANDING_COLS)
@@ -710,12 +712,15 @@ serve(async (req) => {
         || null;
 
       // Fast-Track-Landing (die tatsächlich das Portal + KI-Interview hostet) ermitteln.
+      // Vermittlungs-/Broker-Landings hosten KEIN Portal — niemals als Portal-Domain nutzen.
+      const notBroker = (l: LandingRow | null | undefined): LandingRow | null =>
+        l && l.flow_type !== "broker" ? l : null;
       const fastTrackLanding: LandingRow | null =
         (sourceLanding?.linked_fasttrack_landing_id
-              ? landingMap.get(sourceLanding.linked_fasttrack_landing_id) ?? null
+              ? notBroker(landingMap.get(sourceLanding.linked_fasttrack_landing_id) ?? null)
               : null)
-        || targetLanding
-        || (isInternalBooking(landing) ? landing : null);
+        || notBroker(targetLanding)
+        || (isInternalBooking(landing) ? notBroker(landing) : null);
       const fastTrackDomain = String(fastTrackLanding?.domain || (isRegistration ? (tenant.primary_domain || tenant.domain) : "") || "").trim();
       const fastTrackHost = portalHost(fastTrackDomain);
 
