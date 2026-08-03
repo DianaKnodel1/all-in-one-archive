@@ -250,19 +250,19 @@ function AdminBewerbungenPage() {
     (async () => {
       const { data } = await supabase
         .from("email_send_log")
-        .select("id, recipient_email, template_name, status, created_at, error_message")
+        .select("id, recipient_email, template_name, status, created_at, error_message, metadata")
         // Technische Zeilen (abgelöste Retries, bereinigte Doppelversände)
         // würden sonst echte Mails aus dem 5.000er-Fenster verdrängen.
         .not("status", "in", "(superseded,duplicate)")
         .order("created_at", { ascending: false })
         .limit(5000);
       if (cancelled || !data) return;
-      const m = new Map<string, MailEvent[]>();
+      const byEmail = new Map<string, MailEvent[]>();
+      const byApplication = new Map<string, MailEvent[]>();
       for (const r of data as any[]) {
         const email = String(r.recipient_email ?? "").toLowerCase().trim();
-        if (!email) continue;
-        const list = m.get(email) ?? [];
-        list.push({
+        const applicationId = String(r.metadata?.application_id ?? "").trim();
+        const event: MailEvent = {
           key: r.template_name ?? "unbekannt",
           label: mailLabel(r.template_name),
           status: r.status ?? "unknown",
@@ -270,10 +270,26 @@ function AdminBewerbungenPage() {
           error: r.error_message ?? null,
           source: "email_send_log",
           logId: r.id ?? null,
-        });
-        m.set(email, list);
+        };
+        if (applicationId) {
+          const list = byApplication.get(applicationId) ?? [];
+          list.push(event);
+          byApplication.set(applicationId, list);
+        } else if (email) {
+          // Legacy-Zeilen ohne application_id bleiben als vorsichtiger Fallback.
+          const list = byEmail.get(email) ?? [];
+          list.push(event);
+          byEmail.set(email, list);
+        }
       }
-      setMailEventsByEmail(m);
+      setMailEventsByApp((current) => {
+        const merged = new Map(current);
+        for (const [applicationId, events] of byApplication) {
+          merged.set(applicationId, [...(merged.get(applicationId) ?? []), ...events]);
+        }
+        return merged;
+      });
+      setMailEventsByEmail(byEmail);
     })();
     return () => { cancelled = true; };
   }, [applications, mailReload]);

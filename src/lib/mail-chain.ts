@@ -144,7 +144,13 @@ export function buildMailChain(
     // das Aufräum-Skript behält die ÄLTESTE Zeile als "gesendet" und markiert
     // die späteren — ohne diesen Vorzug würde aus ✓ ein graues ⧉.
     const matches = sorted.filter((e) => keys.includes(e.key));
-    const ev = matches.find((e) => e.status !== "duplicate") ?? matches[0] ?? null;
+    // Ein erfolgreicher Versand ist der fachlich finale Zustand. Frühere oder
+    // spätere fehlgeschlagene Versuche dürfen eine tatsächlich zugestellte Mail
+    // in der kompakten Kette nicht wieder rot darstellen.
+    const ev = matches.find((e) => e.status === "sent")
+      ?? matches.find((e) => e.status !== "duplicate")
+      ?? matches[0]
+      ?? null;
     const isExpected = id === "bewerbung" ? true : id === "termin" ? expected.termin : id === "zusage" ? expected.zusage : false;
     const state: MailStepState = ev ? normalize(ev.status) : isExpected ? "pending" : "na";
     return { id, label: STEP_LABELS[id], state, event: ev };
