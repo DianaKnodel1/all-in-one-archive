@@ -59,7 +59,7 @@ export const listSuppressedRecipients = createServerFn({ method: "POST" })
 export const unsuppressRecipient = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ recipient_email: z.string().email() }).parse(input)
+    z.object({ recipient_email: z.string().email(), tenant_id: z.string().uuid() }).parse(input)
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
@@ -68,7 +68,8 @@ export const unsuppressRecipient = createServerFn({ method: "POST" })
     const { error } = await sb
       .from("email_recipient_failures")
       .update({ suppressed_at: null, consecutive_failures: 0, updated_at: new Date().toISOString() })
-      .eq("recipient_email", key);
+      .eq("recipient_email", key)
+      .eq("tenant_id", data.tenant_id);
     if (error) throw new Error(error.message);
     // Zusätzlich: falls Adresse als "manuell" in suppressed_emails liegt → entfernen
     await sb.from("suppressed_emails").delete().ilike("email", key);
