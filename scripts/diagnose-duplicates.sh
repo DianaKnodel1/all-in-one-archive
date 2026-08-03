@@ -117,7 +117,7 @@ WITH f AS (
           ELSE 'Sonstiges: '||left(regexp_replace(coalesce(l.error_message,'(keine Meldung)'),'[[:space:]]+',' ','g'),70)
          END AS ursache
     FROM email_send_log l LEFT JOIN tenants t ON t.id = l.tenant_id
-   WHERE l.created_at > now() - interval '\$DAYS days'
+   WHERE l.created_at > now() - interval '$DAYS days'
      AND l.status IN ('failed','bounced','dlq')
 )
 SELECT rpad(mandant,26)||' | '||lpad(count(*)::text,4)||'x | '||ursache
@@ -128,13 +128,13 @@ sqlt "
 WITH f AS (
   SELECT lower(l.recipient_email) AS rcpt, l.created_at
     FROM email_send_log l
-   WHERE l.created_at > now() - interval '\$DAYS days'
+   WHERE l.created_at > now() - interval '$DAYS days'
      AND l.status IN ('failed','bounced','dlq')
      AND NOT EXISTS (
           SELECT 1 FROM email_send_log s
            WHERE lower(s.recipient_email) = lower(l.recipient_email)
              AND s.status = 'sent'
-             AND s.created_at > now() - interval '\$DAYS days')
+             AND s.created_at > now() - interval '$DAYS days')
 )
 SELECT rpad(rcpt,36)||' | '||count(*)||' Fehlversuche | zuletzt '
        ||to_char(max(created_at),'DD.MM. HH24:MI')
