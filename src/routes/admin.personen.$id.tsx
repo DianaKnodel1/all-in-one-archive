@@ -608,7 +608,14 @@ function PersonDetailPage() {
           title="Vertrag"
           items={[
             ["Unterschrieben", prof?.contract_signed_at ? fmt(prof.contract_signed_at) : "—"],
-            ["Signatur", prof?.signature_url ? <FileLink href={prof.signature_url} label="Öffnen" /> : "—"],
+            [
+              "Signatur",
+              prof?.signature_url
+                ? String(prof.signature_url).startsWith("text:")
+                  ? String(prof.signature_url).slice(5)
+                  : <FileLink href={kycDocUrls.signature_url} label={kycDocUrls.signature_url ? "Öffnen" : "Lädt…"} />
+                : "—",
+            ],
             ["Admin-Notizen", prof?.admin_notes],
           ]}
         />
