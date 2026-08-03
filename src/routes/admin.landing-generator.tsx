@@ -699,6 +699,17 @@ document.addEventListener('submit', function(e){
       setEditingId((row as any).id);
       setSlug((row as any).slug);
 
+      // Warnung: Vermittlung ohne Fast-Track-Verknüpfung → Bewerber-Mails
+      // können keinen Portal-Link (Bewerbung/Termin/Registrierung) bilden.
+      if (branding.flow_type === "broker" && !branding.linked_fasttrack_landing_id) {
+        toast({
+          title: "⚠️ Keine Fast-Track-Verknüpfung",
+          description:
+            "Diese Vermittlungsseite hat keine verknüpfte Fast-Track-Seite. Bewerber-Mails (Eingangsbestätigung, Terminbestätigung, Interview-Link) können dann keinen Portal-Link erzeugen und werden übersprungen.",
+          variant: "destructive",
+        });
+      }
+
       // Portal-Design auf den Tenant übertragen (nur Fast-Track hat ein Portal).
       if (branding.flow_type === "fast" && branding.tenant_id) {
         try {
