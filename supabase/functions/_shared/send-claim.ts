@@ -84,6 +84,33 @@ export async function retryFailedEmailClaim(admin: any, input: {
   return data?.id ? { id: data.id, eventKey: input.eventKey } : null;
 }
 
+// Reservierung wieder freigeben, wenn die Mail NICHT verschickt wurde und ein
+// späterer Lauf sie erneut versuchen soll (z.B. Stundenlimit des Providers).
+// 'superseded' fällt aus dem eindeutigen Index heraus, die Zeile bleibt als
+// Historie erhalten.
+export async function releaseEmailClaim(admin: any, claim: EmailClaim, input: {
+  reason: string;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const { data, error } = await admin
+    .from("email_send_log")
+    .update({
+      status: "superseded",
+      error_message: input.reason,
+      metadata: {
+        ...(input.metadata ?? {}),
+        event_key: claim.eventKey,
+        claim: false,
+        released: true,
+        release_reason: input.reason,
+      },
+    })
+    .eq("id", claim.id)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) console.warn("[send-claim] release failed:", error?.message ?? "no row");
+}
+
 export function actionBucketEventKey(kind: string, recipient: string, now = Date.now()): string {
   const fiveMinuteBucket = Math.floor(now / (5 * 60_000));
   return `${kind}:${recipient.trim().toLowerCase()}:${fiveMinuteBucket}`;
