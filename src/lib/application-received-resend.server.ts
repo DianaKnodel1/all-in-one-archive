@@ -83,10 +83,7 @@ export async function resendApplicationReceivedMail(applicationId: string): Prom
     tenantId: a.tenant_id,
     templateName: "application_received",
     applicationId: a.id,
-    // Frischer Versuch: eigener Ereignis-Schlüssel, damit die Sperre des
-    // gescheiterten Erstversands den Nachversand nicht blockiert.
-    forceResend: true,
-    resendNonce: `manual:${Date.now()}`,
+    requestId: `manual-resend-${Date.now().toString(36)}`,
     placeholders: { calendly_link: bookingLink ?? "", booking_link: bookingLink ?? "" },
   };
 
