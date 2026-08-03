@@ -90,7 +90,6 @@ export const createStaffAccount = createServerFn({ method: "POST" })
         user_id: uid,
         full_name: data.full_name,
         tenant_id: tenantId,
-        status: "angenommen",
       },
       { onConflict: "user_id" },
     );
