@@ -14,7 +14,7 @@ import { createSmtpTransport, sendMailWithRetry } from "../_shared/smtp.ts";
 import { resolveSender, type EmailKind } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
-import { claimEmailEvent, finishEmailClaim, type EmailClaim } from "../_shared/send-claim.ts";
+import { claimEmailEvent, finishEmailClaim, retryFailedEmailClaim, type EmailClaim } from "../_shared/send-claim.ts";
 
 
 const corsHeaders = {
@@ -455,6 +455,9 @@ serve(async (req) => {
         html,
         metadata: smtpMeta,
       });
+      if (!sendClaim) {
+        sendClaim = await retryFailedEmailClaim(supabaseAdmin, { eventKey, metadata: smtpMeta });
+      }
       if (!sendClaim) {
         return json({ success: true, duplicate: true, reason: "event_already_claimed" }, 200);
       }

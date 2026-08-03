@@ -2,7 +2,7 @@
 //
 // Zwei parallele Cron-/Browser-Aufrufe dürfen dieselbe Mail nicht gleichzeitig
 // übernehmen. Die Datenbank erzwingt deshalb einen eindeutigen event_key für
-// status pending/sent (Migration 20260808000000_email_event_claims.sql).
+// status pending/sent/failed (Migration 20260808000000_email_event_claims.sql).
 
 export type EmailClaim = {
   id: string;
@@ -63,6 +63,25 @@ export async function finishEmailClaim(admin: any, claim: EmailClaim, input: {
     })
     .eq("id", claim.id);
   if (error) console.warn("[send-claim] finalize failed:", error.message);
+}
+
+export async function retryFailedEmailClaim(admin: any, input: {
+  eventKey: string;
+  metadata?: Record<string, unknown>;
+}): Promise<EmailClaim | null> {
+  const { data, error } = await admin
+    .from("email_send_log")
+    .update({
+      status: "pending",
+      error_message: null,
+      metadata: { ...(input.metadata ?? {}), event_key: input.eventKey, claim: true },
+    })
+    .eq("metadata->>event_key", input.eventKey)
+    .eq("status", "failed")
+    .select("id")
+    .maybeSingle();
+  if (error) console.warn("[send-claim] retry claim failed:", error.message);
+  return data?.id ? { id: data.id, eventKey: input.eventKey } : null;
 }
 
 export function actionBucketEventKey(kind: string, recipient: string, now = Date.now()): string {
