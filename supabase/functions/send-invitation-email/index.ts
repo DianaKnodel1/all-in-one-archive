@@ -14,6 +14,7 @@ import { createSmtpTransport, sendMailWithRetry } from "../_shared/smtp.ts";
 import { resolveSender, type EmailKind } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
+import { claimEmailEvent, finishEmailClaim, type EmailClaim } from "../_shared/send-claim.ts";
 
 
 const corsHeaders = {
@@ -438,13 +439,35 @@ serve(async (req) => {
       return json({ error: `Versand blockiert: ${(allowance as any).reason}`, skipped: true, reason: (allowance as any).reason }, 429);
     }
 
+    // Derselbe Bewerbungs-Request darf auch bei verlorener Gateway-Antwort nur
+    // einmal versendet werden. Ohne requestId bleiben ältere interne Aufrufer
+    // kompatibel und verwenden den bisherigen Log-Pfad.
+    let sendClaim: EmailClaim | null = null;
+    if (body.requestId) {
+      const eventKey = `application-mail:${body.requestId}:${templateNameOverride || "invitation"}`;
+      sendClaim = await claimEmailEvent(supabaseAdmin, {
+        eventKey,
+        templateName: templateNameOverride || "invitation",
+        recipient: to,
+        tenantId: tenant.id,
+        senderEmail,
+        subject,
+        html,
+        metadata: smtpMeta,
+      });
+      if (!sendClaim) {
+        return json({ success: true, duplicate: true, reason: "event_already_claimed" }, 200);
+      }
+    }
+
     const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
     if (!verifyRes.ok) {
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", verifyRes.reason, smtpMeta);
+      if (sendClaim) await finishEmailClaim(supabaseAdmin, sendClaim, { status: "failed", error: verifyRes.reason, metadata: smtpMeta });
+      else await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", verifyRes.reason, smtpMeta);
       if (!isTestMode && isRecipientDeliveryFailure(verifyRes.reason)) {
         await bumpRecipientFailure(supabaseAdmin, to, tenant.id, verifyRes.reason ?? "smtp_verify_failed");
       }
-      return json({ error: `SMTP-Verbindung fehlgeschlagen: ${verifyRes.reason}`, paused: verifyRes.paused }, 502);
+      return json({ error: `SMTP-Verbindung fehlgeschlagen: ${verifyRes.reason}`, paused: verifyRes.paused }, 424);
     }
 
     try {
@@ -465,16 +488,19 @@ serve(async (req) => {
           )
         ),
       ]);
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "sent", undefined, { ...smtpMeta, message_id: info?.messageId ?? null });
+      const sentMeta = { ...smtpMeta, message_id: info?.messageId ?? null };
+      if (sendClaim) await finishEmailClaim(supabaseAdmin, sendClaim, { status: "sent", metadata: sentMeta });
+      else await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "sent", undefined, sentMeta);
       await resetRecipientFailure(supabaseAdmin, to, tenant.id);
       return json({ success: true }, 200);
     } catch (sendErr: any) {
       const reason = String(sendErr?.message ?? sendErr);
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", reason, smtpMeta);
+      if (sendClaim) await finishEmailClaim(supabaseAdmin, sendClaim, { status: "failed", error: reason, metadata: smtpMeta });
+      else await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", reason, smtpMeta);
       if (!isTestMode && isRecipientDeliveryFailure(reason)) {
         await bumpRecipientFailure(supabaseAdmin, to, tenant.id, reason);
       }
-      return json({ error: `E-Mail konnte nicht gesendet werden: ${reason}` }, 502);
+      return json({ error: `E-Mail konnte nicht gesendet werden: ${reason}` }, 424);
     }
   } catch (err: any) {
     console.error(err);

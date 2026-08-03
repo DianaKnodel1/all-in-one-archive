@@ -122,6 +122,10 @@ export const HIDDEN_EMAIL_STATUS = ["superseded", "duplicate"];
  */
 export function emailLogKey(log: EmailLog): string {
   const tenant = log.metadata?.tenant_id || log.metadata?.tenant_name || "global";
+  const eventKey = log.metadata?.event_key;
+  if (eventKey) return `event|${eventKey}`;
+  const requestId = log.metadata?.request_id;
+  if (requestId) return ["request", tenant, log.template_name, requestId].join("|");
   const sentDay = new Date(log.created_at).toISOString().slice(0, 10);
   return ["logical", tenant, log.template_name, (log.recipient_email ?? "").toLowerCase(), sentDay].join("|");
 }
