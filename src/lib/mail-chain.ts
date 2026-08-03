@@ -114,10 +114,10 @@ const STEP_KEYS: Record<MailStep["id"], string[]> = {
 };
 
 const STEP_LABELS: Record<MailStep["id"], string> = {
-  bewerbung: "Bewerbung",
-  termin: "Termin",
-  erinnerung: "Erinnerung",
-  zusage: "Zusage",
+  bewerbung: "Eingangs-Mail",
+  termin: "Termin-Mail",
+  erinnerung: "Reminder-Mail",
+  zusage: "Zusage-Mail",
 };
 
 function normalize(status: string): MailStepState {
