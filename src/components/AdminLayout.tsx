@@ -234,13 +234,19 @@ function AdminSidebar() {
 }
 
 export default function AdminLayout() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, canAccessAdmin, loading } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");
-    if (!loading && user && !isAdmin) navigate("/dashboard");
-  }, [user, isAdmin, loading, navigate]);
+    if (!loading && user && !canAccessAdmin) navigate("/dashboard");
+    // Admin-Mitarbeiter: nur freigegebene Bereiche
+    if (!loading && user && canAccessAdmin && !isAdmin) {
+      const allowed = STAFF_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+      if (!allowed) navigate(STAFF_HOME);
+    }
+  }, [user, isAdmin, canAccessAdmin, loading, pathname, navigate]);
 
   if (loading) {
     return (
@@ -253,7 +259,8 @@ export default function AdminLayout() {
     );
   }
 
-  if (!user || !isAdmin) return null;
+  if (!user || !canAccessAdmin) return null;
+  if (!isAdmin && !STAFF_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))) return null;
 
   return (
     <SidebarProvider>
@@ -263,7 +270,9 @@ export default function AdminLayout() {
           <header className="h-12 flex items-center border-b border-border bg-card px-5 gap-3 shrink-0">
             <SidebarTrigger />
             <div className="h-4 w-px bg-border" />
-            <span className="text-xs font-heading font-semibold text-muted-foreground uppercase tracking-wider">Admin Panel</span>
+            <span className="text-xs font-heading font-semibold text-muted-foreground uppercase tracking-wider">
+              {isAdmin ? "Admin Panel" : "Team Panel"}
+            </span>
             <button
               onClick={() => {
                 // Synthetic Cmd+K
