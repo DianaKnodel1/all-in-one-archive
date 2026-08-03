@@ -90,7 +90,7 @@ serve(async (req) => {
         supabaseAdmin.from("profiles").select("email_status").ilike("email", email).neq("email_status", "active").limit(1).maybeSingle(),
         supabaseAdmin.from("applications").select("email_status").ilike("email", email).neq("email_status", "active").limit(1).maybeSingle(),
         supabaseAdmin.from("suppressed_emails").select("reason").ilike("email", email).limit(1).maybeSingle(),
-        supabaseAdmin.from("email_recipient_failures").select("last_error").ilike("recipient_email", email).not("suppressed_at", "is", null).limit(1).maybeSingle(),
+        supabaseAdmin.from("email_recipient_failures").select("last_error").ilike("recipient_email", email).eq("tenant_id", tenant.id).not("suppressed_at", "is", null).limit(1).maybeSingle(),
       ]);
       if (sup || rf) {
         await abort("skipped", `recipient_suppressed: ${(sup as any)?.reason ?? (rf as any)?.last_error ?? "unbekannt"}`, tenant.id);

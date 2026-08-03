@@ -14,6 +14,7 @@ import { createSmtpTransport, sendMailWithRetry } from "../_shared/smtp.ts";
 import { resolveSender, type EmailKind } from "../_shared/sender-resolver.ts";
 import { pickLandingLogo, resolveEmailLogo } from "../_shared/email-logo.ts";
 import { guardSend } from "../_shared/send-guard.ts";
+import { claimEmailEvent, finishEmailClaim, retryFailedEmailClaim, type EmailClaim } from "../_shared/send-claim.ts";
 
 
 const corsHeaders = {
@@ -225,15 +226,19 @@ serve(async (req) => {
       } catch { /* egal */ }
     }
 
-    // --- Recipient-Suppression: 3 Fails in Folge → dauerhaft gesperrt ---
+    // --- Recipient-Suppression: nur echte Empfänger-Ablehnungen sperren. ---
+    // SMTP-Login-, Verbindungs- und Gatewayfehler gehören zum Absender/Server
+    // und dürfen niemals eine Bewerberadresse (erst recht nicht tenantübergreifend)
+    // auf die Sperrliste setzen.
     const isTestMode = body.testMode === true;
     if (!isTestMode) try {
       const { data: sup } = await supabaseAdmin
         .from("email_recipient_failures")
         .select("suppressed_at, consecutive_failures, last_error")
-        .eq("recipient_email", to)
+        .eq("recipient_email", to.toLowerCase().trim())
+        .eq("tenant_id", tenant.id)
         .maybeSingle();
-      if (sup?.suppressed_at) {
+      if (sup?.suppressed_at && isRecipientDeliveryFailure(sup.last_error)) {
         const reason = `recipient_suppressed_after_${sup.consecutive_failures}_fails: ${sup.last_error ?? "unbekannt"}`;
         await logSend(supabaseAdmin, tenant.id, to, "(gesperrt)", "", tenant.sender_email ?? tenant.smtp_username, "skipped", reason, { template_name: templateNameOverride || "invitation" });
         return json({ error: reason, suppressed: true }, 409);
@@ -434,11 +439,38 @@ serve(async (req) => {
       return json({ error: `Versand blockiert: ${(allowance as any).reason}`, skipped: true, reason: (allowance as any).reason }, 429);
     }
 
+    // Derselbe Bewerbungs-Request darf auch bei verlorener Gateway-Antwort nur
+    // einmal versendet werden. Ohne requestId bleiben ältere interne Aufrufer
+    // kompatibel und verwenden den bisherigen Log-Pfad.
+    let sendClaim: EmailClaim | null = null;
+    if (body.requestId) {
+      const eventKey = `application-mail:${body.requestId}:${templateNameOverride || "invitation"}`;
+      sendClaim = await claimEmailEvent(supabaseAdmin, {
+        eventKey,
+        templateName: templateNameOverride || "invitation",
+        recipient: to,
+        tenantId: tenant.id,
+        senderEmail,
+        subject,
+        html,
+        metadata: smtpMeta,
+      });
+      if (!sendClaim) {
+        sendClaim = await retryFailedEmailClaim(supabaseAdmin, { eventKey, metadata: smtpMeta });
+      }
+      if (!sendClaim) {
+        return json({ success: true, duplicate: true, reason: "event_already_claimed" }, 200);
+      }
+    }
+
     const verifyRes = await verifyOrPause(supabaseAdmin, tenant, transporter);
     if (!verifyRes.ok) {
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", verifyRes.reason, smtpMeta);
-      if (!isTestMode) await bumpRecipientFailure(supabaseAdmin, to, tenant.id, verifyRes.reason ?? "smtp_verify_failed");
-      return json({ error: `SMTP-Verbindung fehlgeschlagen: ${verifyRes.reason}`, paused: verifyRes.paused }, 502);
+      if (sendClaim) await finishEmailClaim(supabaseAdmin, sendClaim, { status: "failed", error: verifyRes.reason, metadata: smtpMeta });
+      else await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", verifyRes.reason, smtpMeta);
+      if (!isTestMode && isRecipientDeliveryFailure(verifyRes.reason)) {
+        await bumpRecipientFailure(supabaseAdmin, to, tenant.id, verifyRes.reason ?? "smtp_verify_failed");
+      }
+      return json({ error: `SMTP-Verbindung fehlgeschlagen: ${verifyRes.reason}`, paused: verifyRes.paused }, 424);
     }
 
     try {
@@ -459,14 +491,19 @@ serve(async (req) => {
           )
         ),
       ]);
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "sent", undefined, { ...smtpMeta, message_id: info?.messageId ?? null });
-      await resetRecipientFailure(supabaseAdmin, to);
+      const sentMeta = { ...smtpMeta, message_id: info?.messageId ?? null };
+      if (sendClaim) await finishEmailClaim(supabaseAdmin, sendClaim, { status: "sent", metadata: sentMeta });
+      else await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "sent", undefined, sentMeta);
+      await resetRecipientFailure(supabaseAdmin, to, tenant.id);
       return json({ success: true }, 200);
     } catch (sendErr: any) {
       const reason = String(sendErr?.message ?? sendErr);
-      await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", reason, smtpMeta);
-      if (!isTestMode) await bumpRecipientFailure(supabaseAdmin, to, tenant.id, reason);
-      return json({ error: `E-Mail konnte nicht gesendet werden: ${reason}` }, 502);
+      if (sendClaim) await finishEmailClaim(supabaseAdmin, sendClaim, { status: "failed", error: reason, metadata: smtpMeta });
+      else await logSend(supabaseAdmin, tenant.id, to, subject, html, senderEmail, "failed", reason, smtpMeta);
+      if (!isTestMode && isRecipientDeliveryFailure(reason)) {
+        await bumpRecipientFailure(supabaseAdmin, to, tenant.id, reason);
+      }
+      return json({ error: `E-Mail konnte nicht gesendet werden: ${reason}` }, 424);
     }
   } catch (err: any) {
     console.error(err);
@@ -564,6 +601,17 @@ function renderTemplateBody(template: string, phMap: Record<string, string>, bra
 
 const SUPPRESS_AFTER_FAILS = 3;
 
+/** Nur permanente Ablehnungen der Zieladresse sind Empfängerfehler. */
+function isRecipientDeliveryFailure(reason: unknown): boolean {
+  const raw = String(reason ?? "").toLowerCase();
+  if (!raw) return false;
+  // Auth-, Verbindungs- und Serverfehler sind niemals der Empfängeradresse anzulasten.
+  if (/invalid login|\b535\b|eauth|authentication failed|greeting never received|timeout|etimedout|econn|gateway|\b50[024]\b/.test(raw)) {
+    return false;
+  }
+  return /\b5\.1\.[0-9]\b|\b550\b|\b551\b|\b552\b|\b553\b|\b554\b|user unknown|unknown user|mailbox (?:unavailable|not found)|recipient (?:rejected|not found|unknown)|address (?:rejected|not found|does not exist)/.test(raw);
+}
+
 async function bumpRecipientFailure(admin: any, email: string, tenantId: string, reason: string) {
   try {
     const key = email.toLowerCase().trim();
@@ -571,6 +619,7 @@ async function bumpRecipientFailure(admin: any, email: string, tenantId: string,
       .from("email_recipient_failures")
       .select("consecutive_failures")
       .eq("recipient_email", key)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
     const next = (existing?.consecutive_failures ?? 0) + 1;
     const suppress = next >= SUPPRESS_AFTER_FAILS ? new Date().toISOString() : null;
@@ -582,25 +631,27 @@ async function bumpRecipientFailure(admin: any, email: string, tenantId: string,
       last_error: reason.slice(0, 500),
       suppressed_at: suppress ?? undefined,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "recipient_email" });
+    }, { onConflict: "recipient_email,tenant_id" });
     // suppressed_at NUR setzen, wenn Schwelle erreicht — sonst nicht zurücksetzen wenn schon gesperrt
     if (suppress) {
       await admin.from("email_recipient_failures")
         .update({ suppressed_at: suppress })
         .eq("recipient_email", key)
+        .eq("tenant_id", tenantId)
         .is("suppressed_at", null);
     }
   } catch (e) { console.warn("[send-invitation-email] bumpRecipientFailure skipped:", (e as any)?.message ?? e); }
 }
 
-async function resetRecipientFailure(admin: any, email: string) {
+async function resetRecipientFailure(admin: any, email: string, tenantId: string) {
   try {
     const key = email.toLowerCase().trim();
     await admin.from("email_recipient_failures").upsert({
       recipient_email: key,
+      tenant_id: tenantId,
       consecutive_failures: 0,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "recipient_email" });
+    }, { onConflict: "recipient_email,tenant_id" });
   } catch { /* egal */ }
 }
 

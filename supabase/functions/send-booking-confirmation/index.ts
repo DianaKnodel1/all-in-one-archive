@@ -204,7 +204,7 @@ serve(async (req) => {
     {
       const [{ data: sentRows }, { data: failRows }] = await Promise.all([
         admin.from("email_send_log")
-          .select("metadata")
+          .select("metadata,error_message")
           .eq("template_name", REMINDER_KIND)
           .eq("status", "sent")
           .in("metadata->>appointment_id", apptIds),
@@ -220,11 +220,20 @@ serve(async (req) => {
       }
       // Retry-Cap: pro Termin max. 3 Fehlversuche → dann aussetzen.
       const failCount = new Map<string, number>();
+      const terminalConfigFailure = new Set<string>();
       for (const r of (failRows ?? []) as any[]) {
         const aid = r?.metadata?.appointment_id;
-        if (aid) failCount.set(aid, (failCount.get(aid) ?? 0) + 1);
+        if (aid) {
+          failCount.set(aid, (failCount.get(aid) ?? 0) + 1);
+          const error = String(r?.error_message ?? "").toLowerCase();
+          if (/invalid login|\b535\b|eauth|authentication failed|smtp_anmeldung fehlgeschlagen/.test(error)) {
+            terminalConfigFailure.add(aid);
+          }
+        }
       }
-      for (const [aid, n] of failCount) if (n >= 3 && !doneAppts.has(aid)) capped.add(aid);
+      for (const [aid, n] of failCount) {
+        if ((n >= 3 || terminalConfigFailure.has(aid)) && !doneAppts.has(aid)) capped.add(aid);
+      }
     }
 
     const todo = appts.filter((a: any) => !doneAppts.has(a.id) && !capped.has(a.id));

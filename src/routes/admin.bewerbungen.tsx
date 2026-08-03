@@ -215,6 +215,7 @@ function AdminBewerbungenPage() {
   // E-Mail-Adresse, Reminder-Log per application_id). Daraus entsteht die
   // feste 4er-Kette in der Liste und die Historie im Dialog.
   const [mailEventsByApp, setMailEventsByApp] = useState<Map<string, MailEvent[]>>(new Map());
+  const [mailSendEventsByApp, setMailSendEventsByApp] = useState<Map<string, MailEvent[]>>(new Map());
   const [mailEventsByEmail, setMailEventsByEmail] = useState<Map<string, MailEvent[]>>(new Map());
   const [mailReload, setMailReload] = useState(0);
 
@@ -250,19 +251,19 @@ function AdminBewerbungenPage() {
     (async () => {
       const { data } = await supabase
         .from("email_send_log")
-        .select("id, recipient_email, template_name, status, created_at, error_message")
+        .select("id, recipient_email, template_name, status, created_at, error_message, metadata")
         // Technische Zeilen (abgelöste Retries, bereinigte Doppelversände)
         // würden sonst echte Mails aus dem 5.000er-Fenster verdrängen.
         .not("status", "in", "(superseded,duplicate)")
         .order("created_at", { ascending: false })
         .limit(5000);
       if (cancelled || !data) return;
-      const m = new Map<string, MailEvent[]>();
+      const byEmail = new Map<string, MailEvent[]>();
+      const byApplication = new Map<string, MailEvent[]>();
       for (const r of data as any[]) {
         const email = String(r.recipient_email ?? "").toLowerCase().trim();
-        if (!email) continue;
-        const list = m.get(email) ?? [];
-        list.push({
+        const applicationId = String(r.metadata?.application_id ?? "").trim();
+        const event: MailEvent = {
           key: r.template_name ?? "unbekannt",
           label: mailLabel(r.template_name),
           status: r.status ?? "unknown",
@@ -270,10 +271,20 @@ function AdminBewerbungenPage() {
           error: r.error_message ?? null,
           source: "email_send_log",
           logId: r.id ?? null,
-        });
-        m.set(email, list);
+        };
+        if (applicationId) {
+          const list = byApplication.get(applicationId) ?? [];
+          list.push(event);
+          byApplication.set(applicationId, list);
+        } else if (email) {
+          // Legacy-Zeilen ohne application_id bleiben als vorsichtiger Fallback.
+          const list = byEmail.get(email) ?? [];
+          list.push(event);
+          byEmail.set(email, list);
+        }
       }
-      setMailEventsByEmail(m);
+      setMailSendEventsByApp(byApplication);
+      setMailEventsByEmail(byEmail);
     })();
     return () => { cancelled = true; };
   }, [applications, mailReload]);
@@ -310,6 +321,7 @@ function AdminBewerbungenPage() {
       const sched = bookingByApp.get(a.id) ?? (a.scheduled_at ? new Date(a.scheduled_at) : null);
       const phase = computePhase(a, sched, prof);
       const mailEvents: MailEvent[] = mergeMailEvents([
+        ...(mailSendEventsByApp.get(a.id) ?? []),
         ...(email ? mailEventsByEmail.get(email) ?? [] : []),
         ...(mailEventsByApp.get(a.id) ?? []),
       ]);
@@ -347,7 +359,7 @@ function AdminBewerbungenPage() {
         }),
       };
     }).sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
-  }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, mailEventsByEmail, mailEventsByApp]);
+  }, [applications, bookingByApp, landingById, profileByKey, emailConfirmedUserIds, mailSendEventsByApp, mailEventsByEmail, mailEventsByApp]);
 
   // Gruppierte Tabs — statt 12 Chips nur 6 sinnvolle Buckets
   const GROUPS: { key: string; label: string; emoji: string; phases: Phase[] }[] = [

@@ -36,10 +36,11 @@ export function SuppressedRecipientsPanel() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
-  const handleUnsuppress = async (email: string) => {
-    setBusy(email);
+  const handleUnsuppress = async (email: string, tenantId: string) => {
+    const rowKey = `${email}:${tenantId}`;
+    setBusy(rowKey);
     try {
-      await unsuppress({ data: { recipient_email: email } });
+      await unsuppress({ data: { recipient_email: email, tenant_id: tenantId } });
       toast({ title: "Sperre aufgehoben", description: email });
       await load();
     } catch (e: any) {
@@ -143,7 +144,7 @@ export function SuppressedRecipientsPanel() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.recipient_email} className="border-t hover:bg-muted/30">
+                <tr key={`${r.recipient_email}:${r.tenant_id}`} className="border-t hover:bg-muted/30">
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
                     {new Date(r.suppressed_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </td>
@@ -158,11 +159,11 @@ export function SuppressedRecipientsPanel() {
                   <td className="px-3 py-2 text-right">
                     <Button
                       size="sm" variant="outline"
-                      onClick={() => handleUnsuppress(r.recipient_email)}
-                      disabled={busy === r.recipient_email}
+                      onClick={() => r.tenant_id && handleUnsuppress(r.recipient_email, r.tenant_id)}
+                      disabled={!r.tenant_id || busy === `${r.recipient_email}:${r.tenant_id}`}
                       className="h-7 gap-1"
                     >
-                      {busy === r.recipient_email
+                      {busy === `${r.recipient_email}:${r.tenant_id}`
                         ? <Loader2 className="h-3 w-3 animate-spin" />
                         : <ShieldCheck className="h-3 w-3" />}
                       Sperre aufheben

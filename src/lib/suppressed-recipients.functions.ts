@@ -59,7 +59,7 @@ export const listSuppressedRecipients = createServerFn({ method: "POST" })
 export const unsuppressRecipient = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ recipient_email: z.string().email() }).parse(input)
+    z.object({ recipient_email: z.string().email(), tenant_id: z.string().uuid() }).parse(input)
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
@@ -68,7 +68,8 @@ export const unsuppressRecipient = createServerFn({ method: "POST" })
     const { error } = await sb
       .from("email_recipient_failures")
       .update({ suppressed_at: null, consecutive_failures: 0, updated_at: new Date().toISOString() })
-      .eq("recipient_email", key);
+      .eq("recipient_email", key)
+      .eq("tenant_id", data.tenant_id);
     if (error) throw new Error(error.message);
     // Zusätzlich: falls Adresse als "manuell" in suppressed_emails liegt → entfernen
     await sb.from("suppressed_emails").delete().ilike("email", key);
@@ -96,21 +97,8 @@ export const blockRecipient = createServerFn({ method: "POST" })
     const reason = data.reason?.trim() || "Manuell gesperrt durch Admin";
     const now = new Date().toISOString();
 
-    // 1. Recipient-Failures (blockt App-Mails via Suppression-Check)
-    const { error: e1 } = await sb.from("email_recipient_failures").upsert(
-      {
-        recipient_email: key,
-        consecutive_failures: 999,
-        last_failed_at: now,
-        last_error: reason,
-        suppressed_at: now,
-        updated_at: now,
-      },
-      { onConflict: "recipient_email" },
-    );
-    if (e1) throw new Error(e1.message);
-
-    // 2. Globale suppressed_emails (blockt u.a. Neu-Registrierung + Chat-Reminder)
+    // 1. Globale manuelle Sperre. Automatische Empfängerfehler sind dagegen
+    // bewusst mandantenbezogen in email_recipient_failures gespeichert.
     const { data: existingSup } = await sb
       .from("suppressed_emails").select("id").is("tenant_id", null).ilike("email", key).maybeSingle();
     if (existingSup) {
@@ -123,7 +111,7 @@ export const blockRecipient = createServerFn({ method: "POST" })
     }
 
 
-    // 3. Wenn ein Account mit dieser Adresse existiert → sperren (Login unmöglich)
+    // 2. Wenn ein Account mit dieser Adresse existiert → sperren (Login unmöglich)
     try {
       const { data: list } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
       const existing = list?.users.find((u: any) => (u.email ?? "").toLowerCase() === key);

@@ -488,7 +488,11 @@ export const Route = createFileRoute("/api/public/applications")({
                   function_body: typeof data === "string" ? data.slice(0, 500) : data ? JSON.stringify(data).slice(0, 500) : null,
                 }));
                 lastResult = { data, error, response };
-                if (GATEWAY_STATUSES.has(response.status) && attempt < RETRY_DELAYS.length) {
+                // Nur echte Proxy-/Gateway-Antworten erneut aufrufen. Fachliche
+                // JSON-Fehler der Mailfunktion (z. B. Tenant inaktiv) dürfen
+                // keinen zweiten Versandversuch auslösen.
+                const gatewayResponse = typeof data === "string" || data === null;
+                if (GATEWAY_STATUSES.has(response.status) && gatewayResponse && attempt < RETRY_DELAYS.length) {
                   await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
                   continue;
                 }
