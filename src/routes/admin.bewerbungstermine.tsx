@@ -50,8 +50,19 @@ function AdminApplicantAppointmentsPage() {
         <td className="px-3 py-2 font-medium text-foreground">{app.full_name ?? "Bewerber"}</td>
         <td className="px-3 py-2 text-muted-foreground">{app.email ?? "—"}</td>
         <td className="px-3 py-2 text-muted-foreground">
-          {start.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" })} ·{" "}
-          {start.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr
+          {start.toLocaleDateString("de-DE", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "2-digit",
+            timeZone: "Europe/Berlin",
+          })}{" "}
+          ·{" "}
+          {start.toLocaleTimeString("de-DE", {
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "Europe/Berlin",
+          })}{" "}
+          Uhr
         </td>
         <td className="px-3 py-2">
           <Badge variant={r.status === "scheduled" ? "default" : "secondary"}>{labelAppointmentStatus(r.status)}</Badge>
