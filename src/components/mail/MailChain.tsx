@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { resendRegistrationInvite } from "@/lib/application-stage.functions";
+import { resendApplicationReceived } from "@/lib/application-received-resend.functions";
 import {
   buildMailChain, formatWhen, mailLabel, STEP_STATE_STYLE,
   statusStyle, reasonLabel, isHarmlessReason, type MailEvent,
@@ -38,6 +39,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
   const [confirmNow, setConfirmNow] = useState(false);
   const steps = buildMailChain(events, expected);
   const resend = useServerFn(resendRegistrationInvite);
+  const resendReceived = useServerFn(resendApplicationReceived);
 
   const history = [...events].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
 
@@ -64,16 +66,45 @@ export function MailChain({ applicationId, applicantName, events, expected, next
     { sent: 0, failed: 0, stuck: 0, duplicate: 0, other: 0 },
   );
 
-  const resendOne = async (logId: string) => {
+  /**
+   * Einzel-Nachversand. Die Eingangsbestätigung wird komplett neu aufgebaut
+   * (frischer Buchungslink) — beim Erstversand über ein Gateway-Problem gibt es
+   * kein gespeichertes HTML, der generische Resend liefe sonst ins Leere.
+   */
+  const resendOne = async (logId: string, templateKey?: string) => {
     setResending(logId);
     try {
+      const rebuild = templateKey === "application_received";
+      if (rebuild) {
+        const res: any = await resendReceived({ data: { applicationId } });
+        if (res?.ok) {
+          toast.success(`Erneut versendet an ${res.to || "Empfänger"}`);
+          onRefresh?.();
+        } else {
+          toast.error(res?.reason || "Versand fehlgeschlagen");
+        }
+        return;
+      }
       const res = await resendEmailLog(logId, { force: true });
       if (res.ok) {
         toast.success(`Erneut versendet an ${res.to || "Empfänger"}`);
         onRefresh?.();
-      } else {
-        toast.error(res.message || "Versand fehlgeschlagen");
+        return;
       }
+      // Kein gespeichertes HTML → als letzten Versuch neu aufbauen.
+      if (res.code === "no_rendered_html") {
+        const rebuilt: any = await resendReceived({ data: { applicationId } });
+        if (rebuilt?.ok) {
+          toast.success(`Erneut versendet an ${rebuilt.to || "Empfänger"}`);
+          onRefresh?.();
+          return;
+        }
+        toast.error(rebuilt?.reason || res.message || "Versand fehlgeschlagen");
+        return;
+      }
+      toast.error(res.message || "Versand fehlgeschlagen");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Versand fehlgeschlagen");
     } finally {
       setResending(null);
     }
@@ -315,7 +346,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
                         variant="ghost"
                         className="h-7 px-2 text-xs"
                         disabled={resending === e.logId}
-                        onClick={() => resendOne(e.logId!)}
+                        onClick={() => resendOne(e.logId!, e.key)}
                       >
                         {resending === e.logId ? "Sende…" : "Erneut senden"}
                       </Button>
