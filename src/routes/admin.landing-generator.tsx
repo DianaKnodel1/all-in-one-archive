@@ -1399,6 +1399,13 @@ document.addEventListener('submit', function(e){
                     <p className="text-[10px] text-muted-foreground mt-1">
                       🔗 Die <strong>Terminzeiten beider Seiten werden automatisch synchron gehalten</strong> — beim Speichern eines Kalenders unter „Verfügbarkeiten" wird der Plan auf die verknüpfte Seite gespiegelt.
                     </p>
+                    {!branding.linked_fasttrack_landing_id && (
+                      <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
+                        ⚠️ <strong>Pflicht für Bewerber-Mails:</strong> Ohne verknüpfte Fast-Track-Seite kann kein Portal-Link
+                        (<code>portal.…/bewerbung</code>, Terminbuchung, Registrierung) gebildet werden. Eingangsbestätigung,
+                        Terminbestätigung und Interview-Erinnerung werden dann übersprungen statt einen 404-Link zu senden.
+                      </div>
+                    )}
                   </Field>
                 </div>
               )}
