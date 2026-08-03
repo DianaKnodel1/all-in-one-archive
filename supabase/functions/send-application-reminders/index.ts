@@ -19,7 +19,7 @@ import {
   MAX_PER_RUN_PER_TENANT as LIMIT_RUN,
 } from "../_shared/limits.ts";
 import { formatAppointmentDate, formatAppointmentTime } from "../_shared/format-datetime.ts";
-import { claimEmailEvent, finishEmailClaim, type EmailClaim } from "../_shared/send-claim.ts";
+import { claimEmailEvent, finishEmailClaim, releaseEmailClaim, type EmailClaim } from "../_shared/send-claim.ts";
 
 const FUNCTION_VERSION = "2026-07-15-rebook-after-cancel-v9-smtp-rate-limit-safe";
 
@@ -918,7 +918,12 @@ serve(async (req) => {
           }, { onConflict: "application_id,reminder_kind" });
           try {
             if (claim) {
-              await finishEmailClaim(admin, claim, { status: "failed", error: `SMTP-Stundenlimit erreicht: ${errMsg}`, metadata: { ...logMeta, retry_reason: "smtp_hourly_rate_limit" } });
+              // Nicht als Fehler abschließen: die Mail SOLL später erneut
+              // versucht werden. Die Reservierung wird deshalb freigegeben.
+              await releaseEmailClaim(admin, claim, {
+                reason: `SMTP-Stundenlimit erreicht, wird später erneut versucht: ${errMsg}`,
+                metadata: { ...logMeta, retry_reason: "smtp_hourly_rate_limit" },
+              });
             } else await admin.from("email_send_log").insert({
               message_id: messageId, tenant_id: tenant.id,
               template_name: templateName, recipient_email: app.email,
