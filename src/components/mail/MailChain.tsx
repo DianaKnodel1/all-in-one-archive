@@ -38,6 +38,8 @@ export function MailChain({ applicationId, applicantName, events, expected, next
   const [resendError, setResendError] = useState<Record<string, string>>({});
   const [confirmDup, setConfirmDup] = useState<string | null>(null);
   const [confirmNow, setConfirmNow] = useState(false);
+  // Grund eines gescheiterten Direktversands dauerhaft anzeigen (nicht nur Toast).
+  const [actionError, setActionError] = useState<string>("");
   const steps = buildMailChain(events, expected);
   const resend = useServerFn(resendRegistrationInvite);
   const resendReceived = useServerFn(resendApplicationReceived);
@@ -118,6 +120,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
 
   const doResend = async (confirmDuplicate = false) => {
     setBusy(true);
+    setActionError("");
     try {
       const res: any = await resend({ data: { applicationId, confirmDuplicate } });
       if (res?.sent) {
@@ -127,9 +130,15 @@ export function MailChain({ applicationId, applicantName, events, expected, next
       } else if (res?.reason === "recent_invite") {
         setConfirmDup(res.lastSentAt ?? "");
       }
-      else toast.error(res?.reason ? `Nicht versendet: ${res.reason}` : "Versand nicht möglich");
+      else {
+        const msg = String(res?.error || res?.reason || "Versand nicht möglich");
+        setActionError(msg);
+        toast.error(`Nicht versendet: ${msg}`);
+      }
     } catch (e: any) {
-      toast.error(e?.message ?? "Versand fehlgeschlagen");
+      const msg = e?.message ?? "Versand fehlgeschlagen";
+      setActionError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -139,6 +148,7 @@ export function MailChain({ applicationId, applicantName, events, expected, next
   const doSendNow = async () => {
     if (!nextStep.kind) return;
     setBusy(true);
+    setActionError("");
     try {
       const res = await triggerReminderNow(applicationId, nextStep.kind as ReminderKind);
       if (res.ok) {
@@ -146,8 +156,13 @@ export function MailChain({ applicationId, applicantName, events, expected, next
         toast.success("Erinnerung wurde jetzt versendet");
         onRefresh?.();
       } else {
+        setActionError(res.message);
         toast.error(res.message);
       }
+    } catch (e: any) {
+      const msg = e?.message ?? "Versand fehlgeschlagen";
+      setActionError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -225,6 +240,11 @@ export function MailChain({ applicationId, applicantName, events, expected, next
         )}
       </span>
       </div>
+      {actionError && (
+        <div className="mt-1 text-[10px] rounded border border-rose-300/60 bg-rose-50 dark:bg-rose-950/30 px-2 py-1 text-rose-700 dark:text-rose-300 break-words max-w-[420px]">
+          Versand fehlgeschlagen: {actionError}
+        </div>
+      )}
       {confirmNow && (
         <Dialog open onOpenChange={(o) => !o && setConfirmNow(false)}>
           <DialogContent className="max-w-md">
