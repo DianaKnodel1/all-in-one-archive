@@ -930,6 +930,11 @@ document.addEventListener('submit', function(e){
                           ) {
                             problems.push("Vermittlungsziel fehlt");
                           }
+                          // Bewerber-Mails brauchen zwingend die Fast-Track-Verknüpfung
+                          // (Portal-Link). Partner/Calendly reichen dafür nicht.
+                          if (l.flow_type === "broker" && !l.linked_fasttrack_landing_id) {
+                            problems.push("Fast-Track-Verknüpfung fehlt (keine Portal-Links in Mails)");
+                          }
                           const bookingMode = l.booking_mode ?? "calendly";
                           if (bookingMode === "internal") {
                             const targetId = l.linked_fasttrack_landing_id as string | null;
