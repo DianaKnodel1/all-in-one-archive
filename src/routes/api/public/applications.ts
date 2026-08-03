@@ -715,7 +715,12 @@ export const Route = createFileRoute("/api/public/applications")({
             const lastName = parts.slice(1).join(" ");
             email_status = { attempted: true, status: "failed", template: "application_received" };
             const { tenant, reason: preflightReason } = await loadMailTenant();
-            const fallbackPortalLink = d.portal_url?.replace(/\/+$/, "") || portalBaseFromTenant(tenant);
+            // Vermittlung/Broker: NIEMALS auf die Vermittlungs-Domain zurückfallen.
+            // d.portal_url ist oben serverseitig bereits auf die verknüpfte
+            // Fast-Track-Landing gesetzt; fehlt sie, lieber kein Link als ein
+            // Link auf die Vermittlungsseite (dort gibt es kein Portal).
+            const fallbackPortalLink = d.portal_url?.replace(/\/+$/, "")
+              || (d.flow_type === "broker" ? null : portalBaseFromTenant(tenant));
             const confirmationActionLink = confirmationBookingLink || fallbackPortalLink || "";
             logMailAttempt("application_received", {
               has_booking_link: !!confirmationBookingLink,
