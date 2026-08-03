@@ -24,19 +24,43 @@ export async function resendApplicationReceivedMail(applicationId: string): Prom
   if (!a.email) return { ok: false, reason: "Keine E-Mail-Adresse hinterlegt" };
   if (!a.tenant_id) return { ok: false, reason: "Kein Mandant an der Bewerbung hinterlegt" };
 
-  // ---- Portal-Basis ermitteln (Fast-Track-Landing hat Vorrang) ----
+  // ---- Portal-Basis ermitteln (immer Fast-Track-Portal, nie Vermittlung) ----
   let portalBase: string | null = null;
-  if (a.target_landing_id) {
+  let sourceIsBroker = false;
+  // 1) Aktuelle Verknüpfung der Vermittlungs-Landing hat Vorrang (Admins können sie ändern).
+  if (a.source_landing_id) {
+    const { data: src } = await supabaseAdmin
+      .from("landing_pages").select("flow_type, linked_fasttrack_landing_id")
+      .eq("id", a.source_landing_id).maybeSingle();
+    sourceIsBroker = (src as any)?.flow_type === "broker";
+    const linkedId = (src as any)?.linked_fasttrack_landing_id;
+    if (linkedId) {
+      const { data: ft } = await supabaseAdmin
+        .from("landing_pages").select("domain, flow_type").eq("id", linkedId).maybeSingle();
+      if ((ft as any)?.flow_type !== "broker") portalBase = portalBaseFromDomain((ft as any)?.domain);
+    }
+  }
+  // 2) Gespeicherte Ziel-Landing.
+  if (!portalBase && a.target_landing_id) {
     const { data: lp } = await supabaseAdmin
       .from("landing_pages").select("domain, flow_type").eq("id", a.target_landing_id).maybeSingle();
     if ((lp as any)?.flow_type !== "broker") portalBase = portalBaseFromDomain((lp as any)?.domain);
   }
-  if (!portalBase) {
+  // 3) Tenant-Domain nur, wenn die Bewerbung NICHT über eine Vermittlungsseite kam —
+  //    sonst würde der Link auf die Vermittlungs-Domain ohne Portal zeigen.
+  if (!portalBase && !sourceIsBroker) {
     const { data: t } = await supabaseAdmin
       .from("tenants").select("primary_domain, domain").eq("id", a.tenant_id).maybeSingle();
     portalBase = portalBaseFromDomain((t as any)?.primary_domain ?? (t as any)?.domain);
   }
-  if (!portalBase) return { ok: false, reason: "Keine Portal-Domain für diesen Mandanten hinterlegt" };
+  if (!portalBase) {
+    return {
+      ok: false,
+      reason: sourceIsBroker
+        ? "Keine Fast-Track-Seite mit der Vermittlungsseite verknüpft — bitte Verknüpfung setzen"
+        : "Keine Portal-Domain für diesen Mandanten hinterlegt",
+    };
+  }
 
   // ---- Buchungslink neu aufbauen, wenn ein interner Kalender aktiv ist ----
   let bookingLink: string | null = null;
