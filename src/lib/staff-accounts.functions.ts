@@ -29,14 +29,25 @@ export const listStaffAccounts = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     const ids: string[] = (roles ?? []).map((r: any) => r.user_id);
-    if (ids.length === 0) return { accounts: [] as Array<{ user_id: string; email: string; full_name: string }> };
+    if (ids.length === 0) {
+      const { data: t0 } = await sb.from("tenants").select("id, name").order("name");
+      return {
+        accounts: [] as Array<{ user_id: string; email: string; full_name: string; tenant_ids: string[] }>,
+        tenants: (t0 ?? []) as Array<{ id: string; name: string }>,
+      };
+    }
 
     const { data: profiles } = await sb
       .from("profiles")
       .select("user_id, full_name")
       .in("user_id", ids);
 
-    const accounts = [] as Array<{ user_id: string; email: string; full_name: string }>;
+    const { data: access } = await sb
+      .from("staff_tenant_access")
+      .select("user_id, tenant_id")
+      .in("user_id", ids);
+
+    const accounts = [] as Array<{ user_id: string; email: string; full_name: string; tenant_ids: string[] }>;
     for (const id of ids) {
       let email = "";
       try {
@@ -49,9 +60,38 @@ export const listStaffAccounts = createServerFn({ method: "POST" })
         user_id: id,
         email,
         full_name: (profiles ?? []).find((p: any) => p.user_id === id)?.full_name ?? "",
+        tenant_ids: (access ?? []).filter((a: any) => a.user_id === id).map((a: any) => a.tenant_id),
       });
     }
-    return { accounts };
+
+    const { data: tenants } = await sb.from("tenants").select("id, name").order("name");
+    return { accounts, tenants: (tenants ?? []) as Array<{ id: string; name: string }> };
+  });
+
+const SetTenantsSchema = z.object({
+  user_id: z.string().uuid(),
+  tenant_ids: z.array(z.string().uuid()),
+});
+
+/** Setzt die Marken/Tenants, deren Chats ein Admin-Mitarbeiter sehen darf. Leere Liste = alle. */
+export const setStaffTenants = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => SetTenantsSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const sb = supabaseAdmin as any;
+
+    const { error: delErr } = await sb.from("staff_tenant_access").delete().eq("user_id", data.user_id);
+    if (delErr) throw new Error(delErr.message);
+
+    if (data.tenant_ids.length > 0) {
+      const { error: insErr } = await sb
+        .from("staff_tenant_access")
+        .insert(data.tenant_ids.map((tenant_id) => ({ user_id: data.user_id, tenant_id })));
+      if (insErr) throw new Error(insErr.message);
+    }
+    return { ok: true };
   });
 
 const CreateStaffSchema = z.object({
